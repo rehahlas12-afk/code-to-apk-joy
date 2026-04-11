@@ -5,6 +5,96 @@ import { savePlan, setStores, type StoreData } from "@/lib/store";
 import { toast } from "@/hooks/use-toast";
 import TruckLogo from "@/components/TruckLogo";
 
+const DEMO_STORES: StoreData[] = [
+  // Zone 1
+  { number: "99BIS3", travee: "99BIS3", zone: "Zone 1" },
+  { number: "99BIS2", travee: "99BIS2", zone: "Zone 1" },
+  { number: "99BIS", travee: "99BIS", zone: "Zone 1" },
+  { number: "10892", travee: "99BIS", zone: "Zone 1" },
+  { number: "9673", travee: "99", zone: "Zone 1" },
+  { number: "8999", travee: "99", zone: "Zone 1" },
+  { number: "8214", travee: "100", zone: "Zone 1" },
+  { number: "10297", travee: "100", zone: "Zone 1" },
+  { number: "8176", travee: "102", zone: "Zone 1" },
+  { number: "9617", travee: "103", zone: "Zone 1" },
+  { number: "9616", travee: "201", zone: "Zone 1" },
+  { number: "10032", travee: "201", zone: "Zone 1" },
+  { number: "7518", travee: "202", zone: "Zone 1" },
+  { number: "6243", travee: "202", zone: "Zone 1" },
+  { number: "8485", travee: "202", zone: "Zone 1" },
+  { number: "7879", travee: "202", zone: "Zone 1" },
+  { number: "8074", travee: "204", zone: "Zone 1" },
+  { number: "11964", travee: "204", zone: "Zone 1" },
+  { number: "7878", travee: "204", zone: "Zone 1" },
+  { number: "7576", travee: "204", zone: "Zone 1" },
+  { number: "9738", travee: "301", zone: "Zone 1" },
+  { number: "9684", travee: "301", zone: "Zone 1" },
+  { number: "7822", travee: "301", zone: "Zone 1" },
+  { number: "7389", travee: "303", zone: "Zone 1" },
+  { number: "2088", travee: "303", zone: "Zone 1" },
+  { number: "9571", travee: "303", zone: "Zone 1" },
+  { number: "2971", travee: "304", zone: "Zone 1" },
+  { number: "9738", travee: "304", zone: "Zone 1" },
+  { number: "7039", travee: "306", zone: "Zone 1" },
+  { number: "8154", travee: "306", zone: "Zone 1" },
+  { number: "8214", travee: "306", zone: "Zone 1" },
+  { number: "10892", travee: "306", zone: "Zone 1" },
+  { number: "12671", travee: "401", zone: "Zone 1" },
+  { number: "9668", travee: "401", zone: "Zone 1" },
+  { number: "8484", travee: "402", zone: "Zone 1" },
+  { number: "7922", travee: "402", zone: "Zone 1" },
+  { number: "9083", travee: "402", zone: "Zone 1" },
+  { number: "11843", travee: "404", zone: "Zone 1" },
+  { number: "8060", travee: "501", zone: "Zone 1" },
+  { number: "9668", travee: "501", zone: "Zone 1" },
+  { number: "10712", travee: "501", zone: "Zone 1" },
+  { number: "6059", travee: "503", zone: "Zone 1" },
+  { number: "8486", travee: "503", zone: "Zone 1" },
+  { number: "7822", travee: "504", zone: "Zone 1" },
+  { number: "7450", travee: "504", zone: "Zone 1" },
+  { number: "11839", travee: "504", zone: "Zone 1" },
+  { number: "8215", travee: "602", zone: "Zone 1" },
+  { number: "8214", travee: "603", zone: "Zone 1" },
+  { number: "8215", travee: "603", zone: "Zone 1" },
+  { number: "9669", travee: "603", zone: "Zone 1" },
+  { number: "10574", travee: "701", zone: "Zone 1" },
+  { number: "11754", travee: "701", zone: "Zone 1" },
+  { number: "9812", travee: "702", zone: "Zone 1" },
+  { number: "9673", travee: "702", zone: "Zone 1" },
+  { number: "9796", travee: "704", zone: "Zone 1" },
+  { number: "7859", travee: "704", zone: "Zone 1" },
+  { number: "9037", travee: "801", zone: "Zone 1" },
+  { number: "6317", travee: "801", zone: "Zone 1" },
+  { number: "8858", travee: "803", zone: "Zone 1" },
+  { number: "9796", travee: "803", zone: "Zone 1" },
+  // Débord
+  { number: "10892", travee: "DEB", zone: "Débord" },
+  { number: "9083", travee: "DEB4", zone: "Débord" },
+  { number: "7879", travee: "DEB4", zone: "Débord" },
+  { number: "7576", travee: "DEB3", zone: "Débord" },
+  { number: "7822", travee: "DEB2", zone: "Débord" },
+  { number: "9571", travee: "DEB1", zone: "Débord" },
+  { number: "8154", travee: "85", zone: "Débord" },
+  { number: "10892", travee: "84", zone: "Débord" },
+  { number: "9083", travee: "83", zone: "Débord" },
+  { number: "8486", travee: "80", zone: "Débord" },
+  { number: "11839", travee: "79", zone: "Débord" },
+  { number: "9669", travee: "77", zone: "Débord" },
+  { number: "9673", travee: "75", zone: "Débord" },
+  { number: "6317", travee: "73", zone: "Débord" },
+  { number: "9796", travee: "72", zone: "Débord" },
+  // Craft
+  { number: "10678", travee: "86", zone: "Craft" },
+  { number: "9562", travee: "87", zone: "Craft" },
+  { number: "9660", travee: "88", zone: "Craft" },
+  { number: "9083", travee: "89", zone: "Craft" },
+  { number: "11694", travee: "90", zone: "Craft" },
+  { number: "8074", travee: "91", zone: "Craft" },
+  { number: "10574", travee: "92", zone: "Craft" },
+  { number: "7859", travee: "94", zone: "Craft" },
+  { number: "10032", travee: "95", zone: "Craft" },
+];
+
 const CameraPage = () => {
   const navigate = useNavigate();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -42,9 +132,7 @@ const CameraPage = () => {
     canvas.height = videoRef.current.videoHeight;
     const ctx = canvas.getContext("2d")!;
     ctx.drawImage(videoRef.current, 0, 0);
-    ctx.filter = "brightness(1.2) contrast(1.3)";
-    ctx.drawImage(canvas, 0, 0);
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
     setCapturedImage(dataUrl);
     stopCamera();
   }, [stopCamera]);
@@ -62,111 +150,21 @@ const CameraPage = () => {
   const analyzePlan = async () => {
     if (!capturedImage) return;
     setAnalyzing(true);
-    
-    try {
-      // Demo data matching the plan structure
-      const demoStores: StoreData[] = [
-        // Zone 1 - travées 99 à 803
-        { number: "99BIS3", travee: "99BIS3", zone: "Zone 1" },
-        { number: "99BIS2", travee: "99BIS2", zone: "Zone 1" },
-        { number: "99BIS", travee: "99BIS", zone: "Zone 1" },
-        { number: "10892", travee: "99BIS", zone: "Zone 1" },
-        { number: "9673", travee: "99", zone: "Zone 1" },
-        { number: "8999", travee: "99", zone: "Zone 1" },
-        { number: "8214", travee: "100", zone: "Zone 1" },
-        { number: "10297", travee: "100", zone: "Zone 1" },
-        { number: "8176", travee: "102", zone: "Zone 1" },
-        { number: "9617", travee: "103", zone: "Zone 1" },
-        { number: "9616", travee: "201", zone: "Zone 1" },
-        { number: "10032", travee: "201", zone: "Zone 1" },
-        { number: "7518", travee: "202", zone: "Zone 1" },
-        { number: "6243", travee: "202", zone: "Zone 1" },
-        { number: "8485", travee: "202", zone: "Zone 1" },
-        { number: "7879", travee: "202", zone: "Zone 1" },
-        { number: "8074", travee: "204", zone: "Zone 1" },
-        { number: "11964", travee: "204", zone: "Zone 1" },
-        { number: "7878", travee: "204", zone: "Zone 1" },
-        { number: "7576", travee: "204", zone: "Zone 1" },
-        { number: "9738", travee: "301", zone: "Zone 1" },
-        { number: "9684", travee: "301", zone: "Zone 1" },
-        { number: "7822", travee: "301", zone: "Zone 1" },
-        { number: "7389", travee: "303", zone: "Zone 1" },
-        { number: "2088", travee: "303", zone: "Zone 1" },
-        { number: "9571", travee: "303", zone: "Zone 1" },
-        { number: "2971", travee: "304", zone: "Zone 1" },
-        { number: "9738", travee: "304", zone: "Zone 1" },
-        { number: "7039", travee: "306", zone: "Zone 1" },
-        { number: "8154", travee: "306", zone: "Zone 1" },
-        { number: "8214", travee: "306", zone: "Zone 1" },
-        { number: "10892", travee: "306", zone: "Zone 1" },
-        { number: "12671", travee: "401", zone: "Zone 1" },
-        { number: "9668", travee: "401", zone: "Zone 1" },
-        { number: "8484", travee: "402", zone: "Zone 1" },
-        { number: "7922", travee: "402", zone: "Zone 1" },
-        { number: "9083", travee: "402", zone: "Zone 1" },
-        { number: "11843", travee: "404", zone: "Zone 1" },
-        { number: "8060", travee: "501", zone: "Zone 1" },
-        { number: "9668", travee: "501", zone: "Zone 1" },
-        { number: "10712", travee: "501", zone: "Zone 1" },
-        { number: "6059", travee: "503", zone: "Zone 1" },
-        { number: "8486", travee: "503", zone: "Zone 1" },
-        { number: "7822", travee: "504", zone: "Zone 1" },
-        { number: "7450", travee: "504", zone: "Zone 1" },
-        { number: "11839", travee: "504", zone: "Zone 1" },
-        { number: "8215", travee: "602", zone: "Zone 1" },
-        { number: "8214", travee: "603", zone: "Zone 1" },
-        { number: "8215", travee: "603", zone: "Zone 1" },
-        { number: "9669", travee: "603", zone: "Zone 1" },
-        { number: "10574", travee: "701", zone: "Zone 1" },
-        { number: "11754", travee: "701", zone: "Zone 1" },
-        { number: "9812", travee: "702", zone: "Zone 1" },
-        { number: "9673", travee: "702", zone: "Zone 1" },
-        { number: "9796", travee: "704", zone: "Zone 1" },
-        { number: "7859", travee: "704", zone: "Zone 1" },
-        { number: "9037", travee: "801", zone: "Zone 1" },
-        { number: "6317", travee: "801", zone: "Zone 1" },
-        { number: "8858", travee: "803", zone: "Zone 1" },
-        { number: "9796", travee: "803", zone: "Zone 1" },
-        // Zone Débord - travées 72 à DEB5
-        { number: "10892", travee: "DEB", zone: "Débord" },
-        { number: "9083", travee: "DEB4", zone: "Débord" },
-        { number: "7879", travee: "DEB4", zone: "Débord" },
-        { number: "7576", travee: "DEB3", zone: "Débord" },
-        { number: "7822", travee: "DEB2", zone: "Débord" },
-        { number: "9571", travee: "DEB1", zone: "Débord" },
-        { number: "8154", travee: "85", zone: "Débord" },
-        { number: "10892", travee: "84", zone: "Débord" },
-        { number: "9083", travee: "83", zone: "Débord" },
-        { number: "8486", travee: "80", zone: "Débord" },
-        { number: "11839", travee: "79", zone: "Débord" },
-        { number: "9669", travee: "77", zone: "Débord" },
-        { number: "9673", travee: "75", zone: "Débord" },
-        { number: "6317", travee: "73", zone: "Débord" },
-        { number: "9796", travee: "72", zone: "Débord" },
-        // Zone Craft - travées 86bis à 98
-        { number: "10678", travee: "86", zone: "Craft" },
-        { number: "9562", travee: "87", zone: "Craft" },
-        { number: "9660", travee: "88", zone: "Craft" },
-        { number: "9083", travee: "89", zone: "Craft" },
-        { number: "11694", travee: "90", zone: "Craft" },
-        { number: "8074", travee: "91", zone: "Craft" },
-        { number: "10574", travee: "92", zone: "Craft" },
-        { number: "7859", travee: "94", zone: "Craft" },
-        { number: "10032", travee: "95", zone: "Craft" },
-      ];
 
-      setStores(demoStores);
+    try {
+      // Load demo store data (simulates OCR analysis)
+      setStores(DEMO_STORES);
 
       const now = new Date();
       savePlan({
         id: crypto.randomUUID(),
         imageData: capturedImage,
-        stores: demoStores,
+        stores: DEMO_STORES,
         date: now.toLocaleDateString("fr-FR"),
         time: now.toLocaleTimeString("fr-FR"),
       });
 
-      toast({ title: "Analyse terminée", description: `${demoStores.length} magasins détectés et sauvegardés` });
+      toast({ title: "✅ Analyse terminée", description: `${DEMO_STORES.length} magasins détectés` });
       navigate("/plan-viewer");
     } catch {
       toast({ title: "Erreur d'analyse", variant: "destructive" });
@@ -178,51 +176,52 @@ const CameraPage = () => {
   return (
     <div className="min-h-screen bg-black flex flex-col text-white">
       <TruckLogo />
-      <div className="flex items-center gap-3 p-4">
+      <div className="flex items-center gap-3 px-4 py-2">
         <button onClick={() => { stopCamera(); navigate("/"); }} className="p-2 rounded-lg bg-gray-800">
           <ArrowLeft size={20} />
         </button>
         <h1 className="text-lg font-bold">Scanner le Plan</h1>
       </div>
 
-      <div className="flex-1 p-4 flex flex-col gap-4">
+      <div className="flex-1 px-3 pb-3 flex flex-col gap-3">
         {!capturedImage ? (
           <>
-            <div className="relative bg-gray-900 rounded-xl overflow-hidden aspect-[4/3]">
-              <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
+            {/* Full height camera view */}
+            <div className="relative flex-1 bg-gray-900 rounded-xl overflow-hidden min-h-0">
+              <video ref={videoRef} autoPlay playsInline className="absolute inset-0 w-full h-full object-cover" />
               {!streaming && (
                 <div className="absolute inset-0 flex items-center justify-center">
                   <p className="text-gray-500 text-sm">Caméra inactive</p>
                 </div>
               )}
             </div>
-            <div className="flex gap-3">
+            <div className="flex gap-3 shrink-0">
               {!streaming ? (
-                <button onClick={startCamera} className="flex-1 bg-primary text-primary-foreground rounded-xl p-4 flex items-center justify-center gap-2 font-bold">
-                  <Camera size={20} /> Ouvrir Caméra
+                <button onClick={startCamera} className="flex-1 bg-blue-600 text-white rounded-xl p-4 flex items-center justify-center gap-2 font-bold text-lg">
+                  <Camera size={24} /> Ouvrir Caméra
                 </button>
               ) : (
-                <button onClick={capture} className="flex-1 bg-accent text-accent-foreground rounded-xl p-4 flex items-center justify-center gap-2 font-bold">
-                  <Camera size={20} /> Capturer
+                <button onClick={capture} className="flex-1 bg-green-600 text-white rounded-xl p-4 flex items-center justify-center gap-2 font-bold text-lg">
+                  <Camera size={24} /> Capturer
                 </button>
               )}
-              <button onClick={() => fileInputRef.current?.click()} className="bg-secondary text-secondary-foreground rounded-xl p-4 flex items-center justify-center gap-2 font-bold">
-                <Upload size={20} />
+              <button onClick={() => fileInputRef.current?.click()} className="bg-gray-700 text-white rounded-xl p-4 flex items-center justify-center">
+                <Upload size={24} />
               </button>
               <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
             </div>
           </>
         ) : (
           <>
-            <div className="rounded-xl overflow-hidden">
-              <img src={capturedImage} alt="Plan capturé" className="w-full" />
+            <div className="flex-1 rounded-xl overflow-hidden min-h-0">
+              <img src={capturedImage} alt="Plan capturé" className="w-full h-full object-contain" />
             </div>
-            <div className="flex gap-3">
-              <button onClick={() => setCapturedImage(null)} className="flex-1 bg-gray-800 rounded-xl p-4 font-bold">
+            <div className="flex gap-3 shrink-0">
+              <button onClick={() => setCapturedImage(null)} className="flex-1 bg-gray-700 rounded-xl p-4 font-bold text-lg">
                 Reprendre
               </button>
-              <button onClick={analyzePlan} disabled={analyzing} className="flex-1 bg-primary text-primary-foreground rounded-xl p-4 font-bold disabled:opacity-50">
-                {analyzing ? "Analyse..." : "Analyser"}
+              <button onClick={analyzePlan} disabled={analyzing} className="flex-1 bg-green-600 text-white rounded-xl p-4 font-bold text-lg disabled:opacity-50">
+                {analyzing ? "Analyse..." : "✅ Analyser"}
               </button>
             </div>
           </>
