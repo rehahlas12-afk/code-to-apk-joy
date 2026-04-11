@@ -233,7 +233,7 @@ const PalletCalcPage = () => {
               onChange={(e) => setManualType(e.target.value as PalletEntry["type"])}
               className="flex-1 rounded-lg border border-gray-600 bg-gray-800 px-2 py-2 text-sm text-white"
             >
-              <option value="roll">Rôle</option>
+              <option value="roll">Roll</option>
               <option value="demi">Demi palette</option>
               <option value="demi_eau">Demi eau</option>
               <option value="demi_lait">Demi lait</option>
@@ -336,7 +336,7 @@ const PalletCalcPage = () => {
 
 function typeLabel(type: PalletEntry["type"]): string {
   const labels: Record<string, string> = {
-    roll: "Rôle", demi: "Demi palette", demi_eau: "Demi eau", demi_lait: "Demi lait",
+    roll: "Roll", demi: "Demi palette", demi_eau: "Demi eau", demi_lait: "Demi lait",
     normal: "Palette normale", gros: "Grosse palette", gros_eau: "Grosse palette eau",
   };
   return labels[type] || type;
