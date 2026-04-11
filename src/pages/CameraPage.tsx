@@ -143,7 +143,7 @@ const CameraPage = () => {
                 Reprendre
               </button>
               <button onClick={analyzePlan} disabled={analyzing} className="flex-1 bg-green-600 text-white rounded-xl p-4 font-bold text-lg disabled:opacity-50">
-                {analyzing ? "Analyse..." : "✅ Analyser"}
+                {analyzing ? `OCR ${ocrProgress}%...` : "✅ Analyser (OCR)"}
               </button>
             </div>
           </>
