@@ -1,99 +1,10 @@
 import { useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Camera, Upload } from "lucide-react";
-import { savePlan, setStores, type StoreData } from "@/lib/store";
+import { savePlan, setStores } from "@/lib/store";
+import { ocrAnalyzePlan } from "@/lib/ocr";
 import { toast } from "@/hooks/use-toast";
 import TruckLogo from "@/components/TruckLogo";
-
-const DEMO_STORES: StoreData[] = [
-  // Zone 1
-  { number: "99BIS3", travee: "99BIS3", zone: "Zone 1" },
-  { number: "99BIS2", travee: "99BIS2", zone: "Zone 1" },
-  { number: "99BIS", travee: "99BIS", zone: "Zone 1" },
-  { number: "10892", travee: "99BIS", zone: "Zone 1" },
-  { number: "9673", travee: "99", zone: "Zone 1" },
-  { number: "8999", travee: "99", zone: "Zone 1" },
-  { number: "8214", travee: "100", zone: "Zone 1" },
-  { number: "10297", travee: "100", zone: "Zone 1" },
-  { number: "8176", travee: "102", zone: "Zone 1" },
-  { number: "9617", travee: "103", zone: "Zone 1" },
-  { number: "9616", travee: "201", zone: "Zone 1" },
-  { number: "10032", travee: "201", zone: "Zone 1" },
-  { number: "7518", travee: "202", zone: "Zone 1" },
-  { number: "6243", travee: "202", zone: "Zone 1" },
-  { number: "8485", travee: "202", zone: "Zone 1" },
-  { number: "7879", travee: "202", zone: "Zone 1" },
-  { number: "8074", travee: "204", zone: "Zone 1" },
-  { number: "11964", travee: "204", zone: "Zone 1" },
-  { number: "7878", travee: "204", zone: "Zone 1" },
-  { number: "7576", travee: "204", zone: "Zone 1" },
-  { number: "9738", travee: "301", zone: "Zone 1" },
-  { number: "9684", travee: "301", zone: "Zone 1" },
-  { number: "7822", travee: "301", zone: "Zone 1" },
-  { number: "7389", travee: "303", zone: "Zone 1" },
-  { number: "2088", travee: "303", zone: "Zone 1" },
-  { number: "9571", travee: "303", zone: "Zone 1" },
-  { number: "2971", travee: "304", zone: "Zone 1" },
-  { number: "9738", travee: "304", zone: "Zone 1" },
-  { number: "7039", travee: "306", zone: "Zone 1" },
-  { number: "8154", travee: "306", zone: "Zone 1" },
-  { number: "8214", travee: "306", zone: "Zone 1" },
-  { number: "10892", travee: "306", zone: "Zone 1" },
-  { number: "12671", travee: "401", zone: "Zone 1" },
-  { number: "9668", travee: "401", zone: "Zone 1" },
-  { number: "8484", travee: "402", zone: "Zone 1" },
-  { number: "7922", travee: "402", zone: "Zone 1" },
-  { number: "9083", travee: "402", zone: "Zone 1" },
-  { number: "11843", travee: "404", zone: "Zone 1" },
-  { number: "8060", travee: "501", zone: "Zone 1" },
-  { number: "9668", travee: "501", zone: "Zone 1" },
-  { number: "10712", travee: "501", zone: "Zone 1" },
-  { number: "6059", travee: "503", zone: "Zone 1" },
-  { number: "8486", travee: "503", zone: "Zone 1" },
-  { number: "7822", travee: "504", zone: "Zone 1" },
-  { number: "7450", travee: "504", zone: "Zone 1" },
-  { number: "11839", travee: "504", zone: "Zone 1" },
-  { number: "8215", travee: "602", zone: "Zone 1" },
-  { number: "8214", travee: "603", zone: "Zone 1" },
-  { number: "8215", travee: "603", zone: "Zone 1" },
-  { number: "9669", travee: "603", zone: "Zone 1" },
-  { number: "10574", travee: "701", zone: "Zone 1" },
-  { number: "11754", travee: "701", zone: "Zone 1" },
-  { number: "9812", travee: "702", zone: "Zone 1" },
-  { number: "9673", travee: "702", zone: "Zone 1" },
-  { number: "9796", travee: "704", zone: "Zone 1" },
-  { number: "7859", travee: "704", zone: "Zone 1" },
-  { number: "9037", travee: "801", zone: "Zone 1" },
-  { number: "6317", travee: "801", zone: "Zone 1" },
-  { number: "8858", travee: "803", zone: "Zone 1" },
-  { number: "9796", travee: "803", zone: "Zone 1" },
-  // Débord
-  { number: "10892", travee: "DEB", zone: "Débord" },
-  { number: "9083", travee: "DEB4", zone: "Débord" },
-  { number: "7879", travee: "DEB4", zone: "Débord" },
-  { number: "7576", travee: "DEB3", zone: "Débord" },
-  { number: "7822", travee: "DEB2", zone: "Débord" },
-  { number: "9571", travee: "DEB1", zone: "Débord" },
-  { number: "8154", travee: "85", zone: "Débord" },
-  { number: "10892", travee: "84", zone: "Débord" },
-  { number: "9083", travee: "83", zone: "Débord" },
-  { number: "8486", travee: "80", zone: "Débord" },
-  { number: "11839", travee: "79", zone: "Débord" },
-  { number: "9669", travee: "77", zone: "Débord" },
-  { number: "9673", travee: "75", zone: "Débord" },
-  { number: "6317", travee: "73", zone: "Débord" },
-  { number: "9796", travee: "72", zone: "Débord" },
-  // Craft
-  { number: "10678", travee: "86", zone: "Craft" },
-  { number: "9562", travee: "87", zone: "Craft" },
-  { number: "9660", travee: "88", zone: "Craft" },
-  { number: "9083", travee: "89", zone: "Craft" },
-  { number: "11694", travee: "90", zone: "Craft" },
-  { number: "8074", travee: "91", zone: "Craft" },
-  { number: "10574", travee: "92", zone: "Craft" },
-  { number: "7859", travee: "94", zone: "Craft" },
-  { number: "10032", travee: "95", zone: "Craft" },
-];
 
 const CameraPage = () => {
   const navigate = useNavigate();
@@ -102,6 +13,7 @@ const CameraPage = () => {
   const [streaming, setStreaming] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
+  const [ocrProgress, setOcrProgress] = useState(0);
 
   const startCamera = useCallback(async () => {
     try {
