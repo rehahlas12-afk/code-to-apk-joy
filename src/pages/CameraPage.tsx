@@ -42,7 +42,6 @@ const CameraPage = () => {
     canvas.height = videoRef.current.videoHeight;
     const ctx = canvas.getContext("2d")!;
     ctx.drawImage(videoRef.current, 0, 0);
-    // Enhance brightness/contrast
     ctx.filter = "brightness(1.2) contrast(1.3)";
     ctx.drawImage(canvas, 0, 0);
     const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
@@ -64,11 +63,10 @@ const CameraPage = () => {
     if (!capturedImage) return;
     setAnalyzing(true);
     
-    // Simulate AI analysis - parse plan data from image
-    // In production, this would call an AI service
     try {
-      // Demo data based on the plan structure described
+      // Demo data matching the plan structure
       const demoStores: StoreData[] = [
+        // Zone 1 - travées 99 à 803
         { number: "99BIS3", travee: "99BIS3", zone: "Zone 1" },
         { number: "99BIS2", travee: "99BIS2", zone: "Zone 1" },
         { number: "99BIS", travee: "99BIS", zone: "Zone 1" },
@@ -129,7 +127,7 @@ const CameraPage = () => {
         { number: "6317", travee: "801", zone: "Zone 1" },
         { number: "8858", travee: "803", zone: "Zone 1" },
         { number: "9796", travee: "803", zone: "Zone 1" },
-        // Zone Débord
+        // Zone Débord - travées 72 à DEB5
         { number: "10892", travee: "DEB", zone: "Débord" },
         { number: "9083", travee: "DEB4", zone: "Débord" },
         { number: "7879", travee: "DEB4", zone: "Débord" },
@@ -145,7 +143,7 @@ const CameraPage = () => {
         { number: "9673", travee: "75", zone: "Débord" },
         { number: "6317", travee: "73", zone: "Débord" },
         { number: "9796", travee: "72", zone: "Débord" },
-        // Zone Craft
+        // Zone Craft - travées 86bis à 98
         { number: "10678", travee: "86", zone: "Craft" },
         { number: "9562", travee: "87", zone: "Craft" },
         { number: "9660", travee: "88", zone: "Craft" },
@@ -178,10 +176,10 @@ const CameraPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-black flex flex-col text-white">
       <TruckLogo />
       <div className="flex items-center gap-3 p-4">
-        <button onClick={() => { stopCamera(); navigate("/"); }} className="p-2 rounded-lg bg-muted">
+        <button onClick={() => { stopCamera(); navigate("/"); }} className="p-2 rounded-lg bg-gray-800">
           <ArrowLeft size={20} />
         </button>
         <h1 className="text-lg font-bold">Scanner le Plan</h1>
@@ -190,11 +188,11 @@ const CameraPage = () => {
       <div className="flex-1 p-4 flex flex-col gap-4">
         {!capturedImage ? (
           <>
-            <div className="relative bg-foreground/10 rounded-xl overflow-hidden aspect-[4/3]">
+            <div className="relative bg-gray-900 rounded-xl overflow-hidden aspect-[4/3]">
               <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
               {!streaming && (
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <p className="text-muted-foreground text-sm">Caméra inactive</p>
+                  <p className="text-gray-500 text-sm">Caméra inactive</p>
                 </div>
               )}
             </div>
@@ -220,7 +218,7 @@ const CameraPage = () => {
               <img src={capturedImage} alt="Plan capturé" className="w-full" />
             </div>
             <div className="flex gap-3">
-              <button onClick={() => setCapturedImage(null)} className="flex-1 bg-muted text-foreground rounded-xl p-4 font-bold">
+              <button onClick={() => setCapturedImage(null)} className="flex-1 bg-gray-800 rounded-xl p-4 font-bold">
                 Reprendre
               </button>
               <button onClick={analyzePlan} disabled={analyzing} className="flex-1 bg-primary text-primary-foreground rounded-xl p-4 font-bold disabled:opacity-50">
