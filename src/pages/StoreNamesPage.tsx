@@ -41,30 +41,30 @@ const StoreNamesPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-black flex flex-col text-white">
       <TruckLogo />
       <div className="flex items-center gap-3 p-4">
-        <button onClick={() => navigate("/")} className="p-2 rounded-lg bg-muted">
+        <button onClick={() => navigate("/")} className="p-2 rounded-lg bg-gray-800">
           <ArrowLeft size={20} />
         </button>
         <h1 className="text-lg font-bold">Noms des Magasins</h1>
       </div>
 
       <div className="p-4 space-y-4">
-        <div className="bg-card border rounded-xl p-4 space-y-3">
+        <div className="bg-gray-900 border border-gray-700 rounded-xl p-4 space-y-3">
           <input
             type="text"
             value={number}
             onChange={(e) => setNumber(e.target.value)}
             placeholder="N° Magasin"
-            className="w-full rounded-lg border bg-background px-3 py-2 text-base outline-none focus:ring-2 focus:ring-ring"
+            className="w-full rounded-lg border border-gray-600 bg-gray-800 px-3 py-2 text-base text-white outline-none focus:ring-2 focus:ring-primary"
           />
           <input
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Nom du Magasin"
-            className="w-full rounded-lg border bg-background px-3 py-2 text-base outline-none focus:ring-2 focus:ring-ring"
+            className="w-full rounded-lg border border-gray-600 bg-gray-800 px-3 py-2 text-base text-white outline-none focus:ring-2 focus:ring-primary"
           />
           <button onClick={handleAdd} className="w-full bg-accent text-accent-foreground rounded-lg py-3 font-bold flex items-center justify-center gap-2">
             <Plus size={18} /> Ajouter
@@ -73,7 +73,7 @@ const StoreNamesPage = () => {
 
         <div className="space-y-2">
           {names.map((item, idx) => (
-            <div key={item.number} className="bg-card border rounded-xl p-3 flex items-center gap-3">
+            <div key={item.number} className="bg-gray-900 border border-gray-700 rounded-xl p-3 flex items-center gap-3">
               <div className="flex-1">
                 <p className="font-bold">{item.number}</p>
                 {editingIdx === idx ? (

@@ -73,24 +73,37 @@ export function deletePlan(id: string): void {
   localStorage.setItem(PLANS_KEY, JSON.stringify(plans));
 }
 
-export function searchStore(query: string): { store: StoreData; name?: string } | null {
+export function searchStore(query: string): { store: StoreData; name?: string; allMatches?: StoreData[] } | null {
   const stores = getStores();
   const names = getStoreNames();
   
   const q = query.trim().toLowerCase();
+  if (!q) return null;
   
   // Search by name first
   const nameMatch = names.find(n => n.name.toLowerCase().includes(q));
   if (nameMatch) {
     const store = stores.find(s => s.number === nameMatch.number);
-    if (store) return { store, name: nameMatch.name };
+    if (store) {
+      const allMatches = stores.filter(s => s.number === nameMatch.number);
+      return { store, name: nameMatch.name, allMatches };
+    }
   }
   
-  // Search by number
-  const storeMatch = stores.find(s => s.number === q || s.number.includes(q));
-  if (storeMatch) {
-    const name = names.find(n => n.number === storeMatch.number);
-    return { store: storeMatch, name: name?.name };
+  // Search by exact number
+  const exactMatch = stores.find(s => s.number.toLowerCase() === q);
+  if (exactMatch) {
+    const name = names.find(n => n.number === exactMatch.number);
+    const allMatches = stores.filter(s => s.number === exactMatch.number);
+    return { store: exactMatch, name: name?.name, allMatches };
+  }
+
+  // Search by partial number (contains)
+  const partialMatches = stores.filter(s => s.number.toLowerCase().includes(q));
+  if (partialMatches.length > 0) {
+    const store = partialMatches[0];
+    const name = names.find(n => n.number === store.number);
+    return { store, name: name?.name, allMatches: partialMatches };
   }
   
   return null;

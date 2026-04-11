@@ -56,10 +56,10 @@ const PlanViewerPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-black flex flex-col text-white">
       <TruckLogo />
       <div className="flex items-center gap-3 p-4">
-        <button onClick={() => navigate("/")} className="p-2 rounded-lg bg-muted">
+        <button onClick={() => navigate("/")} className="p-2 rounded-lg bg-gray-800">
           <ArrowLeft size={20} />
         </button>
         <h1 className="text-lg font-bold">Visualiser Plan</h1>

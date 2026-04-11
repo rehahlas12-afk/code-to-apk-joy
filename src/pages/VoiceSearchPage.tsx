@@ -34,13 +34,15 @@ const VoiceSearchPage = () => {
       setTranscript(text);
 
       if (event.results[0].isFinal) {
-        // Extract numbers from speech
         const numbers = text.replace(/\s/g, "").match(/\d+/g);
         if (numbers) {
           const query = numbers.join("");
           const found = searchStore(query);
           if (found) {
-            const msg = `Magasin ${found.store.number}${found.name ? `, ${found.name}` : ""}, se trouve à la travée ${found.store.travee}, ${found.store.zone}`;
+            let msg = `Magasin ${found.store.number}${found.name ? `, ${found.name}` : ""}, se trouve à la travée ${found.store.travee}, ${found.store.zone}`;
+            if (found.allMatches && found.allMatches.length > 1) {
+              msg += `. Aussi présent dans: ${found.allMatches.slice(1).map(m => `travée ${m.travee} ${m.zone}`).join(", ")}`;
+            }
             setResult(msg);
             speak(msg);
           } else {
@@ -49,7 +51,6 @@ const VoiceSearchPage = () => {
             speak(msg);
           }
         } else {
-          // Try name search
           const found = searchStore(text.trim());
           if (found) {
             const msg = `Magasin ${found.store.number}${found.name ? `, ${found.name}` : ""}, travée ${found.store.travee}, ${found.store.zone}`;
@@ -83,10 +84,10 @@ const VoiceSearchPage = () => {
   }, []);
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-black flex flex-col text-white">
       <TruckLogo />
       <div className="flex items-center gap-3 p-4">
-        <button onClick={() => navigate("/")} className="p-2 rounded-lg bg-muted">
+        <button onClick={() => navigate("/")} className="p-2 rounded-lg bg-gray-800">
           <ArrowLeft size={20} />
         </button>
         <h1 className="text-lg font-bold">Recherche Vocale</h1>
@@ -97,28 +98,28 @@ const VoiceSearchPage = () => {
           onClick={listening ? stopListening : startListening}
           className={`w-32 h-32 rounded-full flex items-center justify-center shadow-xl transition-all ${
             listening
-              ? "bg-destructive text-destructive-foreground animate-pulse scale-110"
+              ? "bg-red-600 animate-pulse scale-110"
               : "bg-accent text-accent-foreground"
           }`}
         >
           {listening ? <MicOff size={48} /> : <Mic size={48} />}
         </button>
 
-        <p className="text-muted-foreground text-center text-sm">
+        <p className="text-gray-400 text-center text-sm">
           {listening ? "Parlez maintenant..." : "Appuyez pour parler"}
         </p>
 
         {transcript && (
-          <div className="bg-muted rounded-xl p-4 w-full">
-            <p className="text-sm text-muted-foreground">Entendu :</p>
+          <div className="bg-gray-900 rounded-xl p-4 w-full">
+            <p className="text-sm text-gray-400">Entendu :</p>
             <p className="font-bold">{transcript}</p>
           </div>
         )}
 
         {result && (
-          <div className="bg-card border rounded-xl p-4 w-full shadow-md">
+          <div className="bg-gray-900 border border-gray-700 rounded-xl p-4 w-full shadow-md">
             <div className="flex items-start gap-3">
-              <Volume2 size={20} className="text-accent mt-1 shrink-0" />
+              <Volume2 size={20} className="text-green-400 mt-1 shrink-0" />
               <p className="font-semibold text-base">{result}</p>
             </div>
           </div>
