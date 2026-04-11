@@ -62,24 +62,34 @@ const CameraPage = () => {
   const analyzePlan = async () => {
     if (!capturedImage) return;
     setAnalyzing(true);
+    setOcrProgress(0);
 
     try {
-      // Load demo store data (simulates OCR analysis)
-      setStores(DEMO_STORES);
+      // Real OCR analysis with Tesseract.js
+      const detectedStores = await ocrAnalyzePlan(capturedImage, (p) => setOcrProgress(p));
+
+      if (detectedStores.length === 0) {
+        toast({ title: "⚠️ Aucun magasin détecté", description: "Essayez avec une photo plus nette ou mieux éclairée", variant: "destructive" });
+        setAnalyzing(false);
+        return;
+      }
+
+      setStores(detectedStores);
 
       const now = new Date();
       savePlan({
         id: crypto.randomUUID(),
         imageData: capturedImage,
-        stores: DEMO_STORES,
+        stores: detectedStores,
         date: now.toLocaleDateString("fr-FR"),
         time: now.toLocaleTimeString("fr-FR"),
       });
 
-      toast({ title: "✅ Analyse terminée", description: `${DEMO_STORES.length} magasins détectés` });
+      toast({ title: "✅ Analyse terminée", description: `${detectedStores.length} magasins détectés par OCR` });
       navigate("/plan-viewer");
-    } catch {
-      toast({ title: "Erreur d'analyse", variant: "destructive" });
+    } catch (err) {
+      console.error("OCR error:", err);
+      toast({ title: "Erreur d'analyse OCR", description: "Vérifiez la qualité de l'image", variant: "destructive" });
     } finally {
       setAnalyzing(false);
     }
