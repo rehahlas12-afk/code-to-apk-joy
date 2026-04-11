@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Upload, Trash2 } from "lucide-react";
-import { getPlans, savePlan, deletePlan } from "@/lib/store";
+import { getPlans, savePlan, deletePlan, setStores } from "@/lib/store";
 import TruckLogo from "@/components/TruckLogo";
 import { toast } from "@/hooks/use-toast";
 
@@ -35,16 +35,24 @@ const GalleryPage = () => {
     toast({ title: "Plan supprimé" });
   };
 
+  const handleSelect = (plan: typeof plans[0]) => {
+    if (plan.stores.length > 0) {
+      setStores(plan.stores);
+      toast({ title: "Plan chargé", description: `${plan.stores.length} magasins activés` });
+    }
+    navigate("/plan-viewer");
+  };
+
   return (
     <div className="min-h-screen bg-black flex flex-col text-white">
       <TruckLogo />
-      <div className="flex items-center gap-3 p-4">
+      <div className="flex items-center gap-3 px-4 py-2">
         <button onClick={() => navigate("/")} className="p-2 rounded-lg bg-gray-800">
           <ArrowLeft size={20} />
         </button>
         <h1 className="text-lg font-bold">Galerie</h1>
         <div className="flex-1" />
-        <button onClick={() => fileInputRef.current?.click()} className="bg-primary text-primary-foreground rounded-lg px-4 py-2 flex items-center gap-2 text-sm font-bold">
+        <button onClick={() => fileInputRef.current?.click()} className="bg-blue-600 text-white rounded-lg px-4 py-2 flex items-center gap-2 text-sm font-bold">
           <Upload size={16} /> Importer
         </button>
         <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleUpload} />
@@ -54,19 +62,22 @@ const GalleryPage = () => {
         {plans.length > 0 ? (
           <div className="grid grid-cols-2 gap-3">
             {plans.map((plan) => (
-              <div key={plan.id} className="bg-card border rounded-xl overflow-hidden">
+              <div key={plan.id} className="bg-gray-900 border border-gray-700 rounded-xl overflow-hidden">
                 <img
                   src={plan.imageData}
                   alt="Plan"
                   className="w-full aspect-square object-cover cursor-pointer"
-                  onClick={() => navigate("/plan-viewer")}
+                  onClick={() => handleSelect(plan)}
                 />
                 <div className="p-2 flex items-center justify-between">
                   <div>
                     <p className="text-xs font-semibold">{plan.date}</p>
-                    <p className="text-xs text-muted-foreground">{plan.time}</p>
+                    <p className="text-xs text-gray-400">{plan.time}</p>
+                    {plan.stores.length > 0 && (
+                      <p className="text-[10px] text-green-400">{plan.stores.length} mag.</p>
+                    )}
                   </div>
-                  <button onClick={() => handleDelete(plan.id)} className="p-1 text-destructive">
+                  <button onClick={() => handleDelete(plan.id)} className="p-1 text-red-500">
                     <Trash2 size={16} />
                   </button>
                 </div>
@@ -74,7 +85,7 @@ const GalleryPage = () => {
             ))}
           </div>
         ) : (
-          <p className="text-center text-muted-foreground py-8">Aucun plan dans la galerie</p>
+          <p className="text-center text-gray-500 py-8">Aucun plan dans la galerie</p>
         )}
       </div>
     </div>
