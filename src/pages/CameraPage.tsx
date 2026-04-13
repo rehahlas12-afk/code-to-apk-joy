@@ -74,7 +74,12 @@ const CameraPage = () => {
         return;
       }
 
-      setStores(detectedStores);
+      // Merge with existing stores instead of replacing
+      const existingStores = (await import("@/lib/store")).getStores();
+      const existingKeys = new Set(existingStores.map(s => `${s.number}-${s.travee}`));
+      const newStores = detectedStores.filter(s => !existingKeys.has(`${s.number}-${s.travee}`));
+      const mergedStores = [...existingStores, ...newStores];
+      setStores(mergedStores);
 
       const now = new Date();
       savePlan({
@@ -85,7 +90,7 @@ const CameraPage = () => {
         time: now.toLocaleTimeString("fr-FR"),
       });
 
-      toast({ title: "✅ Analyse terminée", description: `${detectedStores.length} magasins détectés par OCR` });
+      toast({ title: "✅ Analyse terminée", description: `${newStores.length} nouveaux magasins ajoutés (${mergedStores.length} total)` });
       navigate("/plan-viewer");
     } catch (err) {
       console.error("OCR error:", err);

@@ -1,6 +1,8 @@
 import { useNavigate } from "react-router-dom";
-import { Camera, Mic, Search, Eye, Plus, Calculator, Image } from "lucide-react";
+import { Camera, Mic, Search, Eye, Plus, Calculator, Image, RotateCcw } from "lucide-react";
 import TruckLogo from "@/components/TruckLogo";
+import { initDemoStores, getStores } from "@/lib/store";
+import { toast } from "@/hooks/use-toast";
 
 const buttons = [
   { label: "Scanner Plan", icon: Camera, path: "/camera", color: "bg-blue-600" },
@@ -14,6 +16,13 @@ const buttons = [
 
 const Dashboard = () => {
   const navigate = useNavigate();
+
+  const handleReset = () => {
+    localStorage.removeItem("staf_stores");
+    initDemoStores();
+    const count = getStores().length;
+    toast({ title: "✅ Données réinitialisées", description: `${count} magasins de base rechargés` });
+  };
 
   return (
     <div className="min-h-screen bg-black flex flex-col">
@@ -30,6 +39,13 @@ const Dashboard = () => {
               <span className="text-base font-bold text-center leading-tight">{btn.label}</span>
             </button>
           ))}
+          <button
+            onClick={handleReset}
+            className="bg-gray-700 text-white rounded-xl p-6 flex flex-col items-center gap-3 shadow-lg active:scale-95 transition-transform"
+          >
+            <RotateCcw size={36} />
+            <span className="text-base font-bold text-center leading-tight">Réinit. Données</span>
+          </button>
         </div>
       </div>
     </div>
