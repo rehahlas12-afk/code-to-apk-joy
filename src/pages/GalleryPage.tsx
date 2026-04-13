@@ -1,44 +1,77 @@
 import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Upload, Trash2 } from "lucide-react";
-import { getPlans, savePlan, deletePlan, setStores } from "@/lib/store";
+import { ArrowLeft, Upload, Trash2, Loader2 } from "lucide-react";
+import { getPlans, savePlan, deletePlan, setStores, type PlanRecord } from "@/lib/store";
+import { ocrAnalyzePlan } from "@/lib/ocr";
 import TruckLogo from "@/components/TruckLogo";
 import { toast } from "@/hooks/use-toast";
 
 const GalleryPage = () => {
   const navigate = useNavigate();
-  const [plans, setPlans] = useState(getPlans());
+  const [plans, setPlansState] = useState(getPlans());
+  const [analyzingId, setAnalyzingId] = useState<string | null>(null);
+  const [ocrProgress, setOcrProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const analyzeAndSavePlan = async (plan: PlanRecord) => {
+    setAnalyzingId(plan.id);
+    setOcrProgress(0);
+    try {
+      const detectedStores = await ocrAnalyzePlan(plan.imageData, (p) => setOcrProgress(p));
+      // Update the plan with detected stores
+      const allPlans = getPlans();
+      const idx = allPlans.findIndex(p => p.id === plan.id);
+      if (idx >= 0) {
+        allPlans[idx].stores = detectedStores;
+        localStorage.setItem("staf_plans", JSON.stringify(allPlans));
+        setPlansState([...allPlans]);
+      }
+      toast({
+        title: "✅ Analyse terminée",
+        description: `${detectedStores.length} magasins détectés`,
+      });
+    } catch (err) {
+      console.error("OCR error:", err);
+      toast({ title: "Erreur OCR", description: "Vérifiez la qualité de l'image", variant: "destructive" });
+    } finally {
+      setAnalyzingId(null);
+    }
+  };
 
   const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (ev) => {
+    reader.onload = async (ev) => {
       const now = new Date();
-      savePlan({
+      const newPlan: PlanRecord = {
         id: crypto.randomUUID(),
         imageData: ev.target?.result as string,
         stores: [],
         date: now.toLocaleDateString("fr-FR"),
         time: now.toLocaleTimeString("fr-FR"),
-      });
-      setPlans(getPlans());
-      toast({ title: "Plan importé" });
+      };
+      savePlan(newPlan);
+      setPlansState(getPlans());
+      toast({ title: "Plan importé", description: "Analyse OCR en cours..." });
+      // Auto-analyze
+      await analyzeAndSavePlan(newPlan);
     };
     reader.readAsDataURL(file);
   };
 
   const handleDelete = (id: string) => {
     deletePlan(id);
-    setPlans(getPlans());
+    setPlansState(getPlans());
     toast({ title: "Plan supprimé" });
   };
 
-  const handleSelect = (plan: typeof plans[0]) => {
+  const handleSelect = (plan: PlanRecord) => {
     if (plan.stores.length > 0) {
       setStores(plan.stores);
-      toast({ title: "Plan chargé", description: `${plan.stores.length} magasins activés` });
+      toast({ title: "Plan actif", description: `${plan.stores.length} magasins chargés pour la recherche` });
+    } else {
+      toast({ title: "⚠️ Aucun magasin", description: "Ce plan n'a pas encore été analysé. Relancez l'analyse.", variant: "destructive" });
     }
     navigate("/plan-viewer");
   };
@@ -58,6 +91,13 @@ const GalleryPage = () => {
         <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleUpload} />
       </div>
 
+      {analyzingId && (
+        <div className="mx-4 mb-2 bg-blue-900/40 border border-blue-500/50 rounded-xl p-3 flex items-center gap-3">
+          <Loader2 size={20} className="animate-spin text-blue-400" />
+          <span className="text-sm text-blue-300">Analyse OCR en cours... {ocrProgress}%</span>
+        </div>
+      )}
+
       <div className="p-4">
         {plans.length > 0 ? (
           <div className="grid grid-cols-2 gap-3">
@@ -73,8 +113,16 @@ const GalleryPage = () => {
                   <div>
                     <p className="text-xs font-semibold">{plan.date}</p>
                     <p className="text-xs text-gray-400">{plan.time}</p>
-                    {plan.stores.length > 0 && (
+                    {plan.stores.length > 0 ? (
                       <p className="text-[10px] text-green-400">{plan.stores.length} mag.</p>
+                    ) : (
+                      <button
+                        onClick={() => analyzeAndSavePlan(plan)}
+                        disabled={analyzingId !== null}
+                        className="text-[10px] text-yellow-400 underline disabled:opacity-50"
+                      >
+                        Analyser
+                      </button>
                     )}
                   </div>
                   <button onClick={() => handleDelete(plan.id)} className="p-1 text-red-500">
