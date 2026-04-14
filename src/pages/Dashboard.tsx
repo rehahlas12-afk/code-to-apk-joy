@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { Camera, Mic, Search, Eye, Plus, Calculator, Image, RotateCcw } from "lucide-react";
 import TruckLogo from "@/components/TruckLogo";
-import { initDemoStores, getStores } from "@/lib/store";
+import { initDemoStores, getStores, setActivePlanId } from "@/lib/store";
 import { toast } from "@/hooks/use-toast";
 
 const buttons = [
@@ -19,6 +19,7 @@ const Dashboard = () => {
 
   const handleReset = () => {
     localStorage.removeItem("staf_stores");
+    setActivePlanId(null);
     initDemoStores();
     const count = getStores().length;
     toast({ title: "✅ Données réinitialisées", description: `${count} magasins de base rechargés` });

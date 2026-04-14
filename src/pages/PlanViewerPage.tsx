@@ -1,14 +1,15 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Trash2, Check } from "lucide-react";
-import { getPlans, deletePlan, setStores } from "@/lib/store";
+import { activatePlan, deletePlan, getActivePlan, getPlans } from "@/lib/store";
 import TruckLogo from "@/components/TruckLogo";
 import { toast } from "@/hooks/use-toast";
 
 const PlanViewerPage = () => {
   const navigate = useNavigate();
-  const [plans, setPlans] = useState(getPlans());
-  const [selectedPlan, setSelectedPlan] = useState(plans[0] || null);
+  const initialPlans = getPlans();
+  const [plans, setPlans] = useState(initialPlans);
+  const [selectedPlan, setSelectedPlan] = useState(getActivePlan() || initialPlans[0] || null);
   const imgRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
   const [origin, setOrigin] = useState({ x: 0, y: 0 });
@@ -19,7 +20,7 @@ const PlanViewerPage = () => {
     setSelectedPlan(plan);
     setScale(1);
     if (plan && plan.stores.length > 0) {
-      setStores(plan.stores);
+      activatePlan(plan.id);
       toast({ title: "Plan actif", description: `${plan.stores.length} magasins chargés` });
     }
   };
@@ -59,7 +60,7 @@ const PlanViewerPage = () => {
     deletePlan(id);
     const updated = getPlans();
     setPlans(updated);
-    setSelectedPlan(updated[0] || null);
+    setSelectedPlan(getActivePlan() || updated[0] || null);
     toast({ title: "Plan supprimé" });
   };
 

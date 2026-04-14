@@ -1,7 +1,7 @@
 import { useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Camera, Upload } from "lucide-react";
-import { savePlan, setStores } from "@/lib/store";
+import { savePlan } from "@/lib/store";
 import { ocrAnalyzePlan } from "@/lib/ocr";
 import { toast } from "@/hooks/use-toast";
 import TruckLogo from "@/components/TruckLogo";
@@ -74,13 +74,6 @@ const CameraPage = () => {
         return;
       }
 
-      // Merge with existing stores instead of replacing
-      const existingStores = (await import("@/lib/store")).getStores();
-      const existingKeys = new Set(existingStores.map(s => `${s.number}-${s.travee}`));
-      const newStores = detectedStores.filter(s => !existingKeys.has(`${s.number}-${s.travee}`));
-      const mergedStores = [...existingStores, ...newStores];
-      setStores(mergedStores);
-
       const now = new Date();
       savePlan({
         id: crypto.randomUUID(),
@@ -90,7 +83,7 @@ const CameraPage = () => {
         time: now.toLocaleTimeString("fr-FR"),
       });
 
-      toast({ title: "✅ Analyse terminée", description: `${newStores.length} nouveaux magasins ajoutés (${mergedStores.length} total)` });
+      toast({ title: "✅ Analyse terminée", description: `${detectedStores.length} magasins détectés sur ce plan` });
       navigate("/plan-viewer");
     } catch (err) {
       console.error("OCR error:", err);
