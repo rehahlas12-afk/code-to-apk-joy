@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Upload, Trash2, Loader2 } from "lucide-react";
-import { getPlans, savePlan, deletePlan, setStores, type PlanRecord } from "@/lib/store";
+import { activatePlan, getPlans, savePlan, deletePlan, updatePlanStores, type PlanRecord } from "@/lib/store";
 import { ocrAnalyzePlan } from "@/lib/ocr";
 import TruckLogo from "@/components/TruckLogo";
 import { toast } from "@/hooks/use-toast";
@@ -18,14 +18,8 @@ const GalleryPage = () => {
     setOcrProgress(0);
     try {
       const detectedStores = await ocrAnalyzePlan(plan.imageData, (p) => setOcrProgress(p));
-      // Update the plan with detected stores
-      const allPlans = getPlans();
-      const idx = allPlans.findIndex(p => p.id === plan.id);
-      if (idx >= 0) {
-        allPlans[idx].stores = detectedStores;
-        localStorage.setItem("staf_plans", JSON.stringify(allPlans));
-        setPlansState([...allPlans]);
-      }
+      updatePlanStores(plan.id, detectedStores);
+      setPlansState(getPlans());
       toast({
         title: "✅ Analyse terminée",
         description: `${detectedStores.length} magasins détectés`,
@@ -67,9 +61,10 @@ const GalleryPage = () => {
   };
 
   const handleSelect = (plan: PlanRecord) => {
-    if (plan.stores.length > 0) {
-      setStores(plan.stores);
-      toast({ title: "Plan actif", description: `${plan.stores.length} magasins chargés pour la recherche` });
+    const activePlan = activatePlan(plan.id);
+
+    if (activePlan?.stores.length) {
+      toast({ title: "Plan actif", description: `${activePlan.stores.length} magasins chargés pour la recherche` });
     } else {
       toast({ title: "⚠️ Aucun magasin", description: "Ce plan n'a pas encore été analysé. Relancez l'analyse.", variant: "destructive" });
     }

@@ -22,6 +22,7 @@ export interface PlanRecord {
 const STORES_KEY = 'staf_stores';
 const NAMES_KEY = 'staf_names';
 const PLANS_KEY = 'staf_plans';
+const ACTIVE_PLAN_KEY = 'staf_active_plan_id';
 
 const DEMO_STORES: StoreData[] = [
   { number: "99BIS3", travee: "99BIS3", zone: "Zone 1" },
@@ -110,6 +111,19 @@ const DEMO_STORES: StoreData[] = [
   { number: "10032", travee: "95", zone: "Craft" },
 ];
 
+function readJson<T>(key: string, fallback: T): T {
+  try {
+    const data = localStorage.getItem(key);
+    return data ? (JSON.parse(data) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeJson<T>(key: string, value: T): void {
+  localStorage.setItem(key, JSON.stringify(value));
+}
+
 function dedupeStores(stores: StoreData[]): StoreData[] {
   const seen = new Set<string>();
 
@@ -122,39 +136,55 @@ function dedupeStores(stores: StoreData[]): StoreData[] {
   });
 }
 
-function getSearchableStores(): StoreData[] {
-  const storedStores = localStorage.getItem(STORES_KEY);
-  const activeStores: StoreData[] = storedStores ? JSON.parse(storedStores) : [];
-  const planStores = getPlans().flatMap((plan) => plan.stores);
+function dedupePlanRecord(plan: PlanRecord): PlanRecord {
+  return {
+    ...plan,
+    stores: dedupeStores(plan.stores),
+  };
+}
 
-  return dedupeStores([...DEMO_STORES, ...activeStores, ...planStores]);
+function getSearchableStores(): StoreData[] {
+  const activePlan = getActivePlan();
+  if (activePlan) {
+    return dedupeStores(activePlan.stores);
+  }
+
+  const latestAnalyzedPlan = getPlans().find((plan) => plan.stores.length > 0);
+  if (latestAnalyzedPlan) {
+    return dedupeStores(latestAnalyzedPlan.stores);
+  }
+
+  const storedStores = readJson<StoreData[]>(STORES_KEY, []);
+  if (storedStores.length > 0) {
+    return dedupeStores(storedStores);
+  }
+
+  initDemoStores();
+  return readJson<StoreData[]>(STORES_KEY, DEMO_STORES);
 }
 
 export function getStores(): StoreData[] {
-  const data = localStorage.getItem(STORES_KEY);
-  if (data) return JSON.parse(data);
-  // Auto-load demo data on first use
+  const stores = readJson<StoreData[]>(STORES_KEY, []);
+  if (stores.length > 0) return dedupeStores(stores);
   initDemoStores();
-  const d2 = localStorage.getItem(STORES_KEY);
-  return d2 ? JSON.parse(d2) : [];
+  return readJson<StoreData[]>(STORES_KEY, []);
 }
 
 export function initDemoStores(): void {
   if (localStorage.getItem(STORES_KEY)) return;
-  localStorage.setItem(STORES_KEY, JSON.stringify(DEMO_STORES));
+  writeJson(STORES_KEY, DEMO_STORES);
 }
 
 export function setStores(stores: StoreData[]): void {
-  localStorage.setItem(STORES_KEY, JSON.stringify(dedupeStores(stores)));
+  writeJson(STORES_KEY, dedupeStores(stores));
 }
 
 export function getStoreNames(): StoreName[] {
-  const data = localStorage.getItem(NAMES_KEY);
-  return data ? JSON.parse(data) : [];
+  return readJson<StoreName[]>(NAMES_KEY, []);
 }
 
 export function setStoreNames(names: StoreName[]): void {
-  localStorage.setItem(NAMES_KEY, JSON.stringify(names));
+  writeJson(NAMES_KEY, names);
 }
 
 export function addStoreName(number: string, name: string): void {
@@ -173,20 +203,116 @@ export function removeStoreName(number: string): void {
   setStoreNames(names);
 }
 
+export function getActivePlanId(): string | null {
+  return localStorage.getItem(ACTIVE_PLAN_KEY);
+}
+
+export function setActivePlanId(planId: string | null): void {
+  if (planId) {
+    localStorage.setItem(ACTIVE_PLAN_KEY, planId);
+    return;
+  }
+
+  localStorage.removeItem(ACTIVE_PLAN_KEY);
+}
+
 export function getPlans(): PlanRecord[] {
-  const data = localStorage.getItem(PLANS_KEY);
-  return data ? JSON.parse(data) : [];
+  return readJson<PlanRecord[]>(PLANS_KEY, []).map(dedupePlanRecord);
+}
+
+function setPlans(plans: PlanRecord[]): void {
+  writeJson(PLANS_KEY, plans.map(dedupePlanRecord));
+}
+
+export function getPlanById(id: string): PlanRecord | null {
+  return getPlans().find((plan) => plan.id === id) ?? null;
+}
+
+export function getActivePlan(): PlanRecord | null {
+  const activePlanId = getActivePlanId();
+  return activePlanId ? getPlanById(activePlanId) : null;
+}
+
+export function activatePlan(id: string): PlanRecord | null {
+  const plan = getPlanById(id);
+  if (!plan) return null;
+
+  setActivePlanId(id);
+
+  if (plan.stores.length > 0) {
+    setStores(plan.stores);
+  } else {
+    localStorage.removeItem(STORES_KEY);
+  }
+
+  return plan;
 }
 
 export function savePlan(plan: PlanRecord): void {
+  const normalizedPlan = dedupePlanRecord(plan);
   const plans = getPlans();
-  plans.unshift(plan);
-  localStorage.setItem(PLANS_KEY, JSON.stringify(plans));
+  const existing = plans.findIndex((p) => p.id === normalizedPlan.id);
+
+  if (existing >= 0) {
+    plans[existing] = normalizedPlan;
+  } else {
+    plans.unshift(normalizedPlan);
+  }
+
+  setPlans(plans);
+  setActivePlanId(normalizedPlan.id);
+
+  if (normalizedPlan.stores.length > 0) {
+    setStores(normalizedPlan.stores);
+  } else {
+    localStorage.removeItem(STORES_KEY);
+  }
+}
+
+export function updatePlanStores(id: string, stores: StoreData[]): PlanRecord | null {
+  const plans = getPlans();
+  const index = plans.findIndex((plan) => plan.id === id);
+
+  if (index < 0) return null;
+
+  const updatedPlan = dedupePlanRecord({
+    ...plans[index],
+    stores,
+  });
+
+  plans[index] = updatedPlan;
+  setPlans(plans);
+
+  if (getActivePlanId() === id) {
+    if (updatedPlan.stores.length > 0) {
+      setStores(updatedPlan.stores);
+    } else {
+      localStorage.removeItem(STORES_KEY);
+    }
+  }
+
+  return updatedPlan;
 }
 
 export function deletePlan(id: string): void {
   const plans = getPlans().filter(p => p.id !== id);
-  localStorage.setItem(PLANS_KEY, JSON.stringify(plans));
+  setPlans(plans);
+
+  if (getActivePlanId() !== id) return;
+
+  const nextPlan = plans.find((plan) => plan.stores.length > 0) ?? plans[0] ?? null;
+  setActivePlanId(nextPlan?.id ?? null);
+
+  if (nextPlan?.stores.length) {
+    setStores(nextPlan.stores);
+    return;
+  }
+
+  localStorage.removeItem(STORES_KEY);
+
+  if (!nextPlan) {
+    initDemoStores();
+  }
 }
 
 export function searchStore(query: string): { store: StoreData; name?: string; allMatches?: StoreData[] } | null {
@@ -194,10 +320,13 @@ export function searchStore(query: string): { store: StoreData; name?: string; a
   const names = getStoreNames();
   
   const q = query.trim().toLowerCase();
+  const compactQuery = q.replace(/\s+/g, "");
   if (!q) return null;
+
+  const searchableNumbers = new Set(stores.map((store) => store.number));
   
   // Search by name first
-  const nameMatch = names.find(n => n.name.toLowerCase().includes(q));
+  const nameMatch = names.find(n => searchableNumbers.has(n.number) && n.name.toLowerCase().includes(q));
   if (nameMatch) {
     const store = stores.find(s => s.number === nameMatch.number);
     if (store) {
@@ -207,7 +336,7 @@ export function searchStore(query: string): { store: StoreData; name?: string; a
   }
   
   // Search by exact number
-  const exactMatch = stores.find(s => s.number.toLowerCase() === q);
+  const exactMatch = stores.find(s => s.number.toLowerCase() === compactQuery);
   if (exactMatch) {
     const name = names.find(n => n.number === exactMatch.number);
     const allMatches = stores.filter(s => s.number === exactMatch.number);
@@ -215,7 +344,7 @@ export function searchStore(query: string): { store: StoreData; name?: string; a
   }
 
   // Search by partial number (contains)
-  const partialMatches = stores.filter(s => s.number.toLowerCase().includes(q));
+  const partialMatches = stores.filter(s => s.number.toLowerCase().includes(compactQuery));
   if (partialMatches.length > 0) {
     const store = partialMatches[0];
     const name = names.find(n => n.number === store.number);
