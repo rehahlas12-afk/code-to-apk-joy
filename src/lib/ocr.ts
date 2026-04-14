@@ -38,8 +38,7 @@ function normalizeOcrLine(line: string): string {
     .replace(/[\u0300-\u036f]/g, "")
     .toUpperCase()
     .replace(/[’']/g, "")
-    .replace(/(\d)\s+(?=\d)/g, "$1")
-    .replace(/(\d)[,;:.\/\\-]+(?=\d)/g, "$1");
+    .replace(/(\d)[,;:./\\-]+(?=\d)/g, "$1");
 }
 
 function normalizePotentialNumber(token: string): string {
@@ -60,24 +59,61 @@ function inferZoneFromTravee(travee: string, fallbackZone: string): string {
   return fallbackZone;
 }
 
+function tokenizeLine(normalizedLine: string): string[] {
+  return normalizedLine.match(/[A-Z0-9|]+/g) ?? [];
+}
+
+function isTraveeToken(token: string): boolean {
+  return /^99BIS\d?$/.test(token) || /^DEB\d?$/.test(token) || /^[1-9]\d{1,2}$/.test(token);
+}
+
 function extractTravee(normalizedLine: string, currentTravee: string): string {
-  const matches = normalizedLine.match(/\b(99BIS\d?|DEB\d?|[1-9]\d{1,2})\b/g);
-  return matches?.[0] ?? currentTravee;
+  const tokens = tokenizeLine(normalizedLine);
+  return tokens.find(isTraveeToken) ?? currentTravee;
 }
 
 function extractStoreNumbers(normalizedLine: string): string[] {
   const storeNumbers = new Set<string>();
-  const directMatches = normalizedLine.match(/\b\d{4,5}\b/g) ?? [];
+  const tokens = tokenizeLine(normalizedLine);
 
-  for (const match of directMatches) {
-    storeNumbers.add(match);
-  }
+  for (let i = 0; i < tokens.length; i += 1) {
+    if (i === 0 && isTraveeToken(tokens[i])) {
+      continue;
+    }
 
-  const fuzzyTokens = normalizedLine.match(/\b[A-Z0-9|]{4,5}\b/g) ?? [];
-  for (const token of fuzzyTokens) {
-    const normalizedToken = normalizePotentialNumber(token).replace(/[^0-9]/g, "");
+    const normalizedToken = normalizePotentialNumber(tokens[i]).replace(/[^0-9]/g, "");
+    if (!normalizedToken) {
+      continue;
+    }
+
     if (/^\d{4,5}$/.test(normalizedToken)) {
       storeNumbers.add(normalizedToken);
+      continue;
+    }
+
+    if (normalizedToken.length >= 4) {
+      continue;
+    }
+
+    let combined = normalizedToken;
+    let cursor = i + 1;
+
+    while (combined.length < 5 && cursor < tokens.length) {
+      const nextToken = normalizePotentialNumber(tokens[cursor]).replace(/[^0-9]/g, "");
+
+      if (!nextToken || combined.length + nextToken.length > 5) {
+        break;
+      }
+
+      combined += nextToken;
+
+      if (/^\d{4,5}$/.test(combined)) {
+        storeNumbers.add(combined);
+        i = cursor;
+        break;
+      }
+
+      cursor += 1;
     }
   }
 
