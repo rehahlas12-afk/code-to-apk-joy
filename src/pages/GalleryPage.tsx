@@ -1,8 +1,9 @@
 import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Upload, Trash2, Loader2 } from "lucide-react";
-import { activatePlan, getPlans, savePlan, deletePlan, updatePlanStores, type PlanRecord } from "@/lib/store";
+import { activatePlan, getPlanStorageErrorMessage, getPlans, isQuotaExceededError, savePlan, deletePlan, updatePlanStores, type PlanRecord } from "@/lib/store";
 import { ocrAnalyzePlan } from "@/lib/ocr";
+import { readAndOptimizeImageFile } from "@/lib/planImage";
 import TruckLogo from "@/components/TruckLogo";
 import { toast } from "@/hooks/use-toast";
 
@@ -18,7 +19,10 @@ const GalleryPage = () => {
     setOcrProgress(0);
     try {
       const detectedStores = await ocrAnalyzePlan(plan.imageData, (p) => setOcrProgress(p));
-      updatePlanStores(plan.id, detectedStores);
+      const updatedPlan = updatePlanStores(plan.id, detectedStores);
+      if (!updatedPlan) {
+        throw new Error("Plan introuvable après import");
+      }
       setPlansState(getPlans());
       toast({
         title: "✅ Analyse terminée",
@@ -26,32 +30,45 @@ const GalleryPage = () => {
       });
     } catch (err) {
       console.error("OCR error:", err);
-      toast({ title: "Erreur OCR", description: "Vérifiez la qualité de l'image", variant: "destructive" });
+      toast({
+        title: isQuotaExceededError(err) ? "Stockage saturé" : "Erreur OCR",
+        description: isQuotaExceededError(err) ? getPlanStorageErrorMessage(err) : "Vérifiez la qualité de l'image",
+        variant: "destructive",
+      });
     } finally {
       setAnalyzingId(null);
     }
   };
 
-  const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
+
+    try {
+      const optimizedImage = await readAndOptimizeImageFile(file);
       const now = new Date();
       const newPlan: PlanRecord = {
         id: crypto.randomUUID(),
-        imageData: ev.target?.result as string,
+        imageData: optimizedImage,
         stores: [],
         date: now.toLocaleDateString("fr-FR"),
         time: now.toLocaleTimeString("fr-FR"),
       };
+
       savePlan(newPlan);
       setPlansState(getPlans());
       toast({ title: "Plan importé", description: "Analyse OCR en cours..." });
-      // Auto-analyze
       await analyzeAndSavePlan(newPlan);
-    };
-    reader.readAsDataURL(file);
+    } catch (error) {
+      console.error("Plan upload error:", error);
+      toast({
+        title: "Import impossible",
+        description: getPlanStorageErrorMessage(error),
+        variant: "destructive",
+      });
+    } finally {
+      e.target.value = "";
+    }
   };
 
   const handleDelete = (id: string) => {

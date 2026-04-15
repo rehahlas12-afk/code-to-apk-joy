@@ -124,6 +124,21 @@ function writeJson<T>(key: string, value: T): void {
   localStorage.setItem(key, JSON.stringify(value));
 }
 
+export function isQuotaExceededError(error: unknown): boolean {
+  return (
+    error instanceof DOMException &&
+    (error.name === "QuotaExceededError" || error.name === "NS_ERROR_DOM_QUOTA_REACHED")
+  );
+}
+
+export function getPlanStorageErrorMessage(error: unknown): string {
+  if (isQuotaExceededError(error)) {
+    return "Le stockage du téléphone est plein. Supprimez d'anciens plans ou importez une image plus légère.";
+  }
+
+  return "Impossible d'enregistrer ce plan sur ce téléphone.";
+}
+
 function dedupeStores(stores: StoreData[]): StoreData[] {
   const seen = new Set<string>();
 
@@ -221,7 +236,23 @@ export function getPlans(): PlanRecord[] {
 }
 
 function setPlans(plans: PlanRecord[]): void {
-  writeJson(PLANS_KEY, plans.map(dedupePlanRecord));
+  const normalizedPlans = plans.map(dedupePlanRecord);
+  let persistedPlans = normalizedPlans;
+
+  while (persistedPlans.length > 0) {
+    try {
+      writeJson(PLANS_KEY, persistedPlans);
+      return;
+    } catch (error) {
+      if (!isQuotaExceededError(error) || persistedPlans.length === 1) {
+        throw error;
+      }
+
+      persistedPlans = persistedPlans.slice(0, -1);
+    }
+  }
+
+  writeJson(PLANS_KEY, []);
 }
 
 export function getPlanById(id: string): PlanRecord | null {
