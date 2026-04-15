@@ -1,8 +1,9 @@
 import { useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Camera, Upload } from "lucide-react";
-import { savePlan } from "@/lib/store";
+import { getPlanStorageErrorMessage, isQuotaExceededError, savePlan } from "@/lib/store";
 import { ocrAnalyzePlan } from "@/lib/ocr";
+import { optimizePlanImage, readAndOptimizeImageFile } from "@/lib/planImage";
 import { toast } from "@/hooks/use-toast";
 import TruckLogo from "@/components/TruckLogo";
 
@@ -37,26 +38,39 @@ const CameraPage = () => {
     }
   }, []);
 
-  const capture = useCallback(() => {
+  const capture = useCallback(async () => {
     if (!videoRef.current) return;
+
     const canvas = document.createElement("canvas");
     canvas.width = videoRef.current.videoWidth;
     canvas.height = videoRef.current.videoHeight;
     const ctx = canvas.getContext("2d")!;
     ctx.drawImage(videoRef.current, 0, 0);
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
-    setCapturedImage(dataUrl);
-    stopCamera();
+
+    try {
+      const dataUrl = await optimizePlanImage(canvas.toDataURL("image/jpeg", 0.92));
+      setCapturedImage(dataUrl);
+      stopCamera();
+    } catch (error) {
+      console.error("Capture error:", error);
+      toast({ title: "Capture impossible", description: "Impossible de préparer ce plan", variant: "destructive" });
+    }
   }, [stopCamera]);
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      setCapturedImage(ev.target?.result as string);
-    };
-    reader.readAsDataURL(file);
+
+    try {
+      const optimizedImage = await readAndOptimizeImageFile(file);
+      setCapturedImage(optimizedImage);
+      stopCamera();
+    } catch (error) {
+      console.error("File upload error:", error);
+      toast({ title: "Import impossible", description: getPlanStorageErrorMessage(error), variant: "destructive" });
+    } finally {
+      e.target.value = "";
+    }
   };
 
   const analyzePlan = async () => {
@@ -87,7 +101,11 @@ const CameraPage = () => {
       navigate("/plan-viewer");
     } catch (err) {
       console.error("OCR error:", err);
-      toast({ title: "Erreur d'analyse OCR", description: "Vérifiez la qualité de l'image", variant: "destructive" });
+      toast({
+        title: isQuotaExceededError(err) ? "Stockage saturé" : "Erreur d'analyse OCR",
+        description: isQuotaExceededError(err) ? getPlanStorageErrorMessage(err) : "Vérifiez la qualité de l'image",
+        variant: "destructive",
+      });
     } finally {
       setAnalyzing(false);
     }
