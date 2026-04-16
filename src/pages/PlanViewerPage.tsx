@@ -15,14 +15,28 @@ const PlanViewerPage = () => {
   const [origin, setOrigin] = useState({ x: 0, y: 0 });
   const lastDistRef = useRef<number | null>(null);
 
-  // When selecting a plan, load its stores into active storage
+  useEffect(() => {
+    if (!selectedPlan) return;
+
+    const activePlan = getActivePlan();
+    if (activePlan?.id === selectedPlan.id) return;
+
+    activatePlan(selectedPlan.id);
+  }, [selectedPlan]);
+
   const selectPlan = (plan: typeof selectedPlan) => {
+    if (!plan) return;
+
+    const activePlan = activatePlan(plan.id) ?? plan;
     setSelectedPlan(plan);
     setScale(1);
-    if (plan && plan.stores.length > 0) {
-      activatePlan(plan.id);
-      toast({ title: "Plan actif", description: `${plan.stores.length} magasins chargés` });
-    }
+
+    toast({
+      title: "Plan actif",
+      description: activePlan.stores.length > 0
+        ? `${activePlan.stores.length} magasins chargés`
+        : "Ce plan est bien sélectionné, mais aucun magasin n'a encore été détecté.",
+    });
   };
 
   useEffect(() => {
