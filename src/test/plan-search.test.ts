@@ -33,6 +33,28 @@ describe("plan search", () => {
     expect(searchStore("2222")).toBeNull();
   });
 
+  it("does not fall back to an older analyzed plan when the selected plan has no stores", () => {
+    savePlan({
+      id: "plan-a",
+      imageData: "a",
+      stores: [{ number: "1111", travee: "101", zone: "Zone 1" }],
+      date: "01/01/2026",
+      time: "08:00:00",
+    });
+
+    savePlan({
+      id: "plan-b",
+      imageData: "b",
+      stores: [],
+      date: "02/01/2026",
+      time: "08:30:00",
+    });
+
+    activatePlan("plan-b");
+
+    expect(searchStore("1111")).toBeNull();
+  });
+
   it("parses OCR text with split digits and common OCR confusions", () => {
     const stores = parseOcrText(`
       ZONE 1
