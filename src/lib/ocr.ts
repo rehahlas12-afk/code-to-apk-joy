@@ -1,17 +1,63 @@
-import Tesseract from "tesseract.js";
+import { supabase } from "@/integrations/supabase/client";
 import type { StoreData } from "./store";
 
+/**
+ * Analyze a plan image using AI vision (Gemini) to extract structured store data.
+ * Sends the image to a backend edge function that uses table extraction.
+ * Falls back to basic client-side OCR if the backend is unavailable.
+ */
+export async function ocrAnalyzePlan(
+  imageData: string,
+  onProgress?: (progress: number) => void
+): Promise<StoreData[]> {
+  onProgress?.(10);
+
+  try {
+    const stores = await analyzeWithAI(imageData, onProgress);
+    onProgress?.(100);
+    return stores;
+  } catch (error) {
+    console.error("AI analysis failed, falling back to local OCR:", error);
+    onProgress?.(30);
+    // Fallback to local parsing
+    const stores = await fallbackLocalOcr(imageData, onProgress);
+    onProgress?.(100);
+    return stores;
+  }
+}
+
+async function analyzeWithAI(
+  imageData: string,
+  onProgress?: (progress: number) => void
+): Promise<StoreData[]> {
+  onProgress?.(20);
+
+  const { data, error } = await supabase.functions.invoke("analyze-plan", {
+    body: { imageBase64: imageData },
+  });
+
+  onProgress?.(90);
+
+  if (error) {
+    throw new Error(`Edge function error: ${error.message}`);
+  }
+
+  if (data?.error) {
+    throw new Error(data.error);
+  }
+
+  const stores: StoreData[] = data?.stores ?? [];
+  console.log(`AI extracted ${stores.length} stores from plan`);
+  return stores;
+}
+
+// ---- Fallback: simple local text-based extraction ----
+
+import Tesseract from "tesseract.js";
+
 const OCR_DIGIT_FIXES: Record<string, string> = {
-  O: "0",
-  Q: "0",
-  D: "0",
-  I: "1",
-  L: "1",
-  "|": "1",
-  Z: "2",
-  S: "5",
-  B: "8",
-  G: "6",
+  O: "0", Q: "0", D: "0", I: "1", L: "1", "|": "1",
+  Z: "2", S: "5", B: "8", G: "6",
 };
 
 const ZONE_PATTERNS: { pattern: RegExp; zone: string }[] = [
@@ -22,10 +68,8 @@ const ZONE_PATTERNS: { pattern: RegExp; zone: string }[] = [
 
 function dedupeStores(stores: StoreData[]): StoreData[] {
   const seen = new Set<string>();
-
   return stores.filter((store) => {
     const key = `${store.number}-${store.travee}-${store.zone}`;
-
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -37,25 +81,20 @@ function normalizeOcrLine(line: string): string {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toUpperCase()
-    .replace(/[’']/g, "")
+    .replace(/['']/g, "")
     .replace(/(\d)[,;:./\\-]+(?=\d)/g, "$1");
 }
 
 function normalizePotentialNumber(token: string): string {
-  return token
-    .split("")
-    .map((char) => OCR_DIGIT_FIXES[char] ?? char)
-    .join("");
+  return token.split("").map((char) => OCR_DIGIT_FIXES[char] ?? char).join("");
 }
 
 function inferZoneFromTravee(travee: string, fallbackZone: string): string {
   if (travee.startsWith("DEB")) return "Débord";
-
   const traveeNumber = Number(travee);
   if (Number.isNaN(traveeNumber)) return fallbackZone;
   if (traveeNumber >= 72 && traveeNumber <= 85) return "Débord";
   if (traveeNumber >= 86 && traveeNumber <= 95) return "Craft";
-
   return fallbackZone;
 }
 
@@ -77,151 +116,34 @@ function extractStoreNumbers(normalizedLine: string): string[] {
   const tokens = tokenizeLine(normalizedLine);
 
   for (let i = 0; i < tokens.length; i += 1) {
-    if (i === 0 && isTraveeToken(tokens[i])) {
-      continue;
-    }
+    if (i === 0 && isTraveeToken(tokens[i])) continue;
 
     const normalizedToken = normalizePotentialNumber(tokens[i]).replace(/[^0-9]/g, "");
-    if (!normalizedToken) {
-      continue;
-    }
+    if (!normalizedToken) continue;
 
     if (/^\d{4,5}$/.test(normalizedToken)) {
       storeNumbers.add(normalizedToken);
       continue;
     }
-
-    if (normalizedToken.length >= 4) {
-      continue;
-    }
+    if (normalizedToken.length >= 4) continue;
 
     let combined = normalizedToken;
     let cursor = i + 1;
-
     while (combined.length < 5 && cursor < tokens.length) {
       const nextToken = normalizePotentialNumber(tokens[cursor]).replace(/[^0-9]/g, "");
-
-      if (!nextToken || combined.length + nextToken.length > 5) {
-        break;
-      }
-
+      if (!nextToken || combined.length + nextToken.length > 5) break;
       combined += nextToken;
-
       if (/^\d{4,5}$/.test(combined)) {
         storeNumbers.add(combined);
         i = cursor;
         break;
       }
-
       cursor += 1;
     }
   }
-
   return [...storeNumbers];
 }
 
-async function loadImage(src: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error("Impossible de charger l'image du plan"));
-    image.src = src;
-  });
-}
-
-async function preprocessPlanImage(imageData: string): Promise<string> {
-  const image = await loadImage(imageData);
-  const scale = image.width < 1600 ? 2 : 1.35;
-  const width = Math.max(1, Math.round(image.width * scale));
-  const height = Math.max(1, Math.round(image.height * scale));
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Canvas OCR indisponible");
-
-  ctx.drawImage(image, 0, 0, width, height);
-
-  const frame = ctx.getImageData(0, 0, width, height);
-  const contrast = 1.4;
-  const threshold = 168;
-
-  for (let i = 0; i < frame.data.length; i += 4) {
-    const gray = frame.data[i] * 0.299 + frame.data[i + 1] * 0.587 + frame.data[i + 2] * 0.114;
-    const contrasted = Math.max(0, Math.min(255, (gray - 128) * contrast + 128));
-    const value = contrasted > threshold ? 255 : 0;
-
-    frame.data[i] = value;
-    frame.data[i + 1] = value;
-    frame.data[i + 2] = value;
-  }
-
-  ctx.putImageData(frame, 0, 0);
-  return canvas.toDataURL("image/png");
-}
-
-async function recognizeText(
-  imageData: string,
-  onProgress?: (progress: number) => void,
-): Promise<string> {
-  const result = await Tesseract.recognize(imageData, "fra", {
-    langPath: "/tessdata",
-    logger: (message) => {
-      if (message.status === "recognizing text") {
-        onProgress?.(message.progress);
-      }
-    },
-  });
-
-  return result.data.text;
-}
-
-/**
- * Extract store numbers from a plan image using Tesseract.js OCR.
- * Parses the recognized text to find store numbers (4-5 digit codes)
- * and attempts to associate them with travées and zones.
- */
-export async function ocrAnalyzePlan(
-  imageData: string,
-  onProgress?: (progress: number) => void
-): Promise<StoreData[]> {
-  const primaryText = await recognizeText(imageData, (progress) => {
-    onProgress?.(Math.round(progress * 70));
-  });
-
-  const primaryStores = parseOcrText(primaryText);
-  console.log("OCR raw text:", primaryText);
-
-  if (primaryStores.length >= 12) {
-    onProgress?.(100);
-    return primaryStores;
-  }
-
-  try {
-    const processedImage = await preprocessPlanImage(imageData);
-    const enhancedText = await recognizeText(processedImage, (progress) => {
-      onProgress?.(70 + Math.round(progress * 30));
-    });
-
-    console.log("OCR enhanced text:", enhancedText);
-    onProgress?.(100);
-
-    return dedupeStores([...primaryStores, ...parseOcrText(enhancedText)]);
-  } catch (error) {
-    console.warn("OCR enhanced pass failed:", error);
-    onProgress?.(100);
-    return primaryStores;
-  }
-}
-
-/**
- * Parse OCR text to extract store data.
- * Looks for patterns like:
- * - Store numbers: 4-5 digit codes (e.g., 10892, 9673)
- * - Travée numbers: 2-3 digit codes or special codes (99BIS, DEB, etc.)
- * - Zone indicators: Zone 1, Débord, Craft
- */
 export function parseOcrText(text: string): StoreData[] {
   const stores: StoreData[] = [];
   const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
@@ -244,13 +166,29 @@ export function parseOcrText(text: string): StoreData[] {
     const lineNumbers = extractStoreNumbers(normalizedLine);
 
     for (const num of lineNumbers) {
-      stores.push({
-        number: num,
-        travee: currentTravee || "?",
-        zone: inferredZone,
-      });
+      stores.push({ number: num, travee: currentTravee || "?", zone: inferredZone });
     }
   }
 
   return dedupeStores(stores);
+}
+
+async function fallbackLocalOcr(
+  imageData: string,
+  onProgress?: (progress: number) => void
+): Promise<StoreData[]> {
+  try {
+    const result = await Tesseract.recognize(imageData, "fra", {
+      logger: (message) => {
+        if (message.status === "recognizing text") {
+          onProgress?.(30 + Math.round(message.progress * 60));
+        }
+      },
+    });
+    console.log("Fallback OCR text:", result.data.text);
+    return parseOcrText(result.data.text);
+  } catch (err) {
+    console.error("Fallback OCR also failed:", err);
+    return [];
+  }
 }
