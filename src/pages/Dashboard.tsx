@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { Camera, Mic, Search, Eye, Plus, Calculator, Image, RotateCcw } from "lucide-react";
+import { Camera, Search, Eye, Plus, Calculator, Image, RotateCcw, LogOut } from "lucide-react";
 import TruckLogo from "@/components/TruckLogo";
 import { initDemoStores, getStores, setActivePlanId } from "@/lib/store";
 import { toast } from "@/hooks/use-toast";
@@ -7,8 +7,7 @@ import { toast } from "@/hooks/use-toast";
 const buttons = [
   { label: "Scanner Plan", icon: Camera, path: "/camera", color: "bg-blue-600" },
   { label: "Galerie", icon: Image, path: "/gallery", color: "bg-green-700" },
-  { label: "Recherche Clavier", icon: Search, path: "/text-search", color: "bg-orange-600" },
-  { label: "Recherche Vocale", icon: Mic, path: "/voice-search", color: "bg-green-600" },
+  { label: "Recherche", icon: Search, path: "/search", color: "bg-orange-600" },
   { label: "Visualiser Plan", icon: Eye, path: "/plan-viewer", color: "bg-blue-700" },
   { label: "Noms Magasins", icon: Plus, path: "/store-names", color: "bg-orange-700" },
   { label: "Calculateur Palettes", icon: Calculator, path: "/pallet-calc", color: "bg-green-700" },
@@ -23,6 +22,15 @@ const Dashboard = () => {
     initDemoStores();
     const count = getStores().length;
     toast({ title: "✅ Données réinitialisées", description: `${count} magasins de base rechargés` });
+  };
+
+  const handleQuit = () => {
+    if (!confirm("Quitter l'application ?")) return;
+    try {
+      window.close();
+    } catch {}
+    // Fallback for PWA / browser: blank page
+    window.location.href = "about:blank";
   };
 
   return (
@@ -48,6 +56,14 @@ const Dashboard = () => {
             <span className="text-base font-bold text-center leading-tight">Réinit. Données</span>
           </button>
         </div>
+
+        <button
+          onClick={handleQuit}
+          className="mt-4 w-full bg-red-700 text-white rounded-xl p-5 flex items-center justify-center gap-3 shadow-lg active:scale-95 transition-transform"
+        >
+          <LogOut size={28} />
+          <span className="text-lg font-bold">Quitter l'application</span>
+        </button>
       </div>
     </div>
   );

@@ -4,8 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import Dashboard from "./pages/Dashboard";
 import CameraPage from "./pages/CameraPage";
-import VoiceSearchPage from "./pages/VoiceSearchPage";
-import TextSearchPage from "./pages/TextSearchPage";
+import SearchPage from "./pages/SearchPage";
 import PlanViewerPage from "./pages/PlanViewerPage";
 import StoreNamesPage from "./pages/StoreNamesPage";
 import PalletCalcPage from "./pages/PalletCalcPage";
@@ -22,8 +21,10 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/camera" element={<CameraPage />} />
-          <Route path="/voice-search" element={<VoiceSearchPage />} />
-          <Route path="/text-search" element={<TextSearchPage />} />
+          <Route path="/search" element={<SearchPage />} />
+          {/* Legacy routes redirect to unified search */}
+          <Route path="/voice-search" element={<SearchPage />} />
+          <Route path="/text-search" element={<SearchPage />} />
           <Route path="/plan-viewer" element={<PlanViewerPage />} />
           <Route path="/store-names" element={<StoreNamesPage />} />
           <Route path="/pallet-calc" element={<PalletCalcPage />} />
