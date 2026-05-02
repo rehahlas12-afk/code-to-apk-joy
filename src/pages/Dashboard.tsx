@@ -26,16 +26,17 @@ const Dashboard = () => {
   };
 
   const handleQuit = async () => {
-    if (!confirm("Quitter l'application ?")) return;
+    const ok = window.confirm("Voulez-vous quitter l'application ?");
+    if (!ok) return;
     // Native APK : utilise Capacitor App
     try {
       const { App } = await import("@capacitor/app");
       await App.exitApp();
       return;
     } catch {}
-    // Web fallback
+    // Web / PWA fallback
     try { window.close(); } catch {}
-    window.location.href = "about:blank";
+    setTimeout(() => { window.location.href = "about:blank"; }, 100);
   };
 
   const handleExportNames = () => {
