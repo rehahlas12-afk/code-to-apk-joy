@@ -1,23 +1,20 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Mic, Search as SearchIcon, X } from "lucide-react";
-import { searchStore, getActivePlan } from "@/lib/store";
-import TruckLogo from "@/components/TruckLogo";
+import { searchStore } from "@/lib/store";
+
+interface MatchInfo {
+  travee: string;
+  zone: string;
+  emplacement: number; // position in the travée (1, 2, 3)
+  totalInTravee: number;
+}
 
 interface SearchResult {
   number: string;
-  travee: string;
-  zone: string;
   name?: string;
-  position?: number; // 1, 2, 3...
-  totalPositions?: number;
-  others?: { travee: string; zone: string; position: number }[];
+  matches: MatchInfo[];
 }
-
-const ordinal = (n: number) => {
-  if (n === 1) return "1ère position";
-  return `${n}ème position`;
-};
 
 const SearchPage = () => {
   const navigate = useNavigate();
@@ -41,10 +38,19 @@ const SearchPage = () => {
   const announce = useCallback((r: SearchResult) => {
     let msg = `Magasin ${r.number}`;
     if (r.name) msg += `, ${r.name}`;
-    msg += `, travée ${r.travee}, ${r.zone}`;
-    if (r.totalPositions && r.totalPositions > 1) {
-      msg += `, ${ordinal(r.position!)} sur ${r.totalPositions} dans le trajet`;
-    }
+    r.matches.forEach((m, idx) => {
+      if (idx === 0) {
+        msg += `, se trouve sur la travée ${m.travee}`;
+      } else {
+        msg += `, et aussi sur la travée ${m.travee}`;
+      }
+      if (m.totalInTravee > 1) {
+        msg += `, ${m.emplacement}${m.emplacement === 1 ? "er" : "ème"} emplacement`;
+      }
+      if (m.zone && m.zone !== "Zone 1") {
+        msg += `, ${m.zone}`;
+      }
+    });
     speak(msg);
   }, [speak]);
 
@@ -60,51 +66,59 @@ const SearchPage = () => {
       return;
     }
 
-    // Compute position within the active plan, ordered by travée
-    const plan = getActivePlan();
-    const planStores = plan?.stores ?? [];
-
-    // All occurrences of this store number (use allMatches if provided)
     const matches = (found.allMatches && found.allMatches.length > 0)
       ? found.allMatches
       : [found.store];
 
-    // Build a sorted list of all stores for deterministic ordering by travée
+    // Sort by travée number, then alphabetically
     const sortKey = (t: string) => {
-      // Numeric travées first, then alphanumeric
       const n = parseInt(t.replace(/\D/g, ""), 10);
       return isNaN(n) ? Number.MAX_SAFE_INTEGER : n;
     };
-
-    const sortedMatches = [...matches].sort((a, b) => {
+    const sorted = [...matches].sort((a, b) => {
       const ka = sortKey(a.travee);
       const kb = sortKey(b.travee);
       if (ka !== kb) return ka - kb;
       return a.travee.localeCompare(b.travee);
     });
 
-    const total = sortedMatches.length;
-    const primary = sortedMatches[0];
-    const others = sortedMatches.slice(1).map((m, i) => ({
-      travee: m.travee,
-      zone: m.zone,
-      position: i + 2,
-    }));
+    // For each match, compute its emplacement WITHIN its travée
+    // We need the full store list of that travée to know position
+    // We can reuse searchStore globally via a quick scan
+    const computed: MatchInfo[] = sorted.map((m) => {
+      // All stores in same travée+zone (from result perspective: we only know this store appears there)
+      // We need to find ALL stores in that travée. Use the global store list.
+      const allInTravee = (window as any).__stafAllInTravee?.(m.travee, m.zone) ?? [];
+      const totalInTravee = allInTravee.length || 1;
+      let emplacement = allInTravee.findIndex((s: any) => s.number === m.number);
+      if (emplacement < 0) emplacement = 0;
+      return {
+        travee: m.travee,
+        zone: m.zone,
+        emplacement: emplacement + 1,
+        totalInTravee,
+      };
+    });
 
     const r: SearchResult = {
-      number: primary.number,
-      travee: primary.travee,
-      zone: primary.zone,
+      number: sorted[0].number,
       name: found.name,
-      position: 1,
-      totalPositions: total,
-      others,
+      matches: computed,
     };
 
     setResult(r);
     setNotFound(false);
     announce(r);
   }, [announce, speak]);
+
+  // Expose helper to compute travée occupancy
+  useEffect(() => {
+    import("@/lib/store").then(({ getStores }) => {
+      (window as any).__stafAllInTravee = (travee: string, zone: string) => {
+        return getStores().filter((s) => s.travee === travee && s.zone === zone);
+      };
+    });
+  }, []);
 
   const handleSearchClick = () => runSearch(query);
 
@@ -116,7 +130,6 @@ const SearchPage = () => {
     }
     speak("Quel magasin cherchez-vous ?");
 
-    // Wait briefly for the prompt to start, then listen
     setTimeout(() => {
       const rec = new SR();
       rec.lang = "fr-FR";
@@ -147,7 +160,6 @@ const SearchPage = () => {
     setListening(false);
   }, []);
 
-  // Headset/media key support — hardware play/pause triggers voice search
   useEffect(() => {
     if (!("mediaSession" in navigator)) return;
     try {
@@ -161,7 +173,6 @@ const SearchPage = () => {
       };
       navigator.mediaSession.setActionHandler("play", handler);
       navigator.mediaSession.setActionHandler("pause", handler);
-      // Keep session alive with a silent looping audio
       return () => {
         try {
           navigator.mediaSession.setActionHandler("play", null);
@@ -179,18 +190,18 @@ const SearchPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-black flex flex-col text-white">
-      <TruckLogo />
-      <div className="flex items-center gap-3 p-4">
+    <div className="h-screen bg-black flex flex-col text-white overflow-hidden">
+      {/* Compact header */}
+      <div className="flex items-center gap-2 px-3 py-2 bg-black border-b border-gray-800">
         <button onClick={() => navigate("/")} className="p-2 rounded-lg bg-gray-800" aria-label="Retour">
-          <ArrowLeft size={20} />
+          <ArrowLeft size={18} />
         </button>
-        <h1 className="text-lg font-bold">Recherche</h1>
+        <h1 className="text-base font-bold">Recherche</h1>
       </div>
 
-      {/* Combined search bar */}
-      <div className="px-4">
-        <div className="flex items-center gap-2 bg-gray-900 border-2 border-gray-700 rounded-2xl p-2 focus-within:border-primary">
+      {/* Compact search bar — pushed to give room for mic */}
+      <div className="px-2 pt-2">
+        <div className="flex items-center gap-1 bg-gray-900 border-2 border-gray-700 rounded-xl p-1 focus-within:border-primary">
           <input
             ref={inputRef}
             type="text"
@@ -198,73 +209,69 @@ const SearchPage = () => {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSearchClick()}
-            placeholder="N° magasin ou nom..."
-            className="flex-1 bg-transparent px-3 py-3 text-lg text-white outline-none"
+            placeholder="N° magasin..."
+            className="min-w-0 flex-1 bg-transparent px-2 py-2 text-base text-white outline-none"
           />
           {query && (
-            <button onClick={clear} className="p-2 text-gray-400" aria-label="Effacer">
-              <X size={20} />
+            <button onClick={clear} className="p-1.5 text-gray-400 shrink-0" aria-label="Effacer">
+              <X size={18} />
             </button>
           )}
           <button
             onClick={handleSearchClick}
-            className="bg-primary text-primary-foreground rounded-xl p-3"
+            className="bg-primary text-primary-foreground rounded-lg p-2 shrink-0"
             aria-label="Rechercher"
           >
-            <SearchIcon size={22} />
+            <SearchIcon size={20} />
           </button>
           <button
             onClick={listening ? stopListening : startListening}
-            className={`rounded-xl p-3 ${listening ? "bg-red-600 animate-pulse" : "bg-green-600"}`}
+            className={`rounded-lg p-2 shrink-0 ${listening ? "bg-red-600 animate-pulse" : "bg-green-600"}`}
             aria-label="Recherche vocale"
           >
-            <Mic size={22} />
+            <Mic size={20} />
           </button>
         </div>
         {listening && (
-          <p className="text-center text-red-400 mt-2 text-sm font-semibold">🎤 Parlez maintenant...</p>
+          <p className="text-center text-red-400 mt-1 text-xs font-semibold">🎤 Parlez maintenant...</p>
         )}
       </div>
 
-      {/* HUGE result display */}
-      <div className="flex-1 flex flex-col items-center justify-center px-4 py-6">
+      {/* HUGE result display — scrollable, takes maximum space */}
+      <div className="flex-1 overflow-y-auto px-2 py-2">
         {result && (
           <div className="w-full text-center">
             {result.name && (
-              <p className="text-2xl font-bold text-white/80 mb-3">{result.name}</p>
+              <p className="text-xl font-bold text-white/80 mb-1">{result.name}</p>
             )}
-            <p className="text-xl text-gray-400 mb-1">Magasin</p>
-            <p className="text-6xl font-black text-white mb-6">{result.number}</p>
+            <p className="text-5xl font-black text-white mb-2">N° {result.number}</p>
 
-            <div className="bg-gray-900 border-2 border-green-500 rounded-2xl py-6 px-4 mb-4">
-              <p className="text-lg text-gray-400 mb-1">Travée</p>
-              <p className="text-7xl font-black text-green-400 leading-none">{result.travee}</p>
-              <p className="text-2xl font-bold text-blue-400 mt-3">{result.zone}</p>
+            <div className="space-y-2">
+              {result.matches.map((m, i) => (
+                <div
+                  key={i}
+                  className="bg-gray-900 border-2 border-green-500 rounded-2xl py-3 px-3"
+                >
+                  <p className="text-sm text-gray-400">Travée</p>
+                  <p className="text-7xl font-black text-green-400 leading-none">{m.travee}</p>
+                  {m.totalInTravee > 1 ? (
+                    <p className="text-2xl font-bold text-yellow-400 mt-2">
+                      {m.emplacement}{m.emplacement === 1 ? "er" : "ème"} emplacement
+                      <span className="text-base text-gray-400"> / {m.totalInTravee}</span>
+                    </p>
+                  ) : (
+                    <p className="text-base text-gray-500 mt-1">seul magasin</p>
+                  )}
+                  {m.zone && m.zone !== "Zone 1" && (
+                    <p className="text-lg font-bold text-blue-400 mt-1">{m.zone}</p>
+                  )}
+                </div>
+              ))}
             </div>
-
-            {result.totalPositions && result.totalPositions > 1 && (
-              <div className="bg-yellow-900/30 border border-yellow-500/50 rounded-xl p-3 mb-3">
-                <p className="text-yellow-400 font-bold text-lg">
-                  {ordinal(result.position!)} sur {result.totalPositions} dans le trajet
-                </p>
-              </div>
-            )}
-
-            {result.others && result.others.length > 0 && (
-              <div className="bg-gray-900 border border-gray-700 rounded-xl p-3 text-left">
-                <p className="text-xs text-gray-400 mb-2 text-center">Autres positions :</p>
-                {result.others.map((o, i) => (
-                  <p key={i} className="text-base">
-                    <span className="text-yellow-400 font-bold">{ordinal(o.position)}</span> →{" "}
-                    Travée <span className="text-green-400 font-bold">{o.travee}</span> ({o.zone})
-                  </p>
-                ))}
-              </div>
-            )}
 
             <button
               onClick={() => announce(result)}
-              className="mt-4 text-sm text-gray-400 underline"
+              className="mt-3 text-sm text-gray-400 underline"
             >
               🔊 Réécouter
             </button>
@@ -279,7 +286,7 @@ const SearchPage = () => {
         )}
 
         {!result && !notFound && (
-          <div className="text-center text-gray-500">
+          <div className="text-center text-gray-500 mt-8">
             <p className="text-base">Tapez un numéro ou nom de magasin,</p>
             <p className="text-base">ou appuyez sur 🎤 pour parler.</p>
           </div>
