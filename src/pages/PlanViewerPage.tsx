@@ -171,19 +171,24 @@ const PlanViewerPage = () => {
 
           <div
             ref={containerRef}
-            className="flex-1 overflow-hidden rounded-xl border border-gray-700 bg-gray-900 min-h-0 relative"
+            className="flex-1 overflow-hidden rounded-xl border border-gray-700 bg-gray-900 min-h-0 relative flex items-center justify-center"
             style={{ touchAction: "none" }}
           >
-            <img
-              src={selectedPlan.imageData}
-              alt="Plan"
-              draggable={false}
-              className="w-full h-full object-contain select-none"
+            <div
+              className="absolute inset-0 flex items-center justify-center"
               style={{
                 transform: `translate(${tx}px, ${ty}px) scale(${scale})`,
                 transformOrigin: "center center",
+                willChange: "transform",
               }}
-            />
+            >
+              <img
+                src={selectedPlan.imageData}
+                alt="Plan"
+                draggable={false}
+                className="max-w-full max-h-full object-contain select-none"
+              />
+            </div>
 
             <div className="absolute bottom-3 right-3 flex flex-col gap-2">
               <button
