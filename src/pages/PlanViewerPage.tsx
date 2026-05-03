@@ -212,9 +212,10 @@ const PlanViewerPage = () => {
             style={{ touchAction: "none" }}
           >
             <div
+              ref={innerRef}
               className="absolute inset-0 flex items-center justify-center"
               style={{
-                transform: `translate(${tx}px, ${ty}px) scale(${scale})`,
+                transform: `translate3d(${tx}px, ${ty}px, 0) scale(${scale})`,
                 transformOrigin: "center center",
                 willChange: "transform",
               }}
@@ -223,20 +224,20 @@ const PlanViewerPage = () => {
                 src={selectedPlan.imageData}
                 alt="Plan"
                 draggable={false}
-                className="max-w-full max-h-full object-contain select-none"
+                className="max-w-full max-h-full object-contain select-none pointer-events-none"
               />
             </div>
 
             <div className="absolute bottom-3 right-3 flex flex-col gap-2">
               <button
-                onClick={() => setScale(s => Math.min(8, s * 1.4))}
+                onClick={() => setScaleFn(stateRef.current.scale * 1.4)}
                 className="bg-black/80 border border-gray-600 rounded-full p-3 text-white shadow-lg"
                 aria-label="Zoom +"
               >
                 <ZoomIn size={22} />
               </button>
               <button
-                onClick={() => setScale(s => Math.max(1, s / 1.4))}
+                onClick={() => setScaleFn(stateRef.current.scale / 1.4)}
                 className="bg-black/80 border border-gray-600 rounded-full p-3 text-white shadow-lg"
                 aria-label="Zoom -"
               >
