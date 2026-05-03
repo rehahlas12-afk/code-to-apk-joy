@@ -498,3 +498,49 @@ export function searchStore(query: string): { store: StoreData; name?: string; a
 
   return null;
 }
+
+// Recherche permissive (phonétique/fuzzy) — utilisée UNIQUEMENT pour la saisie vocale
+export function searchStoreFuzzy(query: string): { store: StoreData; name?: string; allMatches?: StoreData[] } | null {
+  const exact = searchStore(query);
+  if (exact) return exact;
+
+  const stores = getSearchableStores();
+  const names = getStoreNames();
+  const raw = query.trim();
+  if (!raw) return null;
+  const compactQuery = raw.toLowerCase().replace(/\s+/g, "");
+  if (/^\d+$/.test(compactQuery)) return null; // chiffres : exact uniquement
+
+  const searchableNumbers = new Set(stores.map((s) => s.number));
+  const usableNames = names.filter(n => searchableNumbers.has(n.number));
+  const qNorm = normalizeText(raw);
+  const qPhon = phoneticKey(raw);
+
+  // contient le nom
+  const contains = usableNames.find(n => normalizeText(n.name).includes(qNorm));
+  if (contains) {
+    const store = stores.find(s => s.number === contains.number)!;
+    return { store, name: contains.name, allMatches: stores.filter(s => s.number === contains.number) };
+  }
+
+  // phonétique / Levenshtein
+  let best: { n: StoreName; score: number } | null = null;
+  for (const n of usableNames) {
+    const tokens = normalizeText(n.name).split(" ");
+    for (const tok of tokens) {
+      const kPhon = phoneticKey(tok);
+      const dPhon = levenshtein(qPhon, kPhon);
+      const dRaw = levenshtein(qNorm, tok);
+      const score = Math.min(dPhon, dRaw);
+      const maxLen = Math.max(qNorm.length, tok.length);
+      if (dPhon === 0 || score <= Math.max(1, Math.floor(maxLen * 0.34))) {
+        if (!best || score < best.score) best = { n, score };
+      }
+    }
+  }
+  if (best) {
+    const store = stores.find(s => s.number === best!.n.number)!;
+    return { store, name: best.n.name, allMatches: stores.filter(s => s.number === best!.n.number) };
+  }
+  return null;
+}
