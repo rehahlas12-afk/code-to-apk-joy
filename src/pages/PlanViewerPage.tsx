@@ -11,12 +11,37 @@ const PlanViewerPage = () => {
   const [plans, setPlans] = useState(initialPlans);
   const [selectedPlan, setSelectedPlan] = useState(getActivePlan() || initialPlans[0] || null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const innerRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
   const [tx, setTx] = useState(0);
   const [ty, setTy] = useState(0);
+
+  // Refs so the touch handlers never go stale + we don't re-render on every move
+  const stateRef = useRef({ scale: 1, tx: 0, ty: 0 });
   const lastDistRef = useRef<number | null>(null);
   const lastPanRef = useRef<{ x: number; y: number } | null>(null);
   const lastCenterRef = useRef<{ x: number; y: number } | null>(null);
+  const rafRef = useRef<number | null>(null);
+
+  const applyTransform = () => {
+    const el = innerRef.current;
+    if (!el) return;
+    const { scale: s, tx: x, ty: y } = stateRef.current;
+    el.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${s})`;
+  };
+
+  const scheduleApply = () => {
+    if (rafRef.current != null) return;
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null;
+      applyTransform();
+    });
+  };
+
+  const commitState = () => {
+    const { scale: s, tx: x, ty: y } = stateRef.current;
+    setScale(s); setTx(x); setTy(y);
+  };
 
   useEffect(() => {
     if (!selectedPlan) return;
@@ -26,9 +51,16 @@ const PlanViewerPage = () => {
   }, [selectedPlan]);
 
   const reset = () => {
-    setScale(1);
-    setTx(0);
-    setTy(0);
+    stateRef.current = { scale: 1, tx: 0, ty: 0 };
+    setScale(1); setTx(0); setTy(0);
+    applyTransform();
+  };
+
+  const setScaleFn = (next: number) => {
+    const clamped = Math.min(8, Math.max(1, next));
+    stateRef.current.scale = clamped;
+    setScale(clamped);
+    applyTransform();
   };
 
   const selectPlan = (plan: typeof selectedPlan) => {
@@ -66,30 +98,31 @@ const PlanViewerPage = () => {
 
     const onTouchMove = (e: TouchEvent) => {
       if (e.touches.length === 2) {
-        e.preventDefault();
+        if (e.cancelable) e.preventDefault();
         const dx = e.touches[0].clientX - e.touches[1].clientX;
         const dy = e.touches[0].clientY - e.touches[1].clientY;
         const dist = Math.sqrt(dx * dx + dy * dy);
         const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
         const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-
         if (lastDistRef.current !== null) {
           const delta = dist / lastDistRef.current;
-          setScale(s => Math.min(8, Math.max(1, s * delta)));
+          stateRef.current.scale = Math.min(8, Math.max(1, stateRef.current.scale * delta));
         }
         if (lastCenterRef.current) {
-          setTx(t => t + (cx - lastCenterRef.current!.x));
-          setTy(t => t + (cy - lastCenterRef.current!.y));
+          stateRef.current.tx += cx - lastCenterRef.current.x;
+          stateRef.current.ty += cy - lastCenterRef.current.y;
         }
         lastDistRef.current = dist;
         lastCenterRef.current = { x: cx, y: cy };
-      } else if (e.touches.length === 1 && lastPanRef.current) {
-        e.preventDefault();
+        scheduleApply();
+      } else if (e.touches.length === 1 && lastPanRef.current && stateRef.current.scale > 1) {
+        if (e.cancelable) e.preventDefault();
         const dx = e.touches[0].clientX - lastPanRef.current.x;
         const dy = e.touches[0].clientY - lastPanRef.current.y;
-        setTx(t => t + dx);
-        setTy(t => t + dy);
+        stateRef.current.tx += dx;
+        stateRef.current.ty += dy;
         lastPanRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        scheduleApply();
       }
     };
 
@@ -100,16 +133,20 @@ const PlanViewerPage = () => {
       }
       if (e.touches.length === 0) {
         lastPanRef.current = null;
+        commitState();
       }
     };
 
     el.addEventListener("touchstart", onTouchStart, { passive: true });
     el.addEventListener("touchmove", onTouchMove, { passive: false });
-    el.addEventListener("touchend", onTouchEnd);
+    el.addEventListener("touchend", onTouchEnd, { passive: true });
+    el.addEventListener("touchcancel", onTouchEnd, { passive: true });
     return () => {
       el.removeEventListener("touchstart", onTouchStart);
       el.removeEventListener("touchmove", onTouchMove);
       el.removeEventListener("touchend", onTouchEnd);
+      el.removeEventListener("touchcancel", onTouchEnd);
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
     };
   }, []);
 
