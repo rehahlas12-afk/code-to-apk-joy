@@ -81,12 +81,12 @@ const SearchPage = () => {
     speak(msg);
   }, [speak]);
 
-  const runSearch = useCallback((q: string) => {
+  const runSearch = useCallback((q: string, fuzzy = false) => {
     const trimmed = q.trim();
     if (!trimmed) return;
     setShowSuggestions(false);
 
-    const found = searchStore(trimmed);
+    const found = fuzzy ? searchStoreFuzzy(trimmed) : searchStore(trimmed);
     if (!found) {
       setResult(null);
       setNotFound(true);
