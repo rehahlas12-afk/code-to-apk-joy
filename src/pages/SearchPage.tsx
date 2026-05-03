@@ -127,9 +127,8 @@ const SearchPage = () => {
         setQuery(text);
         if (event.results[0].isFinal) {
           const numbers = text.replace(/\s/g, "").match(/\d+/g);
-          // If text contains digits, use them; otherwise use the whole text (name search w/ phonetic)
           const q = numbers && numbers.join("").length >= 3 ? numbers.join("") : text.trim();
-          runSearch(q);
+          runSearch(q, true); // fuzzy/phonetic OK pour la voix
           setListening(false);
         }
       };
