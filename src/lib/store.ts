@@ -469,51 +469,31 @@ export function searchStore(query: string): { store: StoreData; name?: string; a
   const searchableNumbers = new Set(stores.map((store) => store.number));
   const usableNames = names.filter(n => searchableNumbers.has(n.number));
   const qNorm = normalizeText(raw);
-  const qPhon = phoneticKey(raw);
 
-  // 1) Exact / contains by name (normalized, accent-insensitive)
-  const containsName = usableNames.find(n => normalizeText(n.name).includes(qNorm));
-  if (containsName) {
-    const store = stores.find(s => s.number === containsName.number)!;
-    return { store, name: containsName.name, allMatches: stores.filter(s => s.number === containsName.number) };
-  }
-
-  // 2) Exact number
-  const exactMatch = stores.find(s => s.number.toLowerCase() === compactQuery);
-  if (exactMatch) {
-    const name = names.find(n => n.number === exactMatch.number);
-    return { store: exactMatch, name: name?.name, allMatches: stores.filter(s => s.number === exactMatch.number) };
-  }
-
-  // 3) Phonetic / fuzzy on name (roquette ↔ rouquette, courbevoie ↔ courbevoit)
-  let bestName: { n: StoreName; score: number } | null = null;
-  for (const n of usableNames) {
-    const nm = normalizeText(n.name);
-    // try each token
-    const tokens = nm.split(" ");
-    for (const tok of tokens) {
-      const kPhon = phoneticKey(tok);
-      const dPhon = levenshtein(qPhon, kPhon);
-      const dRaw = levenshtein(qNorm, tok);
-      const score = Math.min(dPhon, dRaw);
-      const maxLen = Math.max(qNorm.length, tok.length);
-      // accept if close enough (≤ 30% of length, or exact phonetic match)
-      if (dPhon === 0 || score <= Math.max(1, Math.floor(maxLen * 0.34))) {
-        if (!bestName || score < bestName.score) bestName = { n, score };
-      }
+  // Si la requête est purement numérique : exiger une correspondance EXACTE
+  const isNumericQuery = /^\d+$/.test(compactQuery);
+  if (isNumericQuery) {
+    const exactMatch = stores.find(s => s.number.toLowerCase() === compactQuery);
+    if (exactMatch) {
+      const name = names.find(n => n.number === exactMatch.number);
+      return { store: exactMatch, name: name?.name, allMatches: stores.filter(s => s.number === exactMatch.number) };
     }
-  }
-  if (bestName) {
-    const store = stores.find(s => s.number === bestName!.n.number)!;
-    return { store, name: bestName.n.name, allMatches: stores.filter(s => s.number === bestName!.n.number) };
+    return null; // pas de fuzzy / partiel sur les chiffres
   }
 
-  // 4) Partial number contains
-  const partialMatches = stores.filter(s => s.number.toLowerCase().includes(compactQuery));
-  if (partialMatches.length > 0) {
-    const store = partialMatches[0];
-    const name = names.find(n => n.number === store.number);
-    return { store, name: name?.name, allMatches: partialMatches };
+  // Texte : correspondance exacte par nom complet uniquement (l'utilisateur doit cliquer
+  // une suggestion du menu pour les correspondances partielles)
+  const exactName = usableNames.find(n => normalizeText(n.name) === qNorm);
+  if (exactName) {
+    const store = stores.find(s => s.number === exactName.number)!;
+    return { store, name: exactName.name, allMatches: stores.filter(s => s.number === exactName.number) };
+  }
+
+  // Code mixte (lettres+chiffres) : exact uniquement
+  const exactCode = stores.find(s => s.number.toLowerCase() === compactQuery);
+  if (exactCode) {
+    const name = names.find(n => n.number === exactCode.number);
+    return { store: exactCode, name: name?.name, allMatches: stores.filter(s => s.number === exactCode.number) };
   }
 
   return null;
