@@ -117,19 +117,35 @@ const PalletCalcPage = () => {
           return;
         }
 
-        const numMatch = lower.match(/(\d+)/);
-        if (numMatch) {
+        // Split utterance into segments (one per number) so multiple items in one phrase
+        // are recognised as separate entries instead of repeating the same one.
+        const segments = lower.split(/(?:,|et\s|puis\s|ensuite\s|\bplus\b)/).map(s => s.trim()).filter(Boolean);
+        const toProcess = segments.length > 0 ? segments : [lower];
+        let added = 0;
+        for (const seg of toProcess) {
+          const numMatch = seg.match(/(\d+)/);
+          if (!numMatch) continue;
           const qty = parseInt(numMatch[1]);
           let type: PalletEntry["type"] = "normal";
-          if (lower.includes("roll") || lower.includes("rôle") || lower.includes("role") || lower.includes("rouleau")) type = "roll";
-          else if (lower.includes("demi") && lower.includes("eau")) type = "demi_eau";
-          else if (lower.includes("demi") && lower.includes("lait")) type = "demi_lait";
-          else if (lower.includes("demi")) type = "demi";
-          else if (lower.includes("gros") && lower.includes("eau")) type = "gros_eau";
-          else if (lower.includes("gros") || lower.includes("grosse")) type = "gros";
-
+          if (seg.includes("roll") || seg.includes("rôle") || seg.includes("role") || seg.includes("rouleau")) type = "roll";
+          else if (seg.includes("demi") && seg.includes("eau")) type = "demi_eau";
+          else if (seg.includes("demi") && seg.includes("lait")) type = "demi_lait";
+          else if (seg.includes("demi")) type = "demi";
+          else if (seg.includes("gros") && seg.includes("eau")) type = "gros_eau";
+          else if (seg.includes("gros") || seg.includes("grosse")) type = "gros";
           addEntry(type, qty);
-          speak(`${qty} ${typeLabel(type)} ajoutés`);
+          added++;
+        }
+        if (added > 0) {
+          // Short ack only — avoid repeating the article each time
+          try {
+            speechSynthesis.cancel();
+            const u = new SpeechSynthesisUtterance("ok");
+            u.lang = "fr-FR";
+            u.rate = 1.4;
+            u.volume = 0.6;
+            speechSynthesis.speak(u);
+          } catch {}
         }
       }
     };
