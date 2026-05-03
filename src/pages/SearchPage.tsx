@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Mic, Search as SearchIcon, X } from "lucide-react";
-import { searchStore, suggestStores, getStores, type StoreSuggestion } from "@/lib/store";
+import { searchStore, searchStoreFuzzy, suggestStores, getStores, type StoreSuggestion } from "@/lib/store";
 
 interface MatchInfo {
   travee: string;
@@ -81,12 +81,12 @@ const SearchPage = () => {
     speak(msg);
   }, [speak]);
 
-  const runSearch = useCallback((q: string) => {
+  const runSearch = useCallback((q: string, fuzzy = false) => {
     const trimmed = q.trim();
     if (!trimmed) return;
     setShowSuggestions(false);
 
-    const found = searchStore(trimmed);
+    const found = fuzzy ? searchStoreFuzzy(trimmed) : searchStore(trimmed);
     if (!found) {
       setResult(null);
       setNotFound(true);
@@ -127,9 +127,8 @@ const SearchPage = () => {
         setQuery(text);
         if (event.results[0].isFinal) {
           const numbers = text.replace(/\s/g, "").match(/\d+/g);
-          // If text contains digits, use them; otherwise use the whole text (name search w/ phonetic)
           const q = numbers && numbers.join("").length >= 3 ? numbers.join("") : text.trim();
-          runSearch(q);
+          runSearch(q, true); // fuzzy/phonetic OK pour la voix
           setListening(false);
         }
       };
