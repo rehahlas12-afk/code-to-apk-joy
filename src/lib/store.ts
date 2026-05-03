@@ -346,41 +346,175 @@ export function deletePlan(id: string): void {
   }
 }
 
+// --- Fuzzy / phonetic helpers --------------------------------------------------
+export function normalizeText(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // strip accents
+    .replace(/[^a-z0-9 ]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// Simple French phonetic key (handles roquette/rouquette, courbevoie/courbevoit, etc.)
+function phoneticKey(s: string): string {
+  let x = normalizeText(s).replace(/\s+/g, "");
+  x = x
+    .replace(/ph/g, "f")
+    .replace(/qu/g, "k")
+    .replace(/q/g, "k")
+    .replace(/c([eiy])/g, "s$1")
+    .replace(/c/g, "k")
+    .replace(/ch/g, "ʃ")
+    .replace(/sc/g, "s")
+    .replace(/sh/g, "ʃ")
+    .replace(/ou/g, "u")
+    .replace(/au|eau/g, "o")
+    .replace(/ai|ei/g, "e")
+    .replace(/oi/g, "wa")
+    .replace(/gn/g, "n")
+    .replace(/[hwy]/g, "")
+    .replace(/(.)\1+/g, "$1") // collapse doubles (roquette/rouquette)
+    .replace(/[aeiou]/g, "");
+  return x;
+}
+
+function levenshtein(a: string, b: string): number {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+  const v0 = new Array(b.length + 1).fill(0).map((_, i) => i);
+  const v1 = new Array(b.length + 1).fill(0);
+  for (let i = 0; i < a.length; i++) {
+    v1[0] = i + 1;
+    for (let j = 0; j < b.length; j++) {
+      const cost = a[i] === b[j] ? 0 : 1;
+      v1[j + 1] = Math.min(v1[j] + 1, v0[j + 1] + 1, v0[j] + cost);
+    }
+    for (let j = 0; j <= b.length; j++) v0[j] = v1[j];
+  }
+  return v1[b.length];
+}
+
+export interface StoreSuggestion {
+  number: string;
+  name?: string;
+  matches: StoreData[];
+  score: number;
+}
+
+// Autocomplete-style suggestions: matches by name prefix/contains and by number
+export function suggestStores(query: string, limit = 30): StoreSuggestion[] {
+  const stores = getSearchableStores();
+  const names = getStoreNames();
+  const q = normalizeText(query);
+  if (!q) return [];
+
+  const numberMap = new Map<string, StoreData[]>();
+  for (const s of stores) {
+    if (!numberMap.has(s.number)) numberMap.set(s.number, []);
+    numberMap.get(s.number)!.push(s);
+  }
+
+  const results: StoreSuggestion[] = [];
+  const seen = new Set<string>();
+  const compact = q.replace(/\s+/g, "");
+
+  // Name-based matches (prefix > contains)
+  for (const n of names) {
+    if (!numberMap.has(n.number)) continue;
+    const nm = normalizeText(n.name);
+    let score = -1;
+    if (nm.startsWith(q)) score = 0;
+    else if (nm.split(" ").some(w => w.startsWith(q))) score = 1;
+    else if (nm.includes(q)) score = 2;
+    if (score >= 0 && !seen.has(n.number)) {
+      seen.add(n.number);
+      results.push({ number: n.number, name: n.name, matches: numberMap.get(n.number)!, score });
+    }
+  }
+
+  // Number-based matches
+  for (const [num, matches] of numberMap) {
+    if (seen.has(num)) continue;
+    if (num.toLowerCase().startsWith(compact)) {
+      seen.add(num);
+      const nm = names.find(n => n.number === num);
+      results.push({ number: num, name: nm?.name, matches, score: 3 });
+    }
+  }
+  for (const [num, matches] of numberMap) {
+    if (seen.has(num)) continue;
+    if (num.toLowerCase().includes(compact)) {
+      seen.add(num);
+      const nm = names.find(n => n.number === num);
+      results.push({ number: num, name: nm?.name, matches, score: 4 });
+    }
+  }
+
+  results.sort((a, b) => a.score - b.score || a.number.localeCompare(b.number));
+  return results.slice(0, limit);
+}
+
 export function searchStore(query: string): { store: StoreData; name?: string; allMatches?: StoreData[] } | null {
   const stores = getSearchableStores();
   const names = getStoreNames();
-  
-  const q = query.trim().toLowerCase();
+
+  const raw = query.trim();
+  const q = raw.toLowerCase();
   const compactQuery = q.replace(/\s+/g, "");
   if (!q) return null;
 
   const searchableNumbers = new Set(stores.map((store) => store.number));
-  
-  // Search by name first
-  const nameMatch = names.find(n => searchableNumbers.has(n.number) && n.name.toLowerCase().includes(q));
-  if (nameMatch) {
-    const store = stores.find(s => s.number === nameMatch.number);
-    if (store) {
-      const allMatches = stores.filter(s => s.number === nameMatch.number);
-      return { store, name: nameMatch.name, allMatches };
-    }
+  const usableNames = names.filter(n => searchableNumbers.has(n.number));
+  const qNorm = normalizeText(raw);
+  const qPhon = phoneticKey(raw);
+
+  // 1) Exact / contains by name (normalized, accent-insensitive)
+  const containsName = usableNames.find(n => normalizeText(n.name).includes(qNorm));
+  if (containsName) {
+    const store = stores.find(s => s.number === containsName.number)!;
+    return { store, name: containsName.name, allMatches: stores.filter(s => s.number === containsName.number) };
   }
-  
-  // Search by exact number
+
+  // 2) Exact number
   const exactMatch = stores.find(s => s.number.toLowerCase() === compactQuery);
   if (exactMatch) {
     const name = names.find(n => n.number === exactMatch.number);
-    const allMatches = stores.filter(s => s.number === exactMatch.number);
-    return { store: exactMatch, name: name?.name, allMatches };
+    return { store: exactMatch, name: name?.name, allMatches: stores.filter(s => s.number === exactMatch.number) };
   }
 
-  // Search by partial number (contains)
+  // 3) Phonetic / fuzzy on name (roquette ↔ rouquette, courbevoie ↔ courbevoit)
+  let bestName: { n: StoreName; score: number } | null = null;
+  for (const n of usableNames) {
+    const nm = normalizeText(n.name);
+    // try each token
+    const tokens = nm.split(" ");
+    for (const tok of tokens) {
+      const kPhon = phoneticKey(tok);
+      const dPhon = levenshtein(qPhon, kPhon);
+      const dRaw = levenshtein(qNorm, tok);
+      const score = Math.min(dPhon, dRaw);
+      const maxLen = Math.max(qNorm.length, tok.length);
+      // accept if close enough (≤ 30% of length, or exact phonetic match)
+      if (dPhon === 0 || score <= Math.max(1, Math.floor(maxLen * 0.34))) {
+        if (!bestName || score < bestName.score) bestName = { n, score };
+      }
+    }
+  }
+  if (bestName) {
+    const store = stores.find(s => s.number === bestName!.n.number)!;
+    return { store, name: bestName.n.name, allMatches: stores.filter(s => s.number === bestName!.n.number) };
+  }
+
+  // 4) Partial number contains
   const partialMatches = stores.filter(s => s.number.toLowerCase().includes(compactQuery));
   if (partialMatches.length > 0) {
     const store = partialMatches[0];
     const name = names.find(n => n.number === store.number);
     return { store, name: name?.name, allMatches: partialMatches };
   }
-  
+
   return null;
 }
