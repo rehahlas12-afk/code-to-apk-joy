@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Mic, Search as SearchIcon, X } from "lucide-react";
-import { searchStore, searchStoreFuzzy, suggestStores, getStores, type StoreSuggestion } from "@/lib/store";
+import { searchStore, searchStoreFuzzy, suggestStores, getSearchableStores, type StoreSuggestion } from "@/lib/store";
 
 interface MatchInfo {
   travee: string;
@@ -45,14 +45,15 @@ const SearchPage = () => {
   }, []);
 
   const computeResult = useCallback((number: string, name?: string): SearchResult => {
-    const all = getStores().filter(s => s.number === number);
+    const stores = getSearchableStores();
+    const all = stores.filter(s => s.number === number);
     const sortKey = (t: string) => {
       const n = parseInt(t.replace(/\D/g, ""), 10);
       return isNaN(n) ? Number.MAX_SAFE_INTEGER : n;
     };
     const sorted = [...all].sort((a, b) => sortKey(a.travee) - sortKey(b.travee) || a.travee.localeCompare(b.travee));
     const matches: MatchInfo[] = sorted.map((m) => {
-      const allInTravee = getStores().filter((s) => s.travee === m.travee && s.zone === m.zone);
+      const allInTravee = stores.filter((s) => s.travee === m.travee && s.zone === m.zone);
       let emp = allInTravee.findIndex((s) => s.number === m.number);
       if (emp < 0) emp = 0;
       return {
@@ -292,8 +293,14 @@ const SearchPage = () => {
 
         {!result && !notFound && !showSuggestions && (
           <div className="text-center text-gray-500 mt-8">
-            <p className="text-base">Tapez les premières lettres,</p>
-            <p className="text-base">ou appuyez sur 🎤 pour parler.</p>
+            {getSearchableStores().length === 0 ? (
+              <p className="text-xl font-bold">Il n'y a pas de plan de travail.</p>
+            ) : (
+              <>
+                <p className="text-base">Tapez les premières lettres,</p>
+                <p className="text-base">ou appuyez sur 🎤 pour parler.</p>
+              </>
+            )}
           </div>
         )}
       </div>
