@@ -36,8 +36,8 @@ Le document est un tableau quadrillé (grille) avec des colonnes et des lignes. 
 
 Les zones sont :
 - "Zone 1" : travées normales (généralement < 72)
-- "Débord" : travées 72-85, ou lignes marquées DEBORD/DEB
-- "Craft" : travées 86-95, ou lignes marquées CRAFT
+- "Débord" : travées 72-86 quand rien n'est marqué, ou lignes marquées DEBORD/DEB
+- "Craft" : travées 86-95 uniquement quand la ligne/case est marquée CRAFT/KRAFT/CRAFTER
 
 INSTRUCTIONS CRITIQUES :
 1. Parcours CHAQUE ligne du tableau, de haut en bas, de gauche à droite
@@ -46,6 +46,8 @@ INSTRUCTIONS CRITIQUES :
 4. Les numéros de travée ont 2-3 chiffres (ex: 72, 306, 94)
 5. Retourne TOUS les magasins trouvés, même si tu n'es pas sûr à 100%
 6. Si un numéro est partiellement lisible, donne ta meilleure estimation
+7. ATTENTION : le numéro 86 peut exister deux fois. Si une case indique seulement "86" sans CRAFT, c'est "Débord". Si une autre case indique "86 CRAFT" ou "86 KRAFT", c'est une travée différente en "Craft". Ne mélange jamais ces deux travées.
+8. Chaque travée 86 (Débord ou Craft) peut avoir son propre magasin unique. Ne copie pas le magasin de l'une vers l'autre.
 
 Retourne le résultat UNIQUEMENT au format JSON, sans texte autour.`;
 
@@ -54,6 +56,8 @@ Retourne le résultat UNIQUEMENT au format JSON, sans texte autour.`;
 Retourne un tableau JSON avec ce format exact :
 [
   {"number": "8486", "travee": "72", "zone": "Débord"},
+  {"number": "1111", "travee": "86", "zone": "Débord"},
+  {"number": "2222", "travee": "86", "zone": "Craft"},
   {"number": "6317", "travee": "306", "zone": "Zone 1"}
 ]
 
