@@ -342,10 +342,6 @@ export function deletePlan(id: string): void {
   }
 
   localStorage.removeItem(STORES_KEY);
-
-  if (!nextPlan) {
-    initDemoStores();
-  }
 }
 
 // --- Fuzzy / phonetic helpers --------------------------------------------------
