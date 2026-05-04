@@ -94,8 +94,8 @@ function inferZoneFromTravee(travee: string, fallbackZone: string, explicitZoneO
   if (explicitZoneOnLine && /CRAFT|KRAFT/i.test(fallbackZone)) return "Craft";
   const traveeNumber = Number(travee);
   if (Number.isNaN(traveeNumber)) return fallbackZone;
-  if (/CRAFT|KRAFT/i.test(fallbackZone)) return "Craft";
   if (traveeNumber === 86) return "Débord";
+  if (/CRAFT|KRAFT/i.test(fallbackZone)) return "Craft";
   if (traveeNumber >= 72 && traveeNumber <= 86) return "Débord";
   if (traveeNumber >= 86 && traveeNumber <= 95) return "Craft";
   return fallbackZone;
