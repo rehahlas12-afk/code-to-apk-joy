@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { parseOcrText } from "../lib/ocr";
-import { activatePlan, savePlan, searchStore } from "../lib/store";
+import { activatePlan, getStores, savePlan, searchStore } from "../lib/store";
 
 describe("plan search", () => {
   beforeEach(() => {
@@ -71,6 +71,28 @@ describe("plan search", () => {
         { number: "9083", travee: "DEB4", zone: "Débord" },
         { number: "7879", travee: "DEB4", zone: "Débord" },
         { number: "7859", travee: "94", zone: "Craft" },
+      ]),
+    );
+  });
+
+  it("does not load demo stores when the app has no work plan", () => {
+    expect(getStores()).toEqual([]);
+    expect(searchStore("8486")).toBeNull();
+  });
+
+  it("keeps 86 Débord separate from 86 Craft", () => {
+    const stores = parseOcrText(`
+      86 1111
+      86 CRAFT 2222
+      CRAFT
+      87 3333
+    `);
+
+    expect(stores).toEqual(
+      expect.arrayContaining([
+        { number: "1111", travee: "86", zone: "Débord" },
+        { number: "2222", travee: "86", zone: "Craft" },
+        { number: "3333", travee: "87", zone: "Craft" },
       ]),
     );
   });
