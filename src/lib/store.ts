@@ -174,7 +174,7 @@ function dedupePlanRecord(plan: PlanRecord): PlanRecord {
   };
 }
 
-function getSearchableStores(): StoreData[] {
+export function getSearchableStores(): StoreData[] {
   const activePlan = getActivePlan();
   if (activePlan) {
     return dedupeStores(normalizeStores(activePlan.stores));
