@@ -123,12 +123,19 @@ Parcours systématiquement chaque ligne et chaque cellule du tableau. Ne rate au
     const stores = JSON.parse(jsonMatch[0]);
 
     // Validate and normalize
+    const normalizeZone = (zone: string) => {
+      const z = String(zone || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+      if (z.includes("craft") || z.includes("kraft")) return "Craft";
+      if (z.includes("debord") || z.includes("deb")) return "Débord";
+      return "Zone 1";
+    };
+
     const validStores = stores
       .filter((s: any) => s.number && /^\d{4,5}$/.test(String(s.number).trim()))
       .map((s: any) => ({
         number: String(s.number).trim(),
         travee: String(s.travee || "?").trim(),
-        zone: String(s.zone || "Zone 1").trim(),
+        zone: normalizeZone(s.zone),
       }));
 
     // Dedupe
