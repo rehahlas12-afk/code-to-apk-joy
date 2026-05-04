@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
-import { Camera, Search, Eye, Plus, Calculator, Image, RotateCcw, LogOut, Download, Upload } from "lucide-react";
+import { Camera, Search, Eye, Plus, Calculator, Image, LogOut, Download, Upload, CalendarClock } from "lucide-react";
 import TruckLogo from "@/components/TruckLogo";
-import { initDemoStores, getStores, setActivePlanId, getStoreNames, setStoreNames, type StoreName } from "@/lib/store";
+import { getStoreNames, setStoreNames, type StoreName } from "@/lib/store";
 import { toast } from "@/hooks/use-toast";
 
 const buttons = [
@@ -16,27 +16,17 @@ const buttons = [
 const Dashboard = () => {
   const navigate = useNavigate();
 
-  const handleReset = () => {
-    if (!confirm("Réinitialiser les données magasins ? (Les noms enregistrés sont conservés)")) return;
-    localStorage.removeItem("staf_stores");
-    setActivePlanId(null);
-    initDemoStores();
-    const count = getStores().length;
-    toast({ title: "✅ Données réinitialisées", description: `${count} magasins de base rechargés` });
-  };
-
   const handleQuit = async () => {
     const ok = window.confirm("Voulez-vous quitter l'application ?");
     if (!ok) return;
-    // Native APK : utilise Capacitor App
+    document.body.innerHTML = "";
     try {
       const { App } = await import("@capacitor/app");
       await App.exitApp();
       return;
     } catch {}
-    // Web / PWA fallback
     try { window.close(); } catch {}
-    setTimeout(() => { window.location.href = "about:blank"; }, 100);
+    setTimeout(() => { window.location.replace("about:blank"); }, 50);
   };
 
   const handleExportNames = () => {
@@ -98,11 +88,11 @@ const Dashboard = () => {
             </button>
           ))}
           <button
-            onClick={handleReset}
+            onClick={() => navigate("/time-tracking")}
             className="bg-gray-700 text-white rounded-xl p-6 flex flex-col items-center gap-3 shadow-lg active:scale-95 transition-transform"
           >
-            <RotateCcw size={36} />
-            <span className="text-base font-bold text-center leading-tight">Réinit. Données</span>
+            <CalendarClock size={36} />
+            <span className="text-base font-bold text-center leading-tight">Pointage nom prénom</span>
           </button>
           <button
             onClick={handleQuit}
