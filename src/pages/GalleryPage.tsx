@@ -145,7 +145,7 @@ const GalleryPage = () => {
             ))}
           </div>
         ) : (
-          <p className="text-center text-gray-500 py-8">Aucun plan dans la galerie</p>
+          <p className="text-center text-gray-500 py-8 text-xl font-bold">Il n'y a pas de plan de travail.</p>
         )}
       </div>
     </div>

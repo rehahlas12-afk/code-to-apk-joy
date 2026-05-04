@@ -61,8 +61,8 @@ const OCR_DIGIT_FIXES: Record<string, string> = {
 };
 
 const ZONE_PATTERNS: { pattern: RegExp; zone: string }[] = [
-  { pattern: /DEBORD/i, zone: "Débord" },
-  { pattern: /CRAFT/i, zone: "Craft" },
+  { pattern: /DEBORD|DEB/i, zone: "Débord" },
+  { pattern: /CRAFT|CRAFTER|KRAFT/i, zone: "Craft" },
   { pattern: /ZONE\s*1/i, zone: "Zone 1" },
 ];
 
@@ -89,11 +89,14 @@ function normalizePotentialNumber(token: string): string {
   return token.split("").map((char) => OCR_DIGIT_FIXES[char] ?? char).join("");
 }
 
-function inferZoneFromTravee(travee: string, fallbackZone: string): string {
+function inferZoneFromTravee(travee: string, fallbackZone: string, explicitZoneOnLine = false): string {
   if (travee.startsWith("DEB")) return "Débord";
+  if (explicitZoneOnLine && /CRAFT|KRAFT/i.test(fallbackZone)) return "Craft";
   const traveeNumber = Number(travee);
   if (Number.isNaN(traveeNumber)) return fallbackZone;
-  if (traveeNumber >= 72 && traveeNumber <= 85) return "Débord";
+  if (traveeNumber === 86) return "Débord";
+  if (/CRAFT|KRAFT/i.test(fallbackZone)) return "Craft";
+  if (traveeNumber >= 72 && traveeNumber <= 86) return "Débord";
   if (traveeNumber >= 86 && traveeNumber <= 95) return "Craft";
   return fallbackZone;
 }
@@ -153,16 +156,18 @@ export function parseOcrText(text: string): StoreData[] {
 
   for (const line of lines) {
     const normalizedLine = normalizeOcrLine(line);
+    let explicitZoneOnLine = false;
 
     for (const { pattern, zone } of ZONE_PATTERNS) {
       if (pattern.test(normalizedLine)) {
         currentZone = zone;
+        explicitZoneOnLine = true;
         break;
       }
     }
 
     currentTravee = extractTravee(normalizedLine, currentTravee);
-    const inferredZone = inferZoneFromTravee(currentTravee, currentZone);
+    const inferredZone = inferZoneFromTravee(currentTravee, currentZone, explicitZoneOnLine);
     const lineNumbers = extractStoreNumbers(normalizedLine);
 
     for (const num of lineNumbers) {

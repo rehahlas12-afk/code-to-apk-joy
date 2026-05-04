@@ -151,6 +151,22 @@ function dedupeStores(stores: StoreData[]): StoreData[] {
   });
 }
 
+function normalizeZone(zone: string): string {
+  const normalized = (zone || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  if (normalized.includes("craft") || normalized.includes("kraft")) return "Craft";
+  if (normalized.includes("debord") || normalized.includes("deb")) return "Débord";
+  return zone || "Zone 1";
+}
+
+function normalizeStores(stores: StoreData[]): StoreData[] {
+  return stores.map((store) => ({
+    ...store,
+    number: String(store.number).trim(),
+    travee: String(store.travee).trim(),
+    zone: normalizeZone(store.zone),
+  }));
+}
+
 function dedupePlanRecord(plan: PlanRecord): PlanRecord {
   return {
     ...plan,
@@ -158,40 +174,26 @@ function dedupePlanRecord(plan: PlanRecord): PlanRecord {
   };
 }
 
-function getSearchableStores(): StoreData[] {
+export function getSearchableStores(): StoreData[] {
   const activePlan = getActivePlan();
   if (activePlan) {
-    return dedupeStores(activePlan.stores);
+    return dedupeStores(normalizeStores(activePlan.stores));
   }
 
-  const latestAnalyzedPlan = getPlans().find((plan) => plan.stores.length > 0);
-  if (latestAnalyzedPlan) {
-    return dedupeStores(latestAnalyzedPlan.stores);
-  }
-
-  const storedStores = readJson<StoreData[]>(STORES_KEY, []);
-  if (storedStores.length > 0) {
-    return dedupeStores(storedStores);
-  }
-
-  initDemoStores();
-  return readJson<StoreData[]>(STORES_KEY, DEMO_STORES);
+  return [];
 }
 
 export function getStores(): StoreData[] {
   const stores = readJson<StoreData[]>(STORES_KEY, []);
-  if (stores.length > 0) return dedupeStores(stores);
-  initDemoStores();
-  return readJson<StoreData[]>(STORES_KEY, []);
+  return dedupeStores(normalizeStores(stores));
 }
 
 export function initDemoStores(): void {
-  if (localStorage.getItem(STORES_KEY)) return;
-  writeJson(STORES_KEY, DEMO_STORES);
+  localStorage.removeItem(STORES_KEY);
 }
 
 export function setStores(stores: StoreData[]): void {
-  writeJson(STORES_KEY, dedupeStores(stores));
+  writeJson(STORES_KEY, dedupeStores(normalizeStores(stores)));
 }
 
 export function getStoreNames(): StoreName[] {
@@ -340,10 +342,6 @@ export function deletePlan(id: string): void {
   }
 
   localStorage.removeItem(STORES_KEY);
-
-  if (!nextPlan) {
-    initDemoStores();
-  }
 }
 
 // --- Fuzzy / phonetic helpers --------------------------------------------------
