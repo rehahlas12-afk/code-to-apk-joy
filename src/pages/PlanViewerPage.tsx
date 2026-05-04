@@ -259,7 +259,7 @@ const PlanViewerPage = () => {
         </div>
       ) : (
         <div className="flex-1 flex items-center justify-center p-4">
-          <p className="text-gray-500 text-center">Aucun plan sauvegardé.<br />Scannez ou importez un plan.</p>
+          <p className="text-gray-500 text-center text-xl font-bold">Il n'y a pas de plan de travail.</p>
         </div>
       )}
     </div>
