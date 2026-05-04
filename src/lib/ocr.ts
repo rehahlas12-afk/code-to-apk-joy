@@ -61,8 +61,8 @@ const OCR_DIGIT_FIXES: Record<string, string> = {
 };
 
 const ZONE_PATTERNS: { pattern: RegExp; zone: string }[] = [
-  { pattern: /DEBORD/i, zone: "Débord" },
-  { pattern: /CRAFT/i, zone: "Craft" },
+  { pattern: /DEBORD|DEB/i, zone: "Débord" },
+  { pattern: /CRAFT|CRAFTER|KRAFT/i, zone: "Craft" },
   { pattern: /ZONE\s*1/i, zone: "Zone 1" },
 ];
 
@@ -91,9 +91,10 @@ function normalizePotentialNumber(token: string): string {
 
 function inferZoneFromTravee(travee: string, fallbackZone: string): string {
   if (travee.startsWith("DEB")) return "Débord";
+  if (/CRAFT|KRAFT/i.test(fallbackZone)) return "Craft";
   const traveeNumber = Number(travee);
   if (Number.isNaN(traveeNumber)) return fallbackZone;
-  if (traveeNumber >= 72 && traveeNumber <= 85) return "Débord";
+  if (traveeNumber >= 72 && traveeNumber <= 86) return "Débord";
   if (traveeNumber >= 86 && traveeNumber <= 95) return "Craft";
   return fallbackZone;
 }
