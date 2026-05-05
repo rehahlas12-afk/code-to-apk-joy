@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Mic, Search as SearchIcon, X } from "lucide-react";
-import { searchStore, searchStoreFuzzy, suggestStores, getSearchableStores, type StoreSuggestion } from "@/lib/store";
+import { searchStore, searchStoreFuzzy, suggestStores, searchByTravee, getSearchableStores, type StoreSuggestion, type TraveeResult } from "@/lib/store";
 
 interface MatchInfo {
   travee: string;
@@ -28,6 +28,7 @@ const SearchPage = () => {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [result, setResult] = useState<SearchResult | null>(null);
+  const [traveeResults, setTraveeResults] = useState<TraveeResult[] | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [listening, setListening] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -82,29 +83,56 @@ const SearchPage = () => {
     speak(msg);
   }, [speak]);
 
+  const announceTravee = useCallback((results: TraveeResult[], travee: string) => {
+    const total = results.reduce((s, g) => s + g.stores.length, 0);
+    let msg = `Travée ${travee}, ${total} magasin${total > 1 ? "s" : ""}`;
+    results.forEach((g) => {
+      const zp = zonePhrase(g.zone);
+      if (zp) msg += `, ${zp}`;
+      g.stores.forEach((st) => {
+        msg += `, ${st.name ? st.name : "magasin " + st.number}`;
+      });
+    });
+    speak(msg);
+  }, [speak]);
+
   const runSearch = useCallback((q: string, fuzzy = false) => {
     const trimmed = q.trim();
     if (!trimmed) return;
     setShowSuggestions(false);
 
     const found = fuzzy ? searchStoreFuzzy(trimmed) : searchStore(trimmed);
-    if (!found) {
-      setResult(null);
-      setNotFound(true);
-      speak(`Magasin ${trimmed} non trouvé`);
+    if (found) {
+      const r = computeResult(found.store.number, found.name);
+      setResult(r);
+      setTraveeResults(null);
+      setNotFound(false);
+      announce(r);
       return;
     }
-    const r = computeResult(found.store.number, found.name);
-    setResult(r);
-    setNotFound(false);
-    announce(r);
-  }, [announce, computeResult, speak]);
+
+    // Fallback : peut-être un numéro de travée
+    const tr = searchByTravee(trimmed);
+    if (tr.length > 0) {
+      setResult(null);
+      setTraveeResults(tr);
+      setNotFound(false);
+      announceTravee(tr, trimmed);
+      return;
+    }
+
+    setResult(null);
+    setTraveeResults(null);
+    setNotFound(true);
+    speak(`${trimmed} non trouvé`);
+  }, [announce, announceTravee, computeResult, speak]);
 
   const selectSuggestion = useCallback((s: StoreSuggestion) => {
     setQuery(s.name || s.number);
     setShowSuggestions(false);
     const r = computeResult(s.number, s.name);
     setResult(r);
+    setTraveeResults(null);
     setNotFound(false);
     announce(r);
   }, [announce, computeResult]);
@@ -147,28 +175,19 @@ const SearchPage = () => {
     setListening(false);
   }, []);
 
+  // Auto-déclenche la voix si on arrive avec ?voice=1 (depuis bouton casque global)
   useEffect(() => {
-    if (!("mediaSession" in navigator)) return;
-    try {
-      navigator.mediaSession.metadata = new MediaMetadata({
-        title: "Recherche STAF",
-        artist: "Appuyez sur play pour parler",
-      });
-      const handler = () => { if (listening) stopListening(); else startListening(); };
-      navigator.mediaSession.setActionHandler("play", handler);
-      navigator.mediaSession.setActionHandler("pause", handler);
-      return () => {
-        try {
-          navigator.mediaSession.setActionHandler("play", null);
-          navigator.mediaSession.setActionHandler("pause", null);
-        } catch {}
-      };
-    } catch {}
-  }, [listening, startListening, stopListening]);
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("voice") === "1") {
+      const t = setTimeout(() => startListening(), 300);
+      return () => clearTimeout(t);
+    }
+  }, [startListening]);
 
   const clear = () => {
     setQuery("");
     setResult(null);
+    setTraveeResults(null);
     setNotFound(false);
     setShowSuggestions(false);
     inputRef.current?.focus();
@@ -284,14 +303,34 @@ const SearchPage = () => {
           </div>
         )}
 
+        {traveeResults && traveeResults.map((g, i) => {
+          const zp = zonePhrase(g.zone);
+          return (
+            <div key={i} className="bg-gray-900 border-2 border-orange-500 rounded-2xl p-3 mb-2">
+              <p className="text-sm text-gray-400 text-center">Travée</p>
+              <p className="text-6xl font-black text-orange-400 leading-none text-center">{g.travee}</p>
+              {zp && <p className="text-lg font-bold text-blue-400 mt-1 uppercase text-center">{zp}</p>}
+              <p className="text-sm text-gray-400 text-center mt-2">{g.stores.length} magasin{g.stores.length > 1 ? "s" : ""} :</p>
+              <div className="mt-2 space-y-1">
+                {g.stores.map((st) => (
+                  <div key={st.number} className="flex items-center justify-between bg-gray-800 rounded-lg px-3 py-2">
+                    <span className="font-bold text-white text-base">{st.emplacement}. {st.name || `Magasin ${st.number}`}</span>
+                    <span className="text-green-400 font-bold text-sm">N° {st.number}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+
         {notFound && (
           <div className="bg-red-900/30 border-2 border-red-500/50 rounded-2xl p-6 text-center">
-            <p className="text-red-400 font-bold text-2xl">Magasin non trouvé</p>
+            <p className="text-red-400 font-bold text-2xl">Non trouvé</p>
             <p className="text-red-300 text-base mt-2">"{query}"</p>
           </div>
         )}
 
-        {!result && !notFound && !showSuggestions && (
+        {!result && !traveeResults && !notFound && !showSuggestions && (
           <div className="text-center text-gray-500 mt-8">
             {getSearchableStores().length === 0 ? (
               <p className="text-xl font-bold">Il n'y a pas de plan de travail.</p>
@@ -299,6 +338,7 @@ const SearchPage = () => {
               <>
                 <p className="text-base">Tapez les premières lettres,</p>
                 <p className="text-base">ou appuyez sur 🎤 pour parler.</p>
+                <p className="text-xs mt-2 text-gray-600">Vous pouvez aussi taper un n° de travée (ex: 306).</p>
               </>
             )}
           </div>
