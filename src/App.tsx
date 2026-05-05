@@ -16,16 +16,32 @@ import { setVoiceTrigger, startAudioService } from "@/lib/audioService";
 
 const queryClient = new QueryClient();
 
+const GlobalVoiceBridge = () => {
+  const navigate = useNavigate();
+  useEffect(() => {
+    setVoiceTrigger(() => navigate("/search?voice=1"));
+    const start = () => {
+      startAudioService();
+      window.removeEventListener("pointerdown", start);
+      window.removeEventListener("keydown", start);
+    };
+    window.addEventListener("pointerdown", start, { once: true });
+    window.addEventListener("keydown", start, { once: true });
+    return () => setVoiceTrigger(null);
+  }, [navigate]);
+  return null;
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
       <BrowserRouter>
+        <GlobalVoiceBridge />
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/camera" element={<CameraPage />} />
           <Route path="/search" element={<SearchPage />} />
-          {/* Legacy routes redirect to unified search */}
           <Route path="/voice-search" element={<SearchPage />} />
           <Route path="/text-search" element={<SearchPage />} />
           <Route path="/plan-viewer" element={<PlanViewerPage />} />
