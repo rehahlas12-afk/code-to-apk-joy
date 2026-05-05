@@ -20,14 +20,7 @@ const Dashboard = () => {
   const handleQuit = async () => {
     const ok = window.confirm("Voulez-vous quitter l'application ?");
     if (!ok) return;
-    document.body.innerHTML = "";
-    try {
-      const { App } = await import("@capacitor/app");
-      await App.exitApp();
-      return;
-    } catch {}
-    try { window.close(); } catch {}
-    setTimeout(() => { window.location.replace("about:blank"); }, 50);
+    await quitApplication();
   };
 
   const handleExportNames = () => {
