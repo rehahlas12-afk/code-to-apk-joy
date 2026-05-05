@@ -28,6 +28,7 @@ const SearchPage = () => {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [result, setResult] = useState<SearchResult | null>(null);
+  const [traveeResults, setTraveeResults] = useState<TraveeResult[] | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [listening, setListening] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
