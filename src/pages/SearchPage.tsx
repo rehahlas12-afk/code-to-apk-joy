@@ -175,24 +175,14 @@ const SearchPage = () => {
     setListening(false);
   }, []);
 
+  // Auto-déclenche la voix si on arrive avec ?voice=1 (depuis bouton casque global)
   useEffect(() => {
-    if (!("mediaSession" in navigator)) return;
-    try {
-      navigator.mediaSession.metadata = new MediaMetadata({
-        title: "Recherche STAF",
-        artist: "Appuyez sur play pour parler",
-      });
-      const handler = () => { if (listening) stopListening(); else startListening(); };
-      navigator.mediaSession.setActionHandler("play", handler);
-      navigator.mediaSession.setActionHandler("pause", handler);
-      return () => {
-        try {
-          navigator.mediaSession.setActionHandler("play", null);
-          navigator.mediaSession.setActionHandler("pause", null);
-        } catch {}
-      };
-    } catch {}
-  }, [listening, startListening, stopListening]);
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("voice") === "1") {
+      const t = setTimeout(() => startListening(), 300);
+      return () => clearTimeout(t);
+    }
+  }, [startListening]);
 
   const clear = () => {
     setQuery("");
