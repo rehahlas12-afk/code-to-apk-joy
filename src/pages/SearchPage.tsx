@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Mic, Search as SearchIcon, X } from "lucide-react";
-import { searchStore, searchStoreFuzzy, suggestStores, getSearchableStores, type StoreSuggestion } from "@/lib/store";
+import { searchStore, searchStoreFuzzy, suggestStores, searchByTravee, getSearchableStores, type StoreSuggestion, type TraveeResult } from "@/lib/store";
 
 interface MatchInfo {
   travee: string;
