@@ -313,14 +313,34 @@ const SearchPage = () => {
           </div>
         )}
 
+        {traveeResults && traveeResults.map((g, i) => {
+          const zp = zonePhrase(g.zone);
+          return (
+            <div key={i} className="bg-gray-900 border-2 border-orange-500 rounded-2xl p-3 mb-2">
+              <p className="text-sm text-gray-400 text-center">Travée</p>
+              <p className="text-6xl font-black text-orange-400 leading-none text-center">{g.travee}</p>
+              {zp && <p className="text-lg font-bold text-blue-400 mt-1 uppercase text-center">{zp}</p>}
+              <p className="text-sm text-gray-400 text-center mt-2">{g.stores.length} magasin{g.stores.length > 1 ? "s" : ""} :</p>
+              <div className="mt-2 space-y-1">
+                {g.stores.map((st) => (
+                  <div key={st.number} className="flex items-center justify-between bg-gray-800 rounded-lg px-3 py-2">
+                    <span className="font-bold text-white text-base">{st.emplacement}. {st.name || `Magasin ${st.number}`}</span>
+                    <span className="text-green-400 font-bold text-sm">N° {st.number}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+
         {notFound && (
           <div className="bg-red-900/30 border-2 border-red-500/50 rounded-2xl p-6 text-center">
-            <p className="text-red-400 font-bold text-2xl">Magasin non trouvé</p>
+            <p className="text-red-400 font-bold text-2xl">Non trouvé</p>
             <p className="text-red-300 text-base mt-2">"{query}"</p>
           </div>
         )}
 
-        {!result && !notFound && !showSuggestions && (
+        {!result && !traveeResults && !notFound && !showSuggestions && (
           <div className="text-center text-gray-500 mt-8">
             {getSearchableStores().length === 0 ? (
               <p className="text-xl font-bold">Il n'y a pas de plan de travail.</p>
@@ -328,6 +348,7 @@ const SearchPage = () => {
               <>
                 <p className="text-base">Tapez les premières lettres,</p>
                 <p className="text-base">ou appuyez sur 🎤 pour parler.</p>
+                <p className="text-xs mt-2 text-gray-600">Vous pouvez aussi taper un n° de travée (ex: 306).</p>
               </>
             )}
           </div>
