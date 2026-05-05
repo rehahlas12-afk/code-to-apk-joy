@@ -497,6 +497,43 @@ export function searchStore(query: string): { store: StoreData; name?: string; a
   return null;
 }
 
+// Recherche par numéro de travée — retourne tous les magasins de la travée
+export interface TraveeResult {
+  travee: string;
+  zone: string;
+  stores: { number: string; name?: string; emplacement: number }[];
+}
+
+export function searchByTravee(query: string): TraveeResult[] {
+  const stores = getSearchableStores();
+  const names = getStoreNames();
+  const compact = query.trim().toLowerCase().replace(/\s+/g, "");
+  if (!compact) return [];
+
+  // Group stores per (travee, zone)
+  const groups = new Map<string, StoreData[]>();
+  for (const s of stores) {
+    if (s.travee.toLowerCase() === compact) {
+      const key = `${s.travee}|${s.zone}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(s);
+    }
+  }
+  if (groups.size === 0) return [];
+
+  const nameOf = (num: string) => names.find(n => n.number === num)?.name;
+  const results: TraveeResult[] = [];
+  for (const [key, list] of groups) {
+    const [travee, zone] = key.split("|");
+    results.push({
+      travee,
+      zone,
+      stores: list.map((s, i) => ({ number: s.number, name: nameOf(s.number), emplacement: i + 1 })),
+    });
+  }
+  return results;
+}
+
 // Recherche permissive (phonétique/fuzzy) — utilisée UNIQUEMENT pour la saisie vocale
 export function searchStoreFuzzy(query: string): { store: StoreData; name?: string; allMatches?: StoreData[] } | null {
   const exact = searchStore(query);
