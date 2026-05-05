@@ -132,6 +132,7 @@ const SearchPage = () => {
     setShowSuggestions(false);
     const r = computeResult(s.number, s.name);
     setResult(r);
+    setTraveeResults(null);
     setNotFound(false);
     announce(r);
   }, [announce, computeResult]);
