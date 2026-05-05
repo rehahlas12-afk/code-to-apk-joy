@@ -2,6 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { Camera, Search, Eye, Plus, Calculator, Image, LogOut, Download, Upload, CalendarClock } from "lucide-react";
 import TruckLogo from "@/components/TruckLogo";
 import { getStoreNames, setStoreNames, type StoreName } from "@/lib/store";
+import { quitApplication } from "@/lib/audioService";
 import { toast } from "@/hooks/use-toast";
 
 const buttons = [
