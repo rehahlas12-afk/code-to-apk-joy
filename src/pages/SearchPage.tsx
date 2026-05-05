@@ -197,6 +197,7 @@ const SearchPage = () => {
   const clear = () => {
     setQuery("");
     setResult(null);
+    setTraveeResults(null);
     setNotFound(false);
     setShowSuggestions(false);
     inputRef.current?.focus();
