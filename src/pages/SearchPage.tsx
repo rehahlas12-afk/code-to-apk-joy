@@ -83,23 +83,49 @@ const SearchPage = () => {
     speak(msg);
   }, [speak]);
 
+  const announceTravee = useCallback((results: TraveeResult[], travee: string) => {
+    const total = results.reduce((s, g) => s + g.stores.length, 0);
+    let msg = `Travée ${travee}, ${total} magasin${total > 1 ? "s" : ""}`;
+    results.forEach((g) => {
+      const zp = zonePhrase(g.zone);
+      if (zp) msg += `, ${zp}`;
+      g.stores.forEach((st) => {
+        msg += `, ${st.name ? st.name : "magasin " + st.number}`;
+      });
+    });
+    speak(msg);
+  }, [speak]);
+
   const runSearch = useCallback((q: string, fuzzy = false) => {
     const trimmed = q.trim();
     if (!trimmed) return;
     setShowSuggestions(false);
 
     const found = fuzzy ? searchStoreFuzzy(trimmed) : searchStore(trimmed);
-    if (!found) {
-      setResult(null);
-      setNotFound(true);
-      speak(`Magasin ${trimmed} non trouvé`);
+    if (found) {
+      const r = computeResult(found.store.number, found.name);
+      setResult(r);
+      setTraveeResults(null);
+      setNotFound(false);
+      announce(r);
       return;
     }
-    const r = computeResult(found.store.number, found.name);
-    setResult(r);
-    setNotFound(false);
-    announce(r);
-  }, [announce, computeResult, speak]);
+
+    // Fallback : peut-être un numéro de travée
+    const tr = searchByTravee(trimmed);
+    if (tr.length > 0) {
+      setResult(null);
+      setTraveeResults(tr);
+      setNotFound(false);
+      announceTravee(tr, trimmed);
+      return;
+    }
+
+    setResult(null);
+    setTraveeResults(null);
+    setNotFound(true);
+    speak(`${trimmed} non trouvé`);
+  }, [announce, announceTravee, computeResult, speak]);
 
   const selectSuggestion = useCallback((s: StoreSuggestion) => {
     setQuery(s.name || s.number);
