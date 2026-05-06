@@ -67,12 +67,15 @@ const SearchPage = () => {
     return { number, name, matches };
   }, []);
 
+  // Insère un espace entre chiffres et lettres pour que la TTS prononce bien "306 X"
+  const traveeSpoken = (t: string) => t.replace(/(\d)([A-Za-z])/g, "$1 $2").replace(/([A-Za-z])(\d)/g, "$1 $2");
+
   const announce = useCallback((r: SearchResult) => {
     let msg = `Magasin ${r.number}`;
     if (r.name) msg += `, ${r.name}`;
     r.matches.forEach((m, idx) => {
       const zp = zonePhrase(m.zone);
-      const traveeRead = zp ? `${m.travee} ${zp}` : `${m.travee}`;
+      const traveeRead = zp ? `${traveeSpoken(m.travee)} ${zp}` : `${traveeSpoken(m.travee)}`;
       msg += idx === 0
         ? `, travée ${traveeRead}`
         : `, et aussi travée ${traveeRead}`;
