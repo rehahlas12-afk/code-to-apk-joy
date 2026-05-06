@@ -24,6 +24,9 @@ const zonePhrase = (zone: string): string => {
   return "";
 };
 
+// Insère un espace entre chiffres et lettres pour que la TTS prononce bien "306 X"
+const traveeSpoken = (t: string) => t.replace(/(\d)([A-Za-z])/g, "$1 $2").replace(/([A-Za-z])(\d)/g, "$1 $2");
+
 const SearchPage = () => {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
@@ -72,7 +75,7 @@ const SearchPage = () => {
     if (r.name) msg += `, ${r.name}`;
     r.matches.forEach((m, idx) => {
       const zp = zonePhrase(m.zone);
-      const traveeRead = zp ? `${m.travee} ${zp}` : `${m.travee}`;
+      const traveeRead = zp ? `${traveeSpoken(m.travee)} ${zp}` : `${traveeSpoken(m.travee)}`;
       msg += idx === 0
         ? `, travée ${traveeRead}`
         : `, et aussi travée ${traveeRead}`;
@@ -85,7 +88,7 @@ const SearchPage = () => {
 
   const announceTravee = useCallback((results: TraveeResult[], travee: string) => {
     const total = results.reduce((s, g) => s + g.stores.length, 0);
-    let msg = `Travée ${travee}, ${total} magasin${total > 1 ? "s" : ""}`;
+    let msg = `Travée ${traveeSpoken(travee)}, ${total} magasin${total > 1 ? "s" : ""}`;
     results.forEach((g) => {
       const zp = zonePhrase(g.zone);
       if (zp) msg += `, ${zp}`;
