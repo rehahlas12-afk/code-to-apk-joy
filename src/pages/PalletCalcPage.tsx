@@ -4,8 +4,10 @@ import { ArrowLeft, Mic, MicOff, Calculator, Trash2, Save, X } from "lucide-reac
 import TruckLogo from "@/components/TruckLogo";
 import { toast } from "@/hooks/use-toast";
 
+type EntryType = "roll" | "demi" | "normale" | "eau" | "demi_eau" | "demi_lait";
+
 interface PalletEntry {
-  type: "roll" | "demi" | "normal" | "gros" | "demi_eau" | "demi_lait" | "gros_eau";
+  type: EntryType;
   quantity: number;
 }
 
@@ -20,12 +22,105 @@ interface SavedCalc {
 const MAX_PALETTES = 20.5;
 const SAVED_KEY = "staf_pallet_calcs";
 
+// Ratios "physiques" en palettes
+const RATIO: Record<EntryType, number> = {
+  roll: 0.64,
+  demi: 0.5,
+  demi_eau: 0.5,
+  demi_lait: 0.5,
+  normale: 1,
+  eau: 1.5, // grosse palette d'eau = 1.5 palettes
+};
+
+const LABEL: Record<EntryType, string> = {
+  roll: "Roll",
+  demi: "Demi palette",
+  demi_eau: "Demi eau",
+  demi_lait: "Demi lait",
+  normale: "Palette normale",
+  eau: "Palette d'eau",
+};
+
 function getSavedCalcs(): SavedCalc[] {
   try { return JSON.parse(localStorage.getItem(SAVED_KEY) || "[]"); } catch { return []; }
 }
-
 function setSavedCalcs(calcs: SavedCalc[]) {
   localStorage.setItem(SAVED_KEY, JSON.stringify(calcs));
+}
+
+function calcSingle(e: PalletEntry): number {
+  return e.quantity * (RATIO[e.type] ?? 1);
+}
+
+// Regroupement automatique : appaire les demis, gère le cas "1 eau seule = 1 normale"
+function smartTotal(list: PalletEntry[]): { total: number; breakdown: string[] } {
+  const counts: Record<EntryType, number> = { roll: 0, demi: 0, demi_eau: 0, demi_lait: 0, normale: 0, eau: 0 };
+  for (const e of list) counts[e.type] += e.quantity;
+
+  const breakdown: string[] = [];
+  let total = 0;
+
+  // Rolls
+  if (counts.roll > 0) {
+    const v = counts.roll * RATIO.roll;
+    total += v;
+    breakdown.push(`${counts.roll} roll → ${v.toFixed(2)} pal`);
+  }
+
+  // Demi eau : 2 = 1 eau (1.5)
+  if (counts.demi_eau > 0) {
+    const grosses = Math.floor(counts.demi_eau / 2);
+    const reste = counts.demi_eau % 2;
+    const v = grosses * RATIO.eau + reste * RATIO.demi_eau;
+    total += v;
+    if (grosses > 0) breakdown.push(`${counts.demi_eau} demi eau → ${grosses} eau${reste ? " + 1 demi" : ""} = ${v.toFixed(2)} pal`);
+    else breakdown.push(`${reste} demi eau → ${v.toFixed(2)} pal`);
+  }
+
+  // Demi lait : 2 = 1 normale
+  if (counts.demi_lait > 0) {
+    const norm = Math.floor(counts.demi_lait / 2);
+    const reste = counts.demi_lait % 2;
+    const v = norm * RATIO.normale + reste * RATIO.demi_lait;
+    total += v;
+    if (norm > 0) breakdown.push(`${counts.demi_lait} demi lait → ${norm} normale${reste ? " + 1 demi" : ""} = ${v.toFixed(2)} pal`);
+    else breakdown.push(`${reste} demi lait → ${v.toFixed(2)} pal`);
+  }
+
+  // Demi générique : 2 = 1 normale
+  if (counts.demi > 0) {
+    const norm = Math.floor(counts.demi / 2);
+    const reste = counts.demi % 2;
+    const v = norm * RATIO.normale + reste * RATIO.demi;
+    total += v;
+    if (norm > 0) breakdown.push(`${counts.demi} demi → ${norm} normale${reste ? " + 1 demi" : ""} = ${v.toFixed(2)} pal`);
+    else breakdown.push(`${reste} demi → ${v.toFixed(2)} pal`);
+  }
+
+  // Palette normale
+  if (counts.normale > 0) {
+    const v = counts.normale * RATIO.normale;
+    total += v;
+    breakdown.push(`${counts.normale} normale = ${v.toFixed(2)} pal`);
+  }
+
+  // Palette eau : si une seule eau et rien d'autre → compte 1 (pas 1.5)
+  if (counts.eau > 0) {
+    const onlyOneEau = counts.eau === 1
+      && counts.normale === 0 && counts.demi === 0
+      && counts.demi_eau === 0 && counts.demi_lait === 0
+      && counts.roll === 0;
+    if (onlyOneEau) {
+      total += 1;
+      breakdown.push("1 palette eau (seule) = 1 pal");
+    } else {
+      const v = counts.eau * RATIO.eau;
+      total += v;
+      breakdown.push(`${counts.eau} palette eau = ${v.toFixed(2)} pal`);
+    }
+  }
+
+  return { total: Math.round(total * 100) / 100, breakdown };
 }
 
 const PalletCalcPage = () => {
@@ -47,19 +142,7 @@ const PalletCalcPage = () => {
     });
   };
 
-  const calcPalettes = useCallback((list: PalletEntry[]) => {
-    let total = 0;
-    list.forEach(e => {
-      switch (e.type) {
-        case "roll": total += e.quantity * 0.64; break;
-        case "demi": case "demi_eau": case "demi_lait": total += e.quantity * 0.5; break;
-        default: total += e.quantity; break;
-      }
-    });
-    return Math.round(total * 100) / 100;
-  }, []);
-
-  const total = calcPalettes(entries);
+  const { total, breakdown } = smartTotal(entries);
   const excess = total > MAX_PALETTES ? Math.round((total - MAX_PALETTES) * 100) / 100 : 0;
 
   const speak = useCallback((text: string) => {
@@ -68,7 +151,7 @@ const PalletCalcPage = () => {
     speechSynthesis.speak(u);
   }, []);
 
-  const addEntry = (type: PalletEntry["type"], quantity: number) => {
+  const addEntry = (type: EntryType, quantity: number) => {
     updateEntries(prev => [...prev, { type, quantity }]);
   };
 
@@ -79,14 +162,12 @@ const PalletCalcPage = () => {
   const handleVoice = () => {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) { toast({ title: "Non supporté", variant: "destructive" }); return; }
-
     if (listening) {
       listeningRef.current = false;
       recognitionRef.current?.stop();
       setListening(false);
       return;
     }
-
     const recognition = new SR();
     recognition.lang = "fr-FR";
     recognition.continuous = true;
@@ -104,12 +185,11 @@ const PalletCalcPage = () => {
         const lower = lastResult[0].transcript.toLowerCase();
 
         if (lower.includes("résultat") || lower.includes("resultat") || lower.includes("total")) {
-          const t = calcPalettes(entriesRef.current);
+          const t = smartTotal(entriesRef.current).total;
           const msg = `Total: ${t} palettes${t > MAX_PALETTES ? `. Attention, dépassement de ${Math.round((t - MAX_PALETTES) * 100) / 100} palettes` : ""}`;
           speak(msg);
           return;
         }
-
         if (lower.includes("stop") || lower.includes("arrêt")) {
           listeningRef.current = false;
           recognitionRef.current?.stop();
@@ -117,8 +197,6 @@ const PalletCalcPage = () => {
           return;
         }
 
-        // Split utterance into segments (one per number) so multiple items in one phrase
-        // are recognised as separate entries instead of repeating the same one.
         const segments = lower.split(/(?:,|et\s|puis\s|ensuite\s|\bplus\b)/).map(s => s.trim()).filter(Boolean);
         const toProcess = segments.length > 0 ? segments : [lower];
         let added = 0;
@@ -126,36 +204,30 @@ const PalletCalcPage = () => {
           const numMatch = seg.match(/(\d+)/);
           if (!numMatch) continue;
           const qty = parseInt(numMatch[1]);
-          let type: PalletEntry["type"] = "normal";
-          if (seg.includes("roll") || seg.includes("rôle") || seg.includes("role") || seg.includes("rouleau")) type = "roll";
+          let type: EntryType = "normale";
+          if (seg.includes("roll") || seg.includes("rouleau")) type = "roll";
           else if (seg.includes("demi") && seg.includes("eau")) type = "demi_eau";
           else if (seg.includes("demi") && seg.includes("lait")) type = "demi_lait";
           else if (seg.includes("demi")) type = "demi";
-          else if (seg.includes("gros") && seg.includes("eau")) type = "gros_eau";
-          else if (seg.includes("gros") || seg.includes("grosse")) type = "gros";
+          else if (seg.includes("eau")) type = "eau";
           addEntry(type, qty);
           added++;
         }
         if (added > 0) {
-          // Short ack only — avoid repeating the article each time
           try {
             speechSynthesis.cancel();
             const u = new SpeechSynthesisUtterance("ok");
-            u.lang = "fr-FR";
-            u.rate = 1.4;
-            u.volume = 0.6;
+            u.lang = "fr-FR"; u.rate = 1.4; u.volume = 0.6;
             speechSynthesis.speak(u);
           } catch {}
         }
       }
     };
-
     recognition.onerror = (e: any) => {
       if (e.error === "no-speech") return;
       listeningRef.current = false;
       setListening(false);
     };
-
     recognition.onend = () => {
       if (listeningRef.current) {
         try { recognition.start(); } catch { listeningRef.current = false; setListening(false); }
@@ -170,12 +242,9 @@ const PalletCalcPage = () => {
     setListening(true);
   };
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      listeningRef.current = false;
-      recognitionRef.current?.stop();
-    };
+  useEffect(() => () => {
+    listeningRef.current = false;
+    recognitionRef.current?.stop();
   }, []);
 
   const handleSave = () => {
@@ -199,7 +268,7 @@ const PalletCalcPage = () => {
     toast({ title: "Calcul supprimé" });
   };
 
-  const [manualType, setManualType] = useState<PalletEntry["type"]>("normal");
+  const [manualType, setManualType] = useState<EntryType>("normale");
   const [manualQty, setManualQty] = useState("");
 
   return (
@@ -213,7 +282,6 @@ const PalletCalcPage = () => {
       </div>
 
       <div className="flex-1 px-4 pb-4 space-y-3 overflow-y-auto">
-        {/* Store name */}
         <input
           type="text"
           value={storeName}
@@ -222,7 +290,6 @@ const PalletCalcPage = () => {
           className="w-full rounded-xl border border-gray-600 bg-gray-900 px-4 py-3 text-base text-white outline-none focus:ring-2 focus:ring-blue-500"
         />
 
-        {/* Voice button */}
         <button
           onClick={handleVoice}
           className={`w-full rounded-xl p-4 flex items-center justify-center gap-3 font-bold text-lg ${
@@ -236,26 +303,23 @@ const PalletCalcPage = () => {
         {listening && (
           <p className="text-xs text-center text-green-400 animate-pulse">🎙️ Parlez... dites "résultat" pour le total, "stop" pour arrêter</p>
         )}
-
         {transcript && (
           <p className="text-xs text-gray-400 bg-gray-900 rounded-lg p-2">{transcript}</p>
         )}
 
-        {/* Manual entry */}
         <div className="bg-gray-900 border border-gray-700 rounded-xl p-3 space-y-2">
           <div className="flex gap-2">
             <select
               value={manualType}
-              onChange={(e) => setManualType(e.target.value as PalletEntry["type"])}
+              onChange={(e) => setManualType(e.target.value as EntryType)}
               className="flex-1 rounded-lg border border-gray-600 bg-gray-800 px-2 py-2 text-sm text-white"
             >
               <option value="roll">Roll</option>
+              <option value="normale">Palette normale</option>
+              <option value="eau">Palette d'eau</option>
               <option value="demi">Demi palette</option>
               <option value="demi_eau">Demi eau</option>
               <option value="demi_lait">Demi lait</option>
-              <option value="normal">Palette normale</option>
-              <option value="gros">Grosse palette</option>
-              <option value="gros_eau">Grosse palette eau</option>
             </select>
             <input
               type="number"
@@ -278,15 +342,12 @@ const PalletCalcPage = () => {
           </div>
         </div>
 
-        {/* Entries list */}
         <div className="space-y-1">
           {entries.map((e, i) => (
             <div key={i} className="flex items-center justify-between bg-gray-900 border border-gray-700 rounded-lg px-3 py-2">
-              <span className="text-sm">{e.quantity} × {typeLabel(e.type)}</span>
+              <span className="text-sm">{e.quantity} × {LABEL[e.type]}</span>
               <div className="flex items-center gap-2">
-                <span className="text-sm font-mono text-gray-400">
-                  = {calcSingle(e).toFixed(2)} pal.
-                </span>
+                <span className="text-sm font-mono text-gray-400">= {calcSingle(e).toFixed(2)} pal.</span>
                 <button onClick={() => removeEntry(i)} className="text-red-500 p-1">
                   <Trash2 size={14} />
                 </button>
@@ -295,16 +356,21 @@ const PalletCalcPage = () => {
           ))}
         </div>
 
-        {/* Total */}
         {entries.length > 0 && (
           <div className={`rounded-xl p-4 text-center space-y-2 ${
             excess > 0 ? "bg-red-900/30 border-2 border-red-500" : "bg-green-900/30 border-2 border-green-500"
           }`}>
             <div className="flex items-center justify-center gap-2">
               <Calculator size={20} />
-              <span className="text-2xl font-black">{total}</span>
+              <span className="text-3xl font-black">{total}</span>
               <span className="text-sm text-gray-400">/ {MAX_PALETTES} palettes</span>
             </div>
+            {breakdown.length > 0 && (
+              <div className="text-xs text-gray-300 text-left bg-black/30 rounded-lg p-2 space-y-0.5">
+                <p className="font-bold text-gray-400 mb-1">Regroupement :</p>
+                {breakdown.map((b, i) => <p key={i}>• {b}</p>)}
+              </div>
+            )}
             {excess > 0 && (
               <p className="text-red-400 font-bold text-sm">
                 ⚠️ Dépassement de {excess} palette(s) ! Enlevez {excess} palette(s).
@@ -313,7 +379,6 @@ const PalletCalcPage = () => {
           </div>
         )}
 
-        {/* Actions */}
         {entries.length > 0 && (
           <div className="flex gap-2">
             <button onClick={handleSave} className="flex-1 bg-blue-600 text-white rounded-xl py-3 font-bold flex items-center justify-center gap-2">
@@ -325,7 +390,6 @@ const PalletCalcPage = () => {
           </div>
         )}
 
-        {/* Saved history */}
         {savedCalcs.length > 0 && (
           <div className="space-y-2">
             <h3 className="font-bold text-sm text-gray-400">Historique</h3>
@@ -349,21 +413,5 @@ const PalletCalcPage = () => {
     </div>
   );
 };
-
-function typeLabel(type: PalletEntry["type"]): string {
-  const labels: Record<string, string> = {
-    roll: "Roll", demi: "Demi palette", demi_eau: "Demi eau", demi_lait: "Demi lait",
-    normal: "Palette normale", gros: "Grosse palette", gros_eau: "Grosse palette eau",
-  };
-  return labels[type] || type;
-}
-
-function calcSingle(e: PalletEntry): number {
-  switch (e.type) {
-    case "roll": return e.quantity * 0.64;
-    case "demi": case "demi_eau": case "demi_lait": return e.quantity * 0.5;
-    default: return e.quantity;
-  }
-}
 
 export default PalletCalcPage;
