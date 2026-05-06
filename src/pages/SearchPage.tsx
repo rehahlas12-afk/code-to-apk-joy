@@ -24,6 +24,9 @@ const zonePhrase = (zone: string): string => {
   return "";
 };
 
+// Insère un espace entre chiffres et lettres pour que la TTS prononce bien "306 X"
+const traveeSpoken = (t: string) => t.replace(/(\d)([A-Za-z])/g, "$1 $2").replace(/([A-Za-z])(\d)/g, "$1 $2");
+
 const SearchPage = () => {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
