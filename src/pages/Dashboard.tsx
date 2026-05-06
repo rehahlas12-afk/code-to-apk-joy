@@ -19,7 +19,8 @@ const Dashboard = () => {
 
   const handleQuit = async () => {
     const ok = window.confirm("Voulez-vous quitter l'application ?");
-    if (!ok) window.close();
+    if (!ok) Application.close();
+
   
   };
 
