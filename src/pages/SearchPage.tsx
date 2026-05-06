@@ -88,7 +88,7 @@ const SearchPage = () => {
 
   const announceTravee = useCallback((results: TraveeResult[], travee: string) => {
     const total = results.reduce((s, g) => s + g.stores.length, 0);
-    let msg = `Travée ${travee}, ${total} magasin${total > 1 ? "s" : ""}`;
+    let msg = `Travée ${traveeSpoken(travee)}, ${total} magasin${total > 1 ? "s" : ""}`;
     results.forEach((g) => {
       const zp = zonePhrase(g.zone);
       if (zp) msg += `, ${zp}`;
