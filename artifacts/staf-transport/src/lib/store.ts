@@ -176,11 +176,35 @@ function dedupePlanRecord(plan: PlanRecord): PlanRecord {
 
 export function getSearchableStores(): StoreData[] {
   const activePlan = getActivePlan();
-  if (activePlan) {
+  if (activePlan && activePlan.stores.length > 0) {
     return dedupeStores(normalizeStores(activePlan.stores));
   }
 
+  // Fallback: if active plan has no stores, look for any plan with stores
+  const allPlans = getPlans();
+  const planWithStores = allPlans.find(p => p.stores.length > 0);
+  if (planWithStores) {
+    // Auto-activate this plan so future lookups work correctly
+    setActivePlanId(planWithStores.id);
+    return dedupeStores(normalizeStores(planWithStores.stores));
+  }
+
+  // Last resort: legacy staf_stores key
+  const legacyStores = readJson<StoreData[]>(STORES_KEY, []);
+  if (legacyStores.length > 0) {
+    return dedupeStores(normalizeStores(legacyStores));
+  }
+
   return [];
+}
+
+export function getActivePlanInfo(): { date: string; storeCount: number } | null {
+  const activePlanId = getActivePlanId();
+  const allPlans = getPlans();
+  const plan = activePlanId ? allPlans.find(p => p.id === activePlanId) : null;
+  const effective = plan && plan.stores.length > 0 ? plan : allPlans.find(p => p.stores.length > 0);
+  if (!effective) return null;
+  return { date: effective.date, storeCount: effective.stores.length };
 }
 
 export function getStores(): StoreData[] {

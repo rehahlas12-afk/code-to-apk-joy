@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Mic, Search as SearchIcon, X } from "lucide-react";
-import { searchStore, searchStoreFuzzy, suggestStores, searchByTravee, getSearchableStores, type StoreSuggestion, type TraveeResult } from "@/lib/store";
+import { searchStore, searchStoreFuzzy, suggestStores, searchByTravee, getSearchableStores, getActivePlanInfo, type StoreSuggestion, type TraveeResult } from "@/lib/store";
 
 interface MatchInfo {
   travee: string;
@@ -48,28 +48,6 @@ const SearchPage = () => {
     } catch {}
   }, []);
 
-  const computeResult = useCallback((number: string, name?: string): SearchResult => {
-    const stores = getSearchableStores();
-    const all = stores.filter(s => s.number === number);
-    const sortKey = (t: string) => {
-      const n = parseInt(t.replace(/\D/g, ""), 10);
-      return isNaN(n) ? Number.MAX_SAFE_INTEGER : n;
-    };
-    const sorted = [...all].sort((a, b) => sortKey(a.travee) - sortKey(b.travee) || a.travee.localeCompare(b.travee));
-    const matches: MatchInfo[] = sorted.map((m) => {
-      const allInTravee = stores.filter((s) => s.travee === m.travee && s.zone === m.zone);
-      let emp = allInTravee.findIndex((s) => s.number === m.number);
-      if (emp < 0) emp = 0;
-      return {
-        travee: m.travee,
-        zone: m.zone,
-        emplacement: emp + 1,
-        totalInTravee: allInTravee.length || 1,
-      };
-    });
-    return { number, name, matches };
-  }, []);
-
   const announce = useCallback((r: SearchResult) => {
     let msg = `Magasin ${r.number}`;
     if (r.name) msg += `, ${r.name}`;
@@ -106,7 +84,17 @@ const SearchPage = () => {
 
     const found = fuzzy ? searchStoreFuzzy(trimmed) : searchStore(trimmed);
     if (found) {
-      const r = computeResult(found.store.number, found.name);
+      const stores = getSearchableStores();
+      const all = stores.filter(s => s.number === found.store.number);
+      const sortKey = (t: string) => { const n = parseInt(t.replace(/\D/g, ""), 10); return isNaN(n) ? Number.MAX_SAFE_INTEGER : n; };
+      const sorted = [...all].sort((a, b) => sortKey(a.travee) - sortKey(b.travee) || a.travee.localeCompare(b.travee));
+      const matches: MatchInfo[] = sorted.map((m) => {
+        const allInTravee = stores.filter((s) => s.travee === m.travee && s.zone === m.zone);
+        let emp = allInTravee.findIndex((s) => s.number === m.number);
+        if (emp < 0) emp = 0;
+        return { travee: m.travee, zone: m.zone, emplacement: emp + 1, totalInTravee: allInTravee.length || 1 };
+      });
+      const r: SearchResult = { number: found.store.number, name: found.name, matches };
       setResult(r);
       setTraveeResults(null);
       setNotFound(false);
@@ -128,17 +116,27 @@ const SearchPage = () => {
     setTraveeResults(null);
     setNotFound(true);
     speak(`${trimmed} non trouvé`);
-  }, [announce, announceTravee, computeResult, speak]);
+  }, [announce, announceTravee, speak]);
 
   const selectSuggestion = useCallback((s: StoreSuggestion) => {
     setQuery(s.name || s.number);
     setShowSuggestions(false);
-    const r = computeResult(s.number, s.name);
+    const stores = getSearchableStores();
+    const all = stores.filter(st => st.number === s.number);
+    const sortKey = (t: string) => { const n = parseInt(t.replace(/\D/g, ""), 10); return isNaN(n) ? Number.MAX_SAFE_INTEGER : n; };
+    const sorted = [...all].sort((a, b) => sortKey(a.travee) - sortKey(b.travee) || a.travee.localeCompare(b.travee));
+    const matches: MatchInfo[] = sorted.map((m) => {
+      const allInTravee = stores.filter((st) => st.travee === m.travee && st.zone === m.zone);
+      let emp = allInTravee.findIndex((st) => st.number === m.number);
+      if (emp < 0) emp = 0;
+      return { travee: m.travee, zone: m.zone, emplacement: emp + 1, totalInTravee: allInTravee.length || 1 };
+    });
+    const r: SearchResult = { number: s.number, name: s.name, matches };
     setResult(r);
     setTraveeResults(null);
     setNotFound(false);
     announce(r);
-  }, [announce, computeResult]);
+  }, [announce]);
 
   const startListening = useCallback(() => {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -181,10 +179,9 @@ const SearchPage = () => {
   // Auto-déclenche la voix si on arrive avec ?voice=1 (depuis bouton casque global)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get("voice") === "1") {
-      const t = setTimeout(() => startListening(), 300);
-      return () => clearTimeout(t);
-    }
+    if (params.get("voice") !== "1") return;
+    const t = setTimeout(() => startListening(), 300);
+    return () => clearTimeout(t);
   }, [startListening]);
 
   const clear = () => {
@@ -208,7 +205,17 @@ const SearchPage = () => {
         <button onClick={() => navigate("/")} className="p-2 rounded-lg bg-gray-800" aria-label="Retour">
           <ArrowLeft size={18} />
         </button>
-        <h1 className="text-base font-bold">Recherche</h1>
+        <div className="flex-1 min-w-0">
+          <h1 className="text-base font-bold">Recherche</h1>
+          {(() => {
+            const info = getActivePlanInfo();
+            return info ? (
+              <p className="text-[10px] text-green-400 truncate">Plan du {info.date} · {info.storeCount} magasins</p>
+            ) : (
+              <p className="text-[10px] text-red-400">Aucun plan actif</p>
+            );
+          })()}
+        </div>
       </div>
 
       {/* Search bar — WHITE outline */}

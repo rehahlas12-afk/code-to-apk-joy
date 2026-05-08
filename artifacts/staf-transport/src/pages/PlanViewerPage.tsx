@@ -45,10 +45,8 @@ const PlanViewerPage = () => {
 
   useEffect(() => {
     if (!selectedPlan) return;
-    const activePlan = getActivePlan();
-    if (activePlan?.id === selectedPlan.id) return;
     activatePlan(selectedPlan.id);
-  }, [selectedPlan]);
+  }, [selectedPlan?.id]);
 
   const reset = () => {
     stateRef.current = { scale: 1, tx: 0, ty: 0 };
