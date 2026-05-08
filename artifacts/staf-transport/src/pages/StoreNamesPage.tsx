@@ -13,6 +13,7 @@ const StoreNamesPage = () => {
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importMsg, setImportMsg] = useState<{ok: boolean; text: string} | null>(null);
 
   const handleAdd = () => {
     if (!number.trim() || !name.trim()) return;
@@ -111,13 +112,8 @@ const StoreNamesPage = () => {
       }
 
       if (valid.length === 0) {
-        // Show a snippet to help debug
-        const preview = JSON.stringify(arr[0] ?? {}).slice(0, 150);
-        toast({
-          title: "⚠️ Format non reconnu",
-          description: `Premier élément : ${preview}`,
-          variant: "destructive"
-        });
+        const preview = JSON.stringify(arr[0] ?? raw).slice(0, 200);
+        setImportMsg({ ok: false, text: `Format non reconnu. Contenu : ${preview}` });
         return;
       }
 
@@ -127,10 +123,11 @@ const StoreNamesPage = () => {
       const merged = Array.from(map.entries()).map(([number, name]) => ({ number, name }));
       setStoreNames(merged);
       setNames(getStoreNames());
+      setImportMsg({ ok: true, text: `✅ ${valid.length} noms importés — Total : ${merged.length} magasins` });
       toast({ title: `✅ ${valid.length} noms importés`, description: `Total : ${merged.length} magasins enregistrés` });
     } catch (err) {
       console.error("Import error:", err);
-      toast({ title: "❌ Fichier invalide", description: "Le fichier doit être un JSON exporté depuis l'app", variant: "destructive" });
+      setImportMsg({ ok: false, text: `Erreur : ${String(err)}` });
     } finally {
       e.target.value = "";
     }
@@ -164,10 +161,16 @@ const StoreNamesPage = () => {
         <button onClick={handleExport} className="bg-purple-700 text-white rounded-lg px-3 py-2 flex items-center gap-2 text-sm font-bold">
           <Download size={16} /> Exporter
         </button>
-        <input ref={fileInputRef} type="file" accept="application/json,.json" className="hidden" onChange={handleImport} />
+        <input ref={fileInputRef} type="file" accept="*/*" className="hidden" onChange={handleImport} />
       </div>
 
       <div className="p-4 space-y-4">
+        {importMsg && (
+          <div className={`rounded-xl p-3 text-sm font-medium ${importMsg.ok ? "bg-green-900 border border-green-500 text-green-200" : "bg-red-900 border border-red-500 text-red-200"}`}>
+            {importMsg.text}
+          </div>
+        )}
+
         <div className="bg-gray-900 border border-gray-700 rounded-xl p-4 space-y-3">
           <input
             type="text"
