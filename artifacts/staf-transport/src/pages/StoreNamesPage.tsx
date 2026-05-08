@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Plus, Trash2, Edit2, Check } from "lucide-react";
-import { getStoreNames, addStoreName, removeStoreName, type StoreName } from "@/lib/store";
+import { ArrowLeft, Plus, Trash2, Edit2, Check, Upload, Download } from "lucide-react";
+import { getStoreNames, addStoreName, removeStoreName, setStoreNames, type StoreName } from "@/lib/store";
 import TruckLogo from "@/components/TruckLogo";
 import { toast } from "@/hooks/use-toast";
 
@@ -12,6 +12,7 @@ const StoreNamesPage = () => {
   const [name, setName] = useState("");
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleAdd = () => {
     if (!number.trim() || !name.trim()) return;
@@ -40,6 +41,41 @@ const StoreNamesPage = () => {
     }
   };
 
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if (!Array.isArray(data)) throw new Error("Format invalide");
+      const valid = data.filter((n: any) => n && n.number && n.name) as StoreName[];
+      const existing = getStoreNames();
+      const map = new Map(existing.map(n => [n.number, n.name]));
+      valid.forEach(n => map.set(String(n.number), String(n.name)));
+      const merged = Array.from(map.entries()).map(([number, name]) => ({ number, name }));
+      setStoreNames(merged);
+      setNames(getStoreNames());
+      toast({ title: `✅ ${valid.length} noms importés`, description: `Total : ${merged.length} magasins` });
+    } catch {
+      toast({ title: "❌ Fichier invalide", variant: "destructive" });
+    } finally {
+      e.target.value = "";
+    }
+  };
+
+  const handleExport = () => {
+    const current = getStoreNames();
+    if (current.length === 0) { toast({ title: "Aucun nom à exporter" }); return; }
+    const blob = new Blob([JSON.stringify(current, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `staf-noms-magasins-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast({ title: `✅ ${current.length} noms exportés` });
+  };
+
   return (
     <div className="min-h-screen bg-black flex flex-col text-white">
       <TruckLogo />
@@ -48,6 +84,14 @@ const StoreNamesPage = () => {
           <ArrowLeft size={20} />
         </button>
         <h1 className="text-lg font-bold">Noms des Magasins</h1>
+        <div className="flex-1" />
+        <button onClick={() => fileInputRef.current?.click()} className="bg-purple-600 text-white rounded-lg px-3 py-2 flex items-center gap-2 text-sm font-bold">
+          <Upload size={16} /> Importer
+        </button>
+        <button onClick={handleExport} className="bg-purple-700 text-white rounded-lg px-3 py-2 flex items-center gap-2 text-sm font-bold">
+          <Download size={16} /> Exporter
+        </button>
+        <input ref={fileInputRef} type="file" accept="application/json,.json" className="hidden" onChange={handleImport} />
       </div>
 
       <div className="p-4 space-y-4">
@@ -65,11 +109,16 @@ const StoreNamesPage = () => {
             onChange={(e) => setName(e.target.value)}
             placeholder="Nom du Magasin"
             className="w-full rounded-lg border border-gray-600 bg-gray-800 px-3 py-2 text-base text-white outline-none focus:ring-2 focus:ring-primary"
+            onKeyDown={(e) => e.key === "Enter" && handleAdd()}
           />
           <button onClick={handleAdd} className="w-full bg-accent text-accent-foreground rounded-lg py-3 font-bold flex items-center justify-center gap-2">
             <Plus size={18} /> Ajouter
           </button>
         </div>
+
+        {names.length > 0 && (
+          <p className="text-xs text-gray-400 text-center">{names.length} magasins enregistrés</p>
+        )}
 
         <div className="space-y-2">
           {names.map((item, idx) => (
@@ -83,6 +132,7 @@ const StoreNamesPage = () => {
                     onChange={(e) => setEditName(e.target.value)}
                     className="w-full rounded border bg-background px-2 py-1 text-sm mt-1"
                     autoFocus
+                    onKeyDown={(e) => e.key === "Enter" && handleEdit(idx)}
                   />
                 ) : (
                   <p className="text-sm text-muted-foreground">{item.name}</p>
@@ -92,7 +142,7 @@ const StoreNamesPage = () => {
                 {editingIdx === idx ? <Check size={18} /> : <Edit2 size={18} />}
               </button>
               <button onClick={() => handleDelete(item.number)} className="p-2 text-destructive">
-                <Trash2 size={18} />
+                <Trash2 size={16} />
               </button>
             </div>
           ))}
