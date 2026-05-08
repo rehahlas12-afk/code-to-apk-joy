@@ -39,10 +39,7 @@ async function analyzeWithAI(
   }
 
   const data = await response.json();
-
-  if (data?.error) {
-    throw new Error(data.error);
-  }
+  if (data?.error) throw new Error(data.error);
 
   const stores: StoreData[] = data?.stores ?? [];
   console.log(`AI extracted ${stores.length} stores from plan`);
@@ -87,85 +84,103 @@ function tokenizeLine(line: string): string[] {
 }
 
 /**
- * Determine the zone from the travée identifier.
- *
- * Travée ranges:
- *   Zone 1  : 99BIS*, 99, 101–104, 201–204, 301–306X, 401–404,
- *              501–504, 601–604, 701–704, 801–803
- *   Débord  : 72–85 (numeric) + DEB1–DEB5 (named)
- *   Craft   : 86–98 (numeric, labeled "CRAFT" on plan)
+ * Zone rules:
+ *   Débord : DEB* prefix, or numeric travée 72–85
+ *   Craft  : numeric travée 86–98 (labeled "CRAFT" on plan)
+ *   Zone 1 : everything else (99, 99BIS*, 101–803)
  */
 function inferZone(travee: string): string {
   const t = travee.toUpperCase().trim();
-
   if (t.startsWith("DEB")) return "Débord";
-
-  // strip trailing letters (e.g. "306X" → 306)
   const n = parseInt(t, 10);
   if (!isNaN(n)) {
     if (n >= 72 && n <= 85) return "Débord";
     if (n >= 86 && n <= 98) return "Craft";
   }
-
   return "Zone 1";
 }
 
 /**
- * Checks whether a token looks like a travée identifier.
- * Travée is always the FIRST recognizable element on a line.
+ * A token is a travée if it is:
+ *   - 99BIS, 99BIS1, 99BIS2, 99BIS3
+ *   - DEB, DEB1…DEB5
+ *   - A 2–3 digit number (72–803), optionally with a letter suffix (306X)
  */
 function isTraveeToken(token: string): boolean {
-  // Named: 99BIS, 99BIS1, 99BIS2, 99BIS3 …
   if (/^99BIS\d*$/.test(token)) return true;
-  // Named débord: DEB, DEB1 … DEB5
   if (/^DEB\d*$/.test(token)) return true;
-  // Numeric travée with optional letter suffix (306X, 204X …)
-  if (/^\d{2,3}[A-Z]?$/.test(token)) {
-    const n = parseInt(token, 10);
-    // Valid numeric travée range: 72–803
-    return !isNaN(n) && n >= 72 && n <= 803;
+  // 2–3 digits with optional trailing letter (e.g. 306X)
+  const m = token.match(/^(\d{2,3})[A-Z]?$/);
+  if (m) {
+    const n = parseInt(m[1], 10);
+    return n >= 72 && n <= 803;
   }
-  // "99" on its own
-  if (token === "99") return true;
   return false;
 }
 
 /**
- * Extract the travée from a normalised line.
- * We look for the FIRST token that looks like a travée.
+ * Extract travée from tokens on a line.
+ * The travée is the first token that looks like a travée identifier.
  */
 function extractTravee(tokens: string[], currentTravee: string): string {
-  const found = tokens.find(isTraveeToken);
-  return found ?? currentTravee;
+  return tokens.find(isTraveeToken) ?? currentTravee;
 }
 
 /**
- * Extract store numbers from a normalised line.
+ * Extract 4–5 digit store numbers from a line.
  *
- * Store numbers are written AFTER the travée number.
- * They are 1–5 digit numbers.
- * Débord (72-85, DEB*) and Craft (86-98) travées always have exactly 1 store.
+ * Store numbers on the plan are 4 or 5 digits.
+ * OCR sometimes splits one number into two adjacent tokens
+ * (e.g. "9 673" → tokens ["9","673"]) — we recombine them.
+ *
+ * The travée token (always first) is skipped.
  */
 function extractStoreNumbers(tokens: string[], currentTravee: string): string[] {
   const stores = new Set<string>();
   let traveeSkipped = false;
+  let i = 0;
 
-  for (const raw of tokens) {
-    // Skip the travée token (only once, the first one)
+  while (i < tokens.length) {
+    const raw = tokens[i];
+
+    // Skip the travée token once
     if (!traveeSkipped && isTraveeToken(raw)) {
       traveeSkipped = true;
+      i++;
       continue;
     }
 
-    // Apply OCR fixes and strip non-digits
     const fixed = applyDigitFixes(raw).replace(/[^0-9]/g, "");
-    if (!fixed) continue;
+    if (!fixed) { i++; continue; }
 
-    // Accept 1–5 digit store numbers; exclude the travée number itself
-    // (in case OCR repeats it)
-    if (/^\d{1,5}$/.test(fixed) && fixed !== currentTravee) {
+    // Direct 4–5 digit hit
+    if (/^\d{4,5}$/.test(fixed)) {
       stores.add(fixed);
+      i++;
+      continue;
     }
+
+    // Too long → skip
+    if (fixed.length > 5) { i++; continue; }
+
+    // Try combining with the next token(s) to reach 4–5 digits
+    let combined = fixed;
+    let cursor = i + 1;
+    let combined_i = i;
+    let found = false;
+    while (combined.length < 5 && cursor < tokens.length) {
+      const nextRaw = applyDigitFixes(tokens[cursor]).replace(/[^0-9]/g, "");
+      if (!nextRaw || combined.length + nextRaw.length > 5) break;
+      combined += nextRaw;
+      if (/^\d{4,5}$/.test(combined)) {
+        stores.add(combined);
+        combined_i = cursor;
+        found = true;
+        break;
+      }
+      cursor++;
+    }
+    i = found ? combined_i + 1 : i + 1;
   }
 
   return [...stores];
@@ -174,31 +189,20 @@ function extractStoreNumbers(tokens: string[], currentTravee: string): string[] 
 export function parseOcrText(text: string): StoreData[] {
   const stores: StoreData[] = [];
   const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
-
   let currentTravee = "";
 
   for (const line of lines) {
     const normalized = normalizeOcrLine(line);
     const tokens = tokenizeLine(normalized);
-
     if (tokens.length === 0) continue;
 
-    // Detect explicit zone headers on the line (e.g. "DEBORD", "CRAFT")
-    // — we use these only to help zone inference if the travée is ambiguous.
-    // The travée-based zone inference takes priority.
-
-    // Update current travée if this line announces one
-    const newTravee = extractTravee(tokens, currentTravee);
-    if (newTravee !== currentTravee) {
-      currentTravee = newTravee;
-    }
-
+    currentTravee = extractTravee(tokens, currentTravee);
     if (!currentTravee) continue;
 
     const zone = inferZone(currentTravee);
-    const storeNumbers = extractStoreNumbers(tokens, currentTravee);
+    const numbers = extractStoreNumbers(tokens, currentTravee);
 
-    for (const num of storeNumbers) {
+    for (const num of numbers) {
       stores.push({ number: num, travee: currentTravee, zone });
     }
   }
@@ -212,9 +216,9 @@ async function fallbackLocalOcr(
 ): Promise<StoreData[]> {
   try {
     const result = await Tesseract.recognize(imageData, "fra", {
-      logger: (message) => {
-        if (message.status === "recognizing text") {
-          onProgress?.(30 + Math.round(message.progress * 60));
+      logger: (m) => {
+        if (m.status === "recognizing text") {
+          onProgress?.(30 + Math.round(m.progress * 60));
         }
       },
     });
