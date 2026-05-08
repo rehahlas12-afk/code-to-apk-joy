@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Plus, Trash2, Edit2, Check, Upload, Download } from "lucide-react";
 import { getStoreNames, addStoreName, removeStoreName, setStoreNames, type StoreName } from "@/lib/store";
@@ -13,6 +13,14 @@ const StoreNamesPage = () => {
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
   const [importMsg, setImportMsg] = useState<{ok: boolean; text: string} | null>(null);
+
+  const triggerImport = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "*/*";
+    input.onchange = (e: any) => handleImport(e);
+    input.click();
+  };
 
   const handleAdd = () => {
     if (!number.trim() || !name.trim()) return;
@@ -154,10 +162,9 @@ const StoreNamesPage = () => {
         </button>
         <h1 className="text-lg font-bold">Noms des Magasins</h1>
         <div className="flex-1" />
-        <label className="bg-purple-600 text-white rounded-lg px-3 py-2 flex items-center gap-2 text-sm font-bold cursor-pointer active:scale-95 transition-transform">
+        <button onClick={triggerImport} className="bg-purple-600 text-white rounded-lg px-3 py-2 flex items-center gap-2 text-sm font-bold active:scale-95 transition-transform">
           <Upload size={16} /> Importer
-          <input type="file" accept="*/*" className="hidden" onChange={handleImport} />
-        </label>
+        </button>
         <button onClick={handleExport} className="bg-purple-700 text-white rounded-lg px-3 py-2 flex items-center gap-2 text-sm font-bold">
           <Download size={16} /> Exporter
         </button>
