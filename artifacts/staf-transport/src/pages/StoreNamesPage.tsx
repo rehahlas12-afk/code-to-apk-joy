@@ -48,15 +48,30 @@ const StoreNamesPage = () => {
       const text = await file.text();
       const raw = JSON.parse(text);
 
-      // Normalize to array — handle wrapped formats
+      // Normalize to array — handle all possible formats
       let arr: any[] = [];
       if (Array.isArray(raw)) {
         arr = raw;
       } else if (raw && typeof raw === "object") {
-        // Try common wrapper keys
-        const wrapKey = ["storeNames","store_names","names","stores","magasins","data"].find(k => Array.isArray(raw[k]));
-        if (wrapKey) arr = raw[wrapKey];
-        else throw new Error("Format non reconnu");
+        // Format dictionnaire : {"8214": "Puteaux", "8215": "La Garenne"...}
+        const dictEntries = Object.entries(raw as Record<string, unknown>);
+        const looksLikeDict = dictEntries.length > 0 && dictEntries.every(([k, v]) => typeof v === "string" || typeof v === "number");
+        if (looksLikeDict) {
+          arr = dictEntries.map(([k, v]) => ({ number: k, name: String(v) }));
+        } else {
+          // Try common wrapper keys
+          const wrapKey = ["storeNames","store_names","names","stores","magasins","data","items","records"].find(k => Array.isArray((raw as any)[k]));
+          if (wrapKey) arr = (raw as any)[wrapKey];
+          else {
+            // Last resort: show raw content for diagnosis
+            toast({
+              title: "⚠️ Format non reconnu",
+              description: `Contenu : ${JSON.stringify(raw).slice(0, 200)}`,
+              variant: "destructive"
+            });
+            return;
+          }
+        }
       }
 
       // Auto-detect field names — find which field holds the store number (4-5 digits)
