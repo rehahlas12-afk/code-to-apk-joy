@@ -46,18 +46,49 @@ const StoreNamesPage = () => {
     if (!file) return;
     try {
       const text = await file.text();
-      const data = JSON.parse(text);
-      if (!Array.isArray(data)) throw new Error("Format invalide");
-      const valid = data.filter((n: any) => n && n.number && n.name) as StoreName[];
+      const raw = JSON.parse(text);
+
+      // Normalize to array — handle wrapped formats
+      let arr: any[] = [];
+      if (Array.isArray(raw)) {
+        arr = raw;
+      } else if (raw && typeof raw === "object") {
+        // Try common wrapper keys
+        const wrapKey = ["storeNames","store_names","names","stores","magasins","data"].find(k => Array.isArray(raw[k]));
+        if (wrapKey) arr = raw[wrapKey];
+        else throw new Error("Format non reconnu");
+      }
+
+      // Normalize each entry — handle various field name styles
+      const valid: StoreName[] = [];
+      for (const item of arr) {
+        if (!item || typeof item !== "object") continue;
+        const num = String(
+          item.number ?? item.storeNumber ?? item.store_number ??
+          item.num ?? item.numero ?? item.magasin ?? ""
+        ).trim();
+        const name = String(
+          item.name ?? item.storeName ?? item.store_name ??
+          item.nom ?? item.label ?? item.ville ?? ""
+        ).trim();
+        if (num && name) valid.push({ number: num, name });
+      }
+
+      if (valid.length === 0) {
+        toast({ title: "⚠️ Aucun magasin trouvé dans le fichier", description: "Vérifie que le fichier vient bien de l'app Noms Magasins", variant: "destructive" });
+        return;
+      }
+
       const existing = getStoreNames();
       const map = new Map(existing.map(n => [n.number, n.name]));
-      valid.forEach(n => map.set(String(n.number), String(n.name)));
+      valid.forEach(n => map.set(n.number, n.name));
       const merged = Array.from(map.entries()).map(([number, name]) => ({ number, name }));
       setStoreNames(merged);
       setNames(getStoreNames());
-      toast({ title: `✅ ${valid.length} noms importés`, description: `Total : ${merged.length} magasins` });
-    } catch {
-      toast({ title: "❌ Fichier invalide", variant: "destructive" });
+      toast({ title: `✅ ${valid.length} noms importés`, description: `Total : ${merged.length} magasins enregistrés` });
+    } catch (err) {
+      console.error("Import error:", err);
+      toast({ title: "❌ Fichier invalide", description: "Le fichier doit être un JSON exporté depuis l'app", variant: "destructive" });
     } finally {
       e.target.value = "";
     }
