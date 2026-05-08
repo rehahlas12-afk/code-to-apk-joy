@@ -27,35 +27,32 @@ router.post("/analyze-plan", async (req, res) => {
   try {
     const base64Data = imageBase64.replace(/^data:image\/[a-z]+;base64,/, "");
 
-    const prompt = `Tu es un lecteur expert de plans de dispatch entrepôt français (STAF Transport).
+    const prompt = `Tu es un lecteur expert de plans de dispatch entrepôt STAF Transport (France).
 
-Analyse cette image d'un plan de travail et extrais UNIQUEMENT les données écrites sur le plan — n'invente rien.
+Le plan est un TABLEAU avec ces colonnes dans cet ordre :
+  Col 1 : TRAVÉE (2-3 chiffres ex: 306, 401, 504 — ou "x" ou "→" à ignorer)
+  Col 2 : HEURE (ex: 5H00, 6H00 — à ignorer)
+  Col 3 : N° MAGASIN 1 (4 ou 5 chiffres ex: 8214, 10297, 11964)
+  Col 4 : lettre M ou S (à ignorer)
+  Col 5 : nombre de palettes (1-2 chiffres — à ignorer)
+  Col 6 : N° MAGASIN 2 (optionnel, 4 ou 5 chiffres — présent si la travée a 2 magasins)
+  Col 7 : lettre M ou S (à ignorer)
+  Col 8 : nombre de palettes (à ignorer)
 
-FORMAT DU PLAN :
-- Chaque ligne contient : NUMÉRO_TRAVÉE  MAGASIN1  MAGASIN2  ...
-- Le numéro de TRAVÉE est toujours le PREMIER élément de la ligne (2 à 3 chiffres, parfois avec une lettre : 101, 306X, 99BIS, DEB1…)
-- Les numéros de MAGASINS viennent après le numéro de travée
-- Les numéros de magasins font exactement 4 ou 5 chiffres (exemples : 9673, 10892, 8214, 11843)
-- Ne confonds PAS les numéros de travées avec les numéros de magasins
+RÈGLES IMPORTANTES :
+- Les lignes avec "x" ou "→" en colonne 1 sont des répétitions ou séparateurs — IGNORE-LES complètement
+- Les numéros de MAGASINS font toujours EXACTEMENT 4 ou 5 chiffres
+- Ne confonds PAS les numéros de palettes (1-2 chiffres) avec les numéros de magasins (4-5 chiffres)
+- Ne confonds PAS les numéros de travées (2-3 chiffres) avec les numéros de magasins (4-5 chiffres)
+- Extrait UNIQUEMENT ce qui est écrit — n'invente rien
 
-TYPES DE TRAVÉES ET ZONES :
-1. Zone 1 : travées 99BIS, 99BIS1, 99BIS2, 99BIS3, 99, 101–104, 201–204, 301–306X, 401–404, 501–504, 601–604, 701–704, 801–803
-   → Peuvent contenir 1, 2, 3 ou 4 magasins
+ZONES :
+- "Débord" : travées 72 à 85, ou DEB1 à DEB5
+- "Craft" : travées 86 à 98
+- "Zone 1" : toutes les autres travées (99, 99BIS, 101–803)
 
-2. Débord (zone = "Débord") : travées 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85 et DEB1, DEB2, DEB3, DEB4, DEB5
-   → Contiennent exactement 1 magasin
-
-3. Craft (zone = "Craft") : travées 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98
-   → Contiennent exactement 1 magasin
-
-RÈGLES STRICTES :
-- Extrait UNIQUEMENT les magasins visibles sur le plan — pas d'invention
-- Les numéros de magasins sont toujours 4 ou 5 chiffres
-- Si plusieurs magasins sont sur la même travée, liste-les tous séparément avec la même travée
-- Ignore les titres, en-têtes et textes non pertinents
-
-Retourne UNIQUEMENT du JSON valide sans aucun texte ni markdown autour :
-{"stores": [{"number": "9673", "travee": "101", "zone": "Zone 1"}, {"number": "8154", "travee": "DEB1", "zone": "Débord"}, ...]}`;
+Retourne UNIQUEMENT du JSON valide, sans markdown ni texte autour :
+{"stores": [{"number": "8214", "travee": "306", "zone": "Zone 1"}, {"number": "8060", "travee": "402", "zone": "Zone 1"}, {"number": "10297", "travee": "402", "zone": "Zone 1"}, ...]}`;
 
     const body = {
       contents: [
