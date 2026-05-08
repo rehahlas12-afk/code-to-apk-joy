@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Plus, Trash2, Edit2, Check, Upload, Download } from "lucide-react";
 import { getStoreNames, addStoreName, removeStoreName, setStoreNames, type StoreName } from "@/lib/store";
@@ -12,7 +12,6 @@ const StoreNamesPage = () => {
   const [name, setName] = useState("");
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [importMsg, setImportMsg] = useState<{ok: boolean; text: string} | null>(null);
 
   const handleAdd = () => {
@@ -155,13 +154,13 @@ const StoreNamesPage = () => {
         </button>
         <h1 className="text-lg font-bold">Noms des Magasins</h1>
         <div className="flex-1" />
-        <button onClick={() => fileInputRef.current?.click()} className="bg-purple-600 text-white rounded-lg px-3 py-2 flex items-center gap-2 text-sm font-bold">
+        <label className="bg-purple-600 text-white rounded-lg px-3 py-2 flex items-center gap-2 text-sm font-bold cursor-pointer active:scale-95 transition-transform">
           <Upload size={16} /> Importer
-        </button>
+          <input type="file" accept="*/*" className="hidden" onChange={handleImport} />
+        </label>
         <button onClick={handleExport} className="bg-purple-700 text-white rounded-lg px-3 py-2 flex items-center gap-2 text-sm font-bold">
           <Download size={16} /> Exporter
         </button>
-        <input ref={fileInputRef} type="file" accept="*/*" className="hidden" onChange={handleImport} />
       </div>
 
       <div className="p-4 space-y-4">
