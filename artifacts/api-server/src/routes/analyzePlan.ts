@@ -115,6 +115,7 @@ Transcris maintenant TOUTES les lignes du plan :`;
     const body = {
       contents: [
         {
+          role: "user",
           parts: [
             { text: prompt },
             { inline_data: { mime_type: "image/jpeg", data: base64Data } },
