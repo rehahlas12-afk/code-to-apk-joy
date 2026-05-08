@@ -8,6 +8,64 @@ interface StoreData {
   zone: string;
 }
 
+/** Zone rules */
+function inferZone(travee: string): string {
+  const t = travee.toUpperCase().trim();
+  if (t.startsWith("DEB")) return "Débord";
+  const n = parseInt(t, 10);
+  if (!isNaN(n)) {
+    if (n >= 72 && n <= 85) return "Débord";
+    if (n >= 86 && n <= 98) return "Craft";
+  }
+  return "Zone 1";
+}
+
+/** Parse plain-text transcription into store records */
+function parseTranscription(text: string): StoreData[] {
+  const stores: StoreData[] = [];
+  const seen = new Set<string>();
+
+  for (const rawLine of text.split("\n")) {
+    const line = rawLine.trim();
+    if (!line) continue;
+
+    // Extract all tokens
+    const tokens = line.match(/[A-Z0-9]+/gi) ?? [];
+    if (tokens.length === 0) continue;
+
+    // First token that looks like a travée (2-3 digits, DEB*, 99BIS*)
+    let travee = "";
+    let storeStart = 0;
+    for (let i = 0; i < tokens.length; i++) {
+      const t = tokens[i].toUpperCase();
+      const n = parseInt(t, 10);
+      const isNumericTravee = !isNaN(n) && t.length >= 2 && t.length <= 3 && n >= 72 && n <= 803;
+      const isDebTravee = /^DEB\d*$/.test(t);
+      const is99Bis = /^99BIS\d*$/.test(t);
+      if (isNumericTravee || isDebTravee || is99Bis) {
+        travee = t;
+        storeStart = i + 1;
+        break;
+      }
+    }
+    if (!travee) continue;
+
+    // Find all 4-5 digit numbers after the travée
+    for (let i = storeStart; i < tokens.length; i++) {
+      const tok = tokens[i].replace(/[^0-9]/g, "");
+      if (/^\d{4,5}$/.test(tok)) {
+        const key = `${travee}-${tok}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          stores.push({ number: tok, travee, zone: inferZone(travee) });
+        }
+      }
+    }
+  }
+
+  return stores;
+}
+
 router.post("/analyze-plan", async (req, res) => {
   const { imageBase64 } = req.body as { imageBase64?: string };
 
@@ -27,47 +85,39 @@ router.post("/analyze-plan", async (req, res) => {
   try {
     const base64Data = imageBase64.replace(/^data:image\/[a-z]+;base64,/, "");
 
-    const prompt = `Tu es un expert OCR spécialisé dans les plans de dispatch entrepôt STAF Transport.
+    // Step 1: Ask Gemini to transcribe the table as plain text — simpler = more complete
+    const prompt = `Tu es un expert OCR. Ce plan est un TABLEAU de dispatch entrepôt.
 
-MISSION : Lire TOUTES les lignes du tableau et extraire CHAQUE numéro de magasin visible. Il peut y avoir entre 40 et 80 magasins. Ne t'arrête pas avant d'avoir lu TOUT le tableau jusqu'à la dernière ligne.
+Transcris TOUTES les lignes du tableau dans ce format exact, une ligne par rangée :
+TRAVÉE MAGASIN1 MAGASIN2
 
-FORMAT DU TABLEAU — chaque ligne a ces colonnes :
-  1. TRAVÉE : nombre à 2-3 chiffres (ex: 99, 101, 202, 306, 401, 504, 801). Parfois "x" ou une flèche "→" = ignorer cette ligne.
-  2. HEURE : ex "5H00", "6H00" → ignorer
-  3. N° MAGASIN 1 : nombre à 4 ou 5 chiffres (ex: 7922, 8214, 9673, 10297, 11964) → À EXTRAIRE
-  4. Lettre "M" ou "S" → ignorer
-  5. Palettes : 1 ou 2 chiffres (ex: 8, 14, 25) → ignorer — NE PAS confondre avec un magasin
-  6. N° MAGASIN 2 (optionnel) : autre nombre à 4-5 chiffres → À EXTRAIRE si présent
-  7. Lettre "M" ou "S" → ignorer
-  8. Palettes → ignorer
+Règles :
+- TRAVÉE = le premier nombre à 2-3 chiffres de la ligne (ex: 101, 306, 504, DEB1, 99BIS)
+- MAGASIN = les nombres à 4 ou 5 chiffres qui suivent (ex: 8214, 10297, 11964, 7922)
+- Ignore : les heures (5H00), les lettres M/S, les petits nombres de palettes (1-2 chiffres)
+- Ignore les lignes avec "x" ou flèche "→" en première colonne
+- Transcris TOUTES les lignes du tableau du début à la fin, sans exception
+- Si une travée a 2 magasins, mets les deux sur la même ligne séparés par un espace
 
-RÈGLES ABSOLUES :
-- Les numéros de MAGASINS ont TOUJOURS 4 ou 5 chiffres
-- Les numéros de TRAVÉES ont 2-3 chiffres → ce ne sont PAS des magasins
-- Les PALETTES ont 1-2 chiffres → ce ne sont PAS des magasins
-- Lis TOUTES les sections du tableau (haut, milieu, bas) sans exception
-- Chaque ligne valide donne 1 ou 2 magasins à extraire
-- N'invente rien — extrait uniquement ce qui est écrit sur le plan
+Exemple de sortie attendue :
+306 8214
+401 6059
+402 8060 10297
+404 11964 8999
+501 9660
+503 9617
+504 7878 7450
+602 7922
+603 9673 9684
 
-ZONES à attribuer automatiquement :
-- zone "Débord" : si travée entre 72 et 85, ou DEB1 à DEB5
-- zone "Craft" : si travée entre 86 et 98
-- zone "Zone 1" : tout le reste
-
-Retourne UNIQUEMENT du JSON valide, sans markdown ni texte avant ou après :
-{"stores":[{"number":"7922","travee":"602","zone":"Zone 1"},{"number":"9673","travee":"603","zone":"Zone 1"},{"number":"9684","travee":"603","zone":"Zone 1"}]}`;
+Transcris maintenant TOUTES les lignes du plan :`;
 
     const body = {
       contents: [
         {
           parts: [
             { text: prompt },
-            {
-              inline_data: {
-                mime_type: "image/jpeg",
-                data: base64Data,
-              },
-            },
+            { inline_data: { mime_type: "image/jpeg", data: base64Data } },
           ],
         },
       ],
@@ -77,7 +127,6 @@ Retourne UNIQUEMENT du JSON valide, sans markdown ni texte avant ou après :
       },
     };
 
-    // Use gemini-2.5-pro for better accuracy on complex dense tables
     const url = `${geminiBaseUrl}/models/gemini-2.5-pro:generateContent?key=${geminiApiKey}`;
 
     const response = await fetch(url, {
@@ -104,48 +153,12 @@ Retourne UNIQUEMENT du JSON valide, sans markdown ni texte avant ou après :
     const rawText = candidate?.content?.parts?.[0]?.text ?? "";
     const finishReason = candidate?.finishReason ?? "unknown";
 
-    req.log.info({ rawTextLength: rawText.length, finishReason }, "Gemini raw response received");
+    req.log.info({ rawTextLength: rawText.length, finishReason, rawText }, "Gemini transcription received");
 
-    // Extract JSON — handle cases where response might be wrapped in markdown
-    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      req.log.error({ rawText: rawText.slice(0, 500) }, "No JSON found in Gemini response");
-      res.status(502).json({ error: "Could not parse AI response" });
-      return;
-    }
+    // Step 2: Parse the plain-text transcription
+    const stores = parseTranscription(rawText);
 
-    let parsed: { stores?: StoreData[] };
-    try {
-      parsed = JSON.parse(jsonMatch[0]);
-    } catch {
-      // Try to recover truncated JSON by closing arrays/objects
-      let partial = jsonMatch[0];
-      // Close any open array and object
-      const openBrackets = (partial.match(/\[/g) ?? []).length - (partial.match(/\]/g) ?? []).length;
-      const openBraces = (partial.match(/\{/g) ?? []).length - (partial.match(/\}/g) ?? []).length;
-      // Remove trailing incomplete entry (ends with comma or partial object)
-      partial = partial.replace(/,\s*\{[^}]*$/, "");
-      for (let i = 0; i < openBrackets; i++) partial += "]";
-      for (let i = 0; i < openBraces; i++) partial += "}";
-      try {
-        parsed = JSON.parse(partial);
-        req.log.warn({ finishReason }, "Recovered from truncated JSON response");
-      } catch {
-        req.log.error({ rawText: rawText.slice(0, 500) }, "Failed to parse even recovered JSON");
-        res.status(502).json({ error: "Could not parse AI response" });
-        return;
-      }
-    }
-
-    const stores: StoreData[] = (parsed.stores ?? [])
-      .map((s) => ({
-        number: String(s.number ?? "").trim(),
-        travee: String(s.travee ?? "").trim(),
-        zone: String(s.zone ?? "Zone 1").trim(),
-      }))
-      .filter((s) => s.number && s.travee && /^\d{4,5}$/.test(s.number));
-
-    req.log.info({ count: stores.length, finishReason }, "AI plan analysis complete");
+    req.log.info({ count: stores.length, finishReason }, "Plan analysis complete");
     res.json({ stores });
   } catch (err) {
     req.log.error({ err }, "analyze-plan route error");
