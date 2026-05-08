@@ -19,9 +19,8 @@ const Dashboard = () => {
 
   const handleQuit = async () => {
     const ok = window.confirm("Voulez-vous quitter l'application ?");
-    if (!ok)finishAffinity ();
-finis
-  
+    if (!ok) return;
+    await quitApplication();
   };
 
   const handleExportNames = () => {
