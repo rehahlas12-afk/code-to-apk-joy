@@ -23,31 +23,50 @@ router.post("/analyze-plan", async (req, res) => {
   }
 
   try {
-    // Strip data URL prefix if present
     const base64Data = imageBase64.replace(/^data:image\/[a-z]+;base64,/, "");
+
+    const prompt = `Tu es un lecteur expert de plans de dispatch entrepôt français.
+
+Analyse cette image d'un plan de travail et extrais les données de placement des magasins.
+
+FORMAT DU PLAN :
+- Chaque ligne contient : NUMÉRO_TRAVÉE  MAGASIN1  MAGASIN2  ...
+- Le numéro de travée est TOUJOURS LE PREMIER élément de la ligne
+- Les numéros de magasins viennent APRÈS le numéro de travée
+- Les numéros de magasins sont des nombres COURTS : 1 à 5 chiffres (ex: 8, 59, 78, 306...)
+- Ne confonds pas les numéros de travées avec les numéros de magasins
+
+TYPES DE TRAVÉES :
+1. Travées Zone 1 : 99BIS, 99BIS1, 99BIS2, 99, 101 à 104, 201 à 204, 301 à 306X, 401 à 404, 501 à 504, 601 à 604, 701 à 704, 801 à 803
+   → Peuvent contenir 1, 2, 3 ou 4 magasins par travée
+
+2. Travées Débord : 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85 et DEB1, DEB2, DEB3, DEB4, DEB5
+   → Contiennent TOUJOURS exactement 1 seul magasin par travée
+   → Zone = "Débord"
+
+3. Travées Craft : 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98 (souvent avec le mot "CRAFT" ou "KRAFT" écrit sur le plan)
+   → Contiennent TOUJOURS exactement 1 seul magasin par travée
+   → Zone = "Craft"
+
+RÈGLES IMPORTANTES :
+- N'invente AUCUN magasin — extrait UNIQUEMENT ce qui est écrit sur le plan
+- Si une travée a plusieurs magasins, liste-les tous séparément
+- Le numéro de magasin peut être très court (1, 2 ou 3 chiffres)
+- Ignore les en-têtes, titres et textes qui ne sont pas des numéros de travées ou de magasins
+
+ZONES :
+- Travées 72–85 et DEB* → "Débord"
+- Travées 86–98 → "Craft"
+- Tout le reste → "Zone 1"
+
+Retourne UNIQUEMENT du JSON valide dans ce format exact, sans explication ni markdown :
+{"stores": [{"number": "78", "travee": "DEB1", "zone": "Débord"}, {"number": "59", "travee": "101", "zone": "Zone 1"}, ...]}`;
 
     const body = {
       contents: [
         {
           parts: [
-            {
-              text: `You are a warehouse plan reader. Analyze this image of a store dispatch plan and extract all store/merchandise location data.
-
-For each row/entry in the plan, extract:
-- number: the store number (4-5 digit number, or alphanumeric like 99BIS)
-- travee: the aisle/row identifier (numeric like 101, 202, or special like DEB, 99BIS)
-- zone: one of "Zone 1", "Débord", or "Craft"
-
-Zone rules:
-- Travees starting with DEB or numbered 72-86 → "Débord"
-- Travees numbered 86-95 → "Craft"
-- All others → "Zone 1"
-
-Return ONLY valid JSON in this exact format:
-{"stores": [{"number": "12345", "travee": "101", "zone": "Zone 1"}, ...]}
-
-Do not include any explanation, markdown, or text outside the JSON.`,
-            },
+            { text: prompt },
             {
               inline_data: {
                 mime_type: "image/jpeg",
@@ -58,7 +77,7 @@ Do not include any explanation, markdown, or text outside the JSON.`,
         },
       ],
       generationConfig: {
-        temperature: 0.1,
+        temperature: 0.05,
         maxOutputTokens: 8192,
       },
     };
@@ -87,7 +106,6 @@ Do not include any explanation, markdown, or text outside the JSON.`,
 
     const rawText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
 
-    // Extract JSON from the response
     const jsonMatch = rawText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       req.log.error({ rawText }, "No JSON found in Gemini response");
@@ -96,7 +114,11 @@ Do not include any explanation, markdown, or text outside the JSON.`,
     }
 
     const parsed = JSON.parse(jsonMatch[0]) as { stores?: StoreData[] };
-    const stores: StoreData[] = parsed.stores ?? [];
+    const stores: StoreData[] = (parsed.stores ?? []).map((s) => ({
+      number: String(s.number ?? "").trim(),
+      travee: String(s.travee ?? "").trim(),
+      zone: String(s.zone ?? "Zone 1").trim(),
+    })).filter((s) => s.number && s.travee);
 
     req.log.info({ count: stores.length }, "AI plan analysis complete");
     res.json({ stores });
