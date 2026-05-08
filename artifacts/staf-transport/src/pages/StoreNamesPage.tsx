@@ -59,23 +59,50 @@ const StoreNamesPage = () => {
         else throw new Error("Format non reconnu");
       }
 
-      // Normalize each entry — handle various field name styles
+      // Auto-detect field names — find which field holds the store number (4-5 digits)
+      // and which holds the name (non-numeric string)
       const valid: StoreName[] = [];
       for (const item of arr) {
         if (!item || typeof item !== "object") continue;
-        const num = String(
-          item.number ?? item.storeNumber ?? item.store_number ??
-          item.num ?? item.numero ?? item.magasin ?? ""
-        ).trim();
-        const name = String(
-          item.name ?? item.storeName ?? item.store_name ??
-          item.nom ?? item.label ?? item.ville ?? ""
-        ).trim();
+
+        const values = Object.entries(item as Record<string, unknown>);
+
+        // Known field names first
+        const KNOWN_NUM = ["number","storeNumber","store_number","num","numero","magasin","code","id_magasin","store_id","storeId"];
+        const KNOWN_NAME = ["name","storeName","store_name","nom","label","ville","city","libelle","designation"];
+
+        let num = "";
+        let name = "";
+
+        for (const k of KNOWN_NUM) {
+          const v = String((item as any)[k] ?? "").trim();
+          if (/^\d{4,5}$/.test(v)) { num = v; break; }
+        }
+        for (const k of KNOWN_NAME) {
+          const v = String((item as any)[k] ?? "").trim();
+          if (v && !/^\d+$/.test(v)) { name = v; break; }
+        }
+
+        // Auto-detect: scan all fields if known names didn't work
+        if (!num || !name) {
+          for (const [, v] of values) {
+            const s = String(v ?? "").trim();
+            if (!num && /^\d{4,5}$/.test(s)) { num = s; continue; }
+            if (!name && s && !/^\d+$/.test(s) && s.length >= 2 && s !== "undefined") { name = s; }
+          }
+        }
+
         if (num && name) valid.push({ number: num, name });
       }
 
       if (valid.length === 0) {
-        toast({ title: "⚠️ Aucun magasin trouvé dans le fichier", description: "Vérifie que le fichier vient bien de l'app Noms Magasins", variant: "destructive" });
+        // Show a snippet to help debug
+        const preview = JSON.stringify(arr[0] ?? {}).slice(0, 150);
+        toast({
+          title: "⚠️ Format non reconnu",
+          description: `Premier élément : ${preview}`,
+          variant: "destructive"
+        });
         return;
       }
 
