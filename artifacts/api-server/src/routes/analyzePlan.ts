@@ -16,9 +16,11 @@ router.post("/analyze-plan", async (req, res) => {
     return;
   }
 
-  const geminiKey = process.env.GEMINI_API_KEY;
-  if (!geminiKey) {
-    res.status(503).json({ error: "AI analysis not configured (GEMINI_API_KEY missing)" });
+  const geminiBaseUrl = process.env.AI_INTEGRATIONS_GEMINI_BASE_URL;
+  const geminiApiKey = process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
+
+  if (!geminiBaseUrl || !geminiApiKey) {
+    res.status(503).json({ error: "AI analysis not configured" });
     return;
   }
 
@@ -43,7 +45,7 @@ TYPES DE TRAVÉES ET ZONES :
 2. Débord (zone = "Débord") : travées 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85 et DEB1, DEB2, DEB3, DEB4, DEB5
    → Contiennent exactement 1 magasin
 
-3. Craft (zone = "Craft") : travées 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98 (le mot "CRAFT" ou "KRAFT" peut apparaître sur le plan)
+3. Craft (zone = "Craft") : travées 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98
    → Contiennent exactement 1 magasin
 
 RÈGLES STRICTES :
@@ -75,14 +77,13 @@ Retourne UNIQUEMENT du JSON valide sans aucun texte ni markdown autour :
       },
     };
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      }
-    );
+    const url = `${geminiBaseUrl}/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`;
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
 
     if (!response.ok) {
       const errText = await response.text();
