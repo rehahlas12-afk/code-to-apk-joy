@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "STAF Transport"
+version = "1.0.0"
+id = "artifacts/staf-transport"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 20084
+
+[services.development]
+run = "pnpm --filter @workspace/staf-transport run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/staf-transport", "run", "build" ]
+publicDir = "artifacts/staf-transport/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "20084"
+BASE_PATH = "/"

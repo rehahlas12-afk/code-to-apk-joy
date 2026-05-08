@@ -1,0 +1,61 @@
+import { useEffect } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { BrowserRouter, Route, Routes, useNavigate } from "react-router-dom";
+import { Toaster } from "@/components/ui/toaster";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import Dashboard from "./pages/Dashboard";
+import CameraPage from "./pages/CameraPage";
+import SearchPage from "./pages/SearchPage";
+import PlanViewerPage from "./pages/PlanViewerPage";
+import StoreNamesPage from "./pages/StoreNamesPage";
+import PalletCalcPage from "./pages/PalletCalcPage";
+import GalleryPage from "./pages/GalleryPage";
+import TimeTrackingPage from "./pages/TimeTrackingPage";
+import NotFound from "./pages/NotFound";
+import { setVoiceTrigger, startAudioService } from "@/lib/audioService";
+
+const queryClient = new QueryClient();
+
+const GlobalVoiceBridge = () => {
+  const navigate = useNavigate();
+  useEffect(() => {
+    setVoiceTrigger(() => navigate("/search?voice=1"));
+    const start = () => {
+      startAudioService();
+      window.removeEventListener("pointerdown", start);
+      window.removeEventListener("keydown", start);
+    };
+    window.addEventListener("pointerdown", start, { once: true });
+    window.addEventListener("keydown", start, { once: true });
+    return () => setVoiceTrigger(null);
+  }, [navigate]);
+  return null;
+};
+
+const basePath = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
+
+const App = () => (
+  <QueryClientProvider client={queryClient}>
+    <TooltipProvider>
+      <Toaster />
+      <BrowserRouter basename={basePath}>
+        <GlobalVoiceBridge />
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/camera" element={<CameraPage />} />
+          <Route path="/search" element={<SearchPage />} />
+          <Route path="/voice-search" element={<SearchPage />} />
+          <Route path="/text-search" element={<SearchPage />} />
+          <Route path="/plan-viewer" element={<PlanViewerPage />} />
+          <Route path="/store-names" element={<StoreNamesPage />} />
+          <Route path="/pallet-calc" element={<PalletCalcPage />} />
+          <Route path="/gallery" element={<GalleryPage />} />
+          <Route path="/time-tracking" element={<TimeTrackingPage />} />
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </BrowserRouter>
+    </TooltipProvider>
+  </QueryClientProvider>
+);
+
+export default App;
