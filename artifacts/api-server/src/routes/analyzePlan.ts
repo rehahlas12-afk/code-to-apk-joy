@@ -20,13 +20,26 @@ function inferZone(travee: string): string {
   return "Zone 1";
 }
 
+/** Normalize a raw line before parsing:
+ *  - "99 BIS 2"   → "99BIS2"
+ *  - "99 BIS"     → "99BIS"
+ *  - "DEB 1"      → "DEB1"
+ *  - "99 bis 3"   → "99BIS3" (case-insensitive)
+ */
+function normalizeLine(line: string): string {
+  return line
+    .toUpperCase()
+    .replace(/\b99\s+BIS\s*(\d*)\b/g, (_, d) => `99BIS${d}`)
+    .replace(/\bDEB\s*(\d+)\b/g, (_, d) => `DEB${d}`);
+}
+
 /** Parse plain-text transcription into store records */
 function parseTranscription(text: string): StoreData[] {
   const stores: StoreData[] = [];
   const seen = new Set<string>();
 
   for (const rawLine of text.split("\n")) {
-    const line = rawLine.trim();
+    const line = normalizeLine(rawLine.trim());
     if (!line) continue;
 
     // Extract all tokens
@@ -88,32 +101,42 @@ router.post("/analyze-plan", async (req, res) => {
     // Step 1: Ask Gemini to transcribe the table as plain text — simpler = more complete
     const prompt = `Tu es un expert OCR spécialisé dans les tableaux de dispatch entrepôt.
 
-MISSION : Extraire ABSOLUMENT TOUS les numéros de magasin (4-5 chiffres) de ce plan.
-Il y a probablement entre 50 et 80 lignes — tu DOIS toutes les transcrire sans en sauter une seule.
+MISSION CRITIQUE : Lire CHAQUE ligne du tableau de haut en bas et extraire tous les numéros de magasin.
+Le tableau a environ 60-70 lignes. Tu DOIS toutes les traiter sans en sauter une seule.
 
-Format de sortie : une ligne par rangée du tableau :
+Format de sortie STRICT — une ligne par rangée :
 TRAVÉE MAGASIN1 [MAGASIN2]
 
 Définitions :
-- TRAVÉE = nombre à 2-3 chiffres (ex: 72, 101, 306, 504) OU DEB1 OU 99BIS
-- MAGASIN = nombre à 4 ou 5 chiffres (ex: 7879, 10032, 8486)
-- Ignore : heures (ex: 5H00, 6H30), lettres M/S, nombres de palettes (1-2 chiffres max)
+- TRAVÉE = identifiant en colonne 1 :
+  * Nombre 2-3 chiffres : 72, 99, 100, 101, 201, 306, 504, 803...
+  * Débord : DEB1, DEB2, DEB3... (écris-les comme ça, sans espace)
+  * Spécial : 99BIS, 99BIS1, 99BIS2, 99BIS3 (sans espace)
+- MAGASIN = nombre à 4 ou 5 chiffres dans les colonnes suivantes (ex: 7879, 10032, 8486, 11754)
+- IGNORER : heures (5H00, 6H30), lettres M/S, palettes (1 ou 2 chiffres), flèches →, croix x
 
-Règles critiques :
-1. TOUTES les lignes du tableau, du haut jusqu'en bas, sans exception
-2. Si une travée a 2 magasins, mets les 2 sur la même ligne
-3. Si tu n'es pas sûr d'un chiffre, transcris quand même ton meilleur essai
-4. Ne regroupe PAS plusieurs lignes ensemble
-5. Ne saute AUCUNE ligne même si elle te semble incomplète
+Règles absolues :
+1. Commence depuis la PREMIÈRE ligne du tableau et va jusqu'à la DERNIÈRE
+2. Chaque ligne du tableau = une ligne dans ta réponse
+3. Si une travée a 2 magasins → mets les 2 sur la même ligne
+4. Si une ligne a une travée mais tu ne vois pas clairement le magasin → écris quand même la travée seule
+5. Sections DEB (Débord) et 99BIS en haut du tableau : ne les saute pas
 
-Exemple :
-72 8214
-101 6059
-102 8060 10297
-306 11964 8999
+Exemple de sortie :
+DEB1 8214
+DEB2 6059 9812
+99BIS 7450
+99BIS1 8060
+99 9738
+100 8999
+102 7450
+103 8176 6317
+201 8484 9616
+401 7518
+402 9668 9684
 504 7878 7450
 
-Transcris maintenant TOUTES les lignes, du début à la fin du tableau :`;
+Commence maintenant — transcris TOUTES les lignes de haut en bas :`;
 
     const body = {
       contents: [
