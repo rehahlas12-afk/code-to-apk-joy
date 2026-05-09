@@ -57,7 +57,7 @@ const SearchPage = () => {
       msg += idx === 0
         ? `, travée ${traveeRead}`
         : `, et aussi travée ${traveeRead}`;
-      if (m.totalInTravee > 1 && m.zone !== "Craft") {
+      if (m.totalInTravee > 1 && m.zone !== "Craft" && m.zone !== "Débord") {
         msg += `, ${m.emplacement}${m.emplacement === 1 ? "er" : "ème"} emplacement`;
       }
     });
@@ -294,7 +294,7 @@ const SearchPage = () => {
                     {zp && (
                       <p className="text-xl font-bold text-blue-400 mt-1 uppercase">{zp}</p>
                     )}
-                    {m.totalInTravee > 1 && m.zone !== "Craft" ? (
+                    {m.totalInTravee > 1 && m.zone !== "Craft" && m.zone !== "Débord" ? (
                       <p className="text-2xl font-bold text-yellow-400 mt-2">
                         {m.emplacement}{m.emplacement === 1 ? "er" : "ème"} emplacement
                         <span className="text-base text-gray-400"> / {m.totalInTravee}</span>
