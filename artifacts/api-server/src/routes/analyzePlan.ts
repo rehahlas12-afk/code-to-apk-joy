@@ -39,7 +39,7 @@ function parseTranscription(text: string): StoreData[] {
     for (let i = 0; i < tokens.length; i++) {
       const t = tokens[i].toUpperCase();
       const n = parseInt(t, 10);
-      const isNumericTravee = !isNaN(n) && t.length >= 2 && t.length <= 3 && n >= 72 && n <= 803;
+      const isNumericTravee = !isNaN(n) && t.length >= 2 && t.length <= 3 && n >= 10 && n <= 999;
       const isDebTravee = /^DEB\d*$/.test(t);
       const is99Bis = /^99BIS\d*$/.test(t);
       if (isNumericTravee || isDebTravee || is99Bis) {
@@ -86,31 +86,34 @@ router.post("/analyze-plan", async (req, res) => {
     const base64Data = imageBase64.replace(/^data:image\/[a-z]+;base64,/, "");
 
     // Step 1: Ask Gemini to transcribe the table as plain text — simpler = more complete
-    const prompt = `Tu es un expert OCR. Ce plan est un TABLEAU de dispatch entrepôt.
+    const prompt = `Tu es un expert OCR spécialisé dans les tableaux de dispatch entrepôt.
 
-Transcris TOUTES les lignes du tableau dans ce format exact, une ligne par rangée :
-TRAVÉE MAGASIN1 MAGASIN2
+MISSION : Extraire ABSOLUMENT TOUS les numéros de magasin (4-5 chiffres) de ce plan.
+Il y a probablement entre 50 et 80 lignes — tu DOIS toutes les transcrire sans en sauter une seule.
 
-Règles :
-- TRAVÉE = le premier nombre à 2-3 chiffres de la ligne (ex: 101, 306, 504, DEB1, 99BIS)
-- MAGASIN = les nombres à 4 ou 5 chiffres qui suivent (ex: 8214, 10297, 11964, 7922)
-- Ignore : les heures (5H00), les lettres M/S, les petits nombres de palettes (1-2 chiffres)
-- Ignore les lignes avec "x" ou flèche "→" en première colonne
-- Transcris TOUTES les lignes du tableau du début à la fin, sans exception
-- Si une travée a 2 magasins, mets les deux sur la même ligne séparés par un espace
+Format de sortie : une ligne par rangée du tableau :
+TRAVÉE MAGASIN1 [MAGASIN2]
 
-Exemple de sortie attendue :
-306 8214
-401 6059
-402 8060 10297
-404 11964 8999
-501 9660
-503 9617
+Définitions :
+- TRAVÉE = nombre à 2-3 chiffres (ex: 72, 101, 306, 504) OU DEB1 OU 99BIS
+- MAGASIN = nombre à 4 ou 5 chiffres (ex: 7879, 10032, 8486)
+- Ignore : heures (ex: 5H00, 6H30), lettres M/S, nombres de palettes (1-2 chiffres max)
+
+Règles critiques :
+1. TOUTES les lignes du tableau, du haut jusqu'en bas, sans exception
+2. Si une travée a 2 magasins, mets les 2 sur la même ligne
+3. Si tu n'es pas sûr d'un chiffre, transcris quand même ton meilleur essai
+4. Ne regroupe PAS plusieurs lignes ensemble
+5. Ne saute AUCUNE ligne même si elle te semble incomplète
+
+Exemple :
+72 8214
+101 6059
+102 8060 10297
+306 11964 8999
 504 7878 7450
-602 7922
-603 9673 9684
 
-Transcris maintenant TOUTES les lignes du plan :`;
+Transcris maintenant TOUTES les lignes, du début à la fin du tableau :`;
 
     const body = {
       contents: [
@@ -124,7 +127,7 @@ Transcris maintenant TOUTES les lignes du plan :`;
       ],
       generationConfig: {
         temperature: 0.0,
-        maxOutputTokens: 8192,
+        maxOutputTokens: 32768,
       },
     };
 
