@@ -99,51 +99,43 @@ router.post("/analyze-plan", async (req, res) => {
     const base64Data = imageBase64.replace(/^data:image\/[a-z]+;base64,/, "");
 
     // Step 1: Ask Gemini to transcribe the table as plain text — simpler = more complete
-    const prompt = `Tu es un expert OCR spécialisé dans les tableaux de dispatch entrepôt.
+    const prompt = `Tu es un expert OCR. Ce document est un tableau de dispatch entrepôt.
 
-MISSION CRITIQUE : Lire CHAQUE ligne du tableau de haut en bas et extraire tous les numéros de magasin.
-Le tableau a environ 60-70 lignes. Tu DOIS toutes les traiter sans en sauter une seule.
+Extrait TOUS les nombres à 4 ou 5 chiffres (numéros de magasin) et leur travée associée.
 
-Format de sortie STRICT — une ligne par rangée :
-TRAVÉE MAGASIN1 [MAGASIN2]
+FORMAT DE SORTIE — une ligne par rangée du tableau :
+TRAVÉE MAGASIN1 MAGASIN2
 
-Définitions :
-- TRAVÉE = identifiant en colonne 1 :
-  * Nombre 2-3 chiffres : 72, 99, 100, 101, 201, 306, 504, 803...
-  * Débord : DEB1, DEB2, DEB3... (écris-les comme ça, sans espace)
-  * Spécial : 99BIS, 99BIS1, 99BIS2, 99BIS3 (sans espace)
-- MAGASIN = nombre à 4 ou 5 chiffres dans les colonnes suivantes (ex: 7879, 10032, 8486, 11754)
-- IGNORER : heures (5H00, 6H30), lettres M/S, palettes (1 ou 2 chiffres), flèches →, croix x
+Colonne 1 = TRAVÉE : peut être un nombre (99, 100, 201...), DEB1/DEB2/DEB3, 99BIS/99BIS1/99BIS2/99BIS3
+Colonnes suivantes = MAGASINS : nombres à 4 ou 5 chiffres UNIQUEMENT (ex: 7879, 10032, 8486)
 
-Règles absolues :
-1. Commence depuis la PREMIÈRE ligne du tableau et va jusqu'à la DERNIÈRE
-2. Chaque ligne du tableau = une ligne dans ta réponse
-3. Si une travée a 2 magasins → mets les 2 sur la même ligne
-4. Si une ligne a une travée mais tu ne vois pas clairement le magasin → écris quand même la travée seule
-5. Sections DEB (Débord) et 99BIS en haut du tableau : ne les saute pas
+IMPORTANT :
+- Les lignes DEB et 99BIS en HAUT du tableau ont aussi des magasins — lis-les attentivement
+- Ignore : heures (5H00), M, S, nombres 1-2 chiffres (palettes), flèches →, x
+- Si tu lis mal un chiffre, transcris quand même ton meilleur essai
+- Lis de haut en bas sans sauter aucune ligne
 
-Exemple de sortie :
-DEB1 8214
-DEB2 6059 9812
+Exemple :
+DEB1 9812
+DEB2 11839
 99BIS 7450
 99BIS1 8060
-99 9738
-100 8999
-102 7450
+99BIS2 9738
+99 8999
+100 7450
 103 8176 6317
-201 8484 9616
-401 7518
-402 9668 9684
+202 6243 7389
+402 9668 9684 11754
 504 7878 7450
 
-Commence maintenant — transcris TOUTES les lignes de haut en bas :`;
+Transcris maintenant :`;
 
-    const makeBody = (p: string) => ({
+    const body = {
       contents: [
         {
           role: "user",
           parts: [
-            { text: p },
+            { text: prompt },
             { inline_data: { mime_type: "image/jpeg", data: base64Data } },
           ],
         },
@@ -152,56 +144,36 @@ Commence maintenant — transcris TOUTES les lignes de haut en bas :`;
         temperature: 0.0,
         maxOutputTokens: 32768,
       },
-      thinkingConfig: { thinkingBudget: 8000 },
-    });
+    };
 
     const url = `${geminiBaseUrl}/models/gemini-2.5-pro:generateContent?key=${geminiApiKey}`;
 
-    const callGemini = async (p: string): Promise<{ text: string; finishReason: string }> => {
-      const resp = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(makeBody(p)),
-      });
-      if (!resp.ok) {
-        const errText = await resp.text();
-        req.log.error({ status: resp.status, body: errText }, "Gemini API error");
-        throw new Error(`Gemini error ${resp.status}`);
-      }
-      const data = await resp.json() as {
-        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> }; finishReason?: string }>;
-      };
-      const cand = data.candidates?.[0];
-      // thinking model returns multiple parts; grab the last non-empty text part
-      const parts = cand?.content?.parts ?? [];
-      const text = [...parts].reverse().find(p => p.text?.trim())?.text ?? "";
-      return { text, finishReason: cand?.finishReason ?? "unknown" };
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      req.log.error({ status: response.status, body: errText }, "Gemini API error");
+      res.status(502).json({ error: "AI service error" });
+      return;
+    }
+
+    const geminiData = await response.json() as {
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> }; finishReason?: string }>;
     };
 
-    // Pass 1 — full table
-    const pass1 = await callGemini(prompt);
-    req.log.info({ rawTextLength: pass1.text.length, finishReason: pass1.finishReason, rawText: pass1.text }, "Gemini pass1");
+    const candidate = geminiData.candidates?.[0];
+    const rawText = candidate?.content?.parts?.[0]?.text ?? "";
+    const finishReason = candidate?.finishReason ?? "unknown";
 
-    // Pass 2 — focused on DEB / 99BIS section at top of plan
-    const promptDeb = `Ce plan contient une section en haut avec des travées Débord (DEB1, DEB2, DEB3...) et 99BIS.
-Ces lignes ont des numéros de magasin à 4-5 chiffres que tu dois lire.
+    req.log.info({ rawTextLength: rawText.length, finishReason, rawText }, "Gemini transcription received");
 
-Lis UNIQUEMENT la section du haut du tableau (DEB et 99BIS) et transcris chaque ligne :
-DEB1 MAGASIN
-DEB2 MAGASIN
-99BIS MAGASIN
-99BIS1 MAGASIN
-etc.
+    const stores = parseTranscription(rawText);
 
-Si tu ne vois pas de section DEB, réponds simplement : AUCUN`;
-    const pass2 = await callGemini(promptDeb);
-    req.log.info({ rawTextLength: pass2.text.length, rawText: pass2.text }, "Gemini pass2 (DEB section)");
-
-    // Merge both passes
-    const combined = pass1.text + "\n" + (pass2.text.trim() === "AUCUN" ? "" : pass2.text);
-    const stores = parseTranscription(combined);
-
-    req.log.info({ count: stores.length }, "Plan analysis complete");
+    req.log.info({ count: stores.length, finishReason }, "Plan analysis complete");
     res.json({ stores });
   } catch (err) {
     req.log.error({ err }, "analyze-plan route error");
