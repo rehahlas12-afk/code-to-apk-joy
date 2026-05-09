@@ -37,6 +37,7 @@ function normalizeLine(line: string): string {
 function parseTranscription(text: string): StoreData[] {
   const stores: StoreData[] = [];
   const seen = new Set<string>();
+  let lastTravee = "";
 
   for (const rawLine of text.split("\n")) {
     const line = normalizeLine(rawLine.trim());
@@ -46,22 +47,32 @@ function parseTranscription(text: string): StoreData[] {
     const tokens = line.match(/[A-Z0-9]+/gi) ?? [];
     if (tokens.length === 0) continue;
 
-    // First token that looks like a travée (2-3 digits, DEB*, 99BIS*)
+    // Check if first token is "X" → use last known travée (same row as above)
     let travee = "";
     let storeStart = 0;
-    for (let i = 0; i < tokens.length; i++) {
-      const t = tokens[i].toUpperCase();
-      const n = parseInt(t, 10);
-      const isNumericTravee = !isNaN(n) && t.length >= 2 && t.length <= 3 && n >= 10 && n <= 999;
-      const isDebTravee = /^DEB\d*$/.test(t);
-      const is99Bis = /^99BIS\d*$/.test(t);
-      if (isNumericTravee || isDebTravee || is99Bis) {
-        travee = t;
-        storeStart = i + 1;
-        break;
+    const firstToken = tokens[0].toUpperCase();
+
+    if (firstToken === "X" && lastTravee) {
+      travee = lastTravee;
+      storeStart = 1;
+    } else {
+      // First token that looks like a travée (2-3 digits, DEB*, 99BIS*)
+      for (let i = 0; i < tokens.length; i++) {
+        const t = tokens[i].toUpperCase();
+        const n = parseInt(t, 10);
+        const isNumericTravee = !isNaN(n) && t.length >= 2 && t.length <= 3 && n >= 10 && n <= 999;
+        const isDebTravee = /^DEB\d*$/.test(t);
+        const is99Bis = /^99BIS\d*$/.test(t);
+        if (isNumericTravee || isDebTravee || is99Bis) {
+          travee = t;
+          storeStart = i + 1;
+          break;
+        }
       }
     }
+
     if (!travee) continue;
+    lastTravee = travee;
 
     // Find all 4-5 digit numbers after the travée
     for (let i = storeStart; i < tokens.length; i++) {
@@ -111,7 +122,8 @@ Colonnes suivantes = MAGASINS : nombres à 4 ou 5 chiffres UNIQUEMENT (ex: 7879,
 
 IMPORTANT :
 - Les lignes DEB et 99BIS en HAUT du tableau ont aussi des magasins — lis-les attentivement
-- Ignore : heures (5H00), M, S, nombres 1-2 chiffres (palettes), flèches →, x
+- Si la colonne travée contient "x" ou "×" ou "X" → utilise la MÊME travée que la ligne précédente
+- Ignore : heures (5H00), M, S, nombres 1-2 chiffres (palettes), flèches →
 - Si tu lis mal un chiffre, transcris quand même ton meilleur essai
 - Lis de haut en bas sans sauter aucune ligne
 
