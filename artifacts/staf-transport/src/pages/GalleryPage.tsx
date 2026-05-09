@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Upload, Trash2, Loader2 } from "lucide-react";
+import { ArrowLeft, Upload, Trash2, Loader2, RefreshCw } from "lucide-react";
 import { activatePlan, getPlanStorageErrorMessage, getPlans, isQuotaExceededError, savePlan, deletePlan, updatePlanStores, type PlanRecord } from "@/lib/store";
 import { ocrAnalyzePlan } from "@/lib/ocr";
 import { readAndOptimizeImageFile } from "@/lib/planImage";
@@ -121,23 +121,27 @@ const GalleryPage = () => {
                   className="w-full aspect-square object-cover cursor-pointer"
                   onClick={() => handleSelect(plan)}
                 />
-                <div className="p-2 flex items-center justify-between">
-                  <div>
+                <div className="p-2 flex items-center justify-between gap-1">
+                  <div className="flex-1 min-w-0">
                     <p className="text-xs font-semibold">{plan.date}</p>
                     <p className="text-xs text-gray-400">{plan.time}</p>
                     {plan.stores.length > 0 ? (
                       <p className="text-[10px] text-green-400">{plan.stores.length} mag.</p>
                     ) : (
-                      <button
-                        onClick={() => analyzeAndSavePlan(plan)}
-                        disabled={analyzingId !== null}
-                        className="text-[10px] text-yellow-400 underline disabled:opacity-50"
-                      >
-                        Analyser
-                      </button>
+                      <p className="text-[10px] text-yellow-400">Non analysé</p>
                     )}
                   </div>
-                  <button onClick={() => handleDelete(plan.id)} className="p-1 text-red-500">
+                  <button
+                    onClick={() => analyzeAndSavePlan(plan)}
+                    disabled={analyzingId !== null}
+                    title="Réanalyser"
+                    className="p-1 text-blue-400 disabled:opacity-40 active:scale-90 transition-transform"
+                  >
+                    {analyzingId === plan.id
+                      ? <Loader2 size={16} className="animate-spin" />
+                      : <RefreshCw size={16} />}
+                  </button>
+                  <button onClick={() => handleDelete(plan.id)} className="p-1 text-red-500 active:scale-90 transition-transform">
                     <Trash2 size={16} />
                   </button>
                 </div>
