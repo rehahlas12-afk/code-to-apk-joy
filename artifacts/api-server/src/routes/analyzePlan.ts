@@ -138,12 +138,12 @@ DEB2 6059 9812
 
 Commence maintenant — transcris TOUTES les lignes de haut en bas :`;
 
-    const body = {
+    const makeBody = (p: string) => ({
       contents: [
         {
           role: "user",
           parts: [
-            { text: prompt },
+            { text: p },
             { inline_data: { mime_type: "image/jpeg", data: base64Data } },
           ],
         },
@@ -152,40 +152,56 @@ Commence maintenant — transcris TOUTES les lignes de haut en bas :`;
         temperature: 0.0,
         maxOutputTokens: 32768,
       },
-    };
+      thinkingConfig: { thinkingBudget: 8000 },
+    });
 
     const url = `${geminiBaseUrl}/models/gemini-2.5-pro:generateContent?key=${geminiApiKey}`;
 
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-
-    if (!response.ok) {
-      const errText = await response.text();
-      req.log.error({ status: response.status, body: errText }, "Gemini API error");
-      res.status(502).json({ error: "AI service error" });
-      return;
-    }
-
-    const geminiData = await response.json() as {
-      candidates?: Array<{
-        content?: { parts?: Array<{ text?: string }> };
-        finishReason?: string;
-      }>;
+    const callGemini = async (p: string): Promise<{ text: string; finishReason: string }> => {
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(makeBody(p)),
+      });
+      if (!resp.ok) {
+        const errText = await resp.text();
+        req.log.error({ status: resp.status, body: errText }, "Gemini API error");
+        throw new Error(`Gemini error ${resp.status}`);
+      }
+      const data = await resp.json() as {
+        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> }; finishReason?: string }>;
+      };
+      const cand = data.candidates?.[0];
+      // thinking model returns multiple parts; grab the last non-empty text part
+      const parts = cand?.content?.parts ?? [];
+      const text = [...parts].reverse().find(p => p.text?.trim())?.text ?? "";
+      return { text, finishReason: cand?.finishReason ?? "unknown" };
     };
 
-    const candidate = geminiData.candidates?.[0];
-    const rawText = candidate?.content?.parts?.[0]?.text ?? "";
-    const finishReason = candidate?.finishReason ?? "unknown";
+    // Pass 1 — full table
+    const pass1 = await callGemini(prompt);
+    req.log.info({ rawTextLength: pass1.text.length, finishReason: pass1.finishReason, rawText: pass1.text }, "Gemini pass1");
 
-    req.log.info({ rawTextLength: rawText.length, finishReason, rawText }, "Gemini transcription received");
+    // Pass 2 — focused on DEB / 99BIS section at top of plan
+    const promptDeb = `Ce plan contient une section en haut avec des travées Débord (DEB1, DEB2, DEB3...) et 99BIS.
+Ces lignes ont des numéros de magasin à 4-5 chiffres que tu dois lire.
 
-    // Step 2: Parse the plain-text transcription
-    const stores = parseTranscription(rawText);
+Lis UNIQUEMENT la section du haut du tableau (DEB et 99BIS) et transcris chaque ligne :
+DEB1 MAGASIN
+DEB2 MAGASIN
+99BIS MAGASIN
+99BIS1 MAGASIN
+etc.
 
-    req.log.info({ count: stores.length, finishReason }, "Plan analysis complete");
+Si tu ne vois pas de section DEB, réponds simplement : AUCUN`;
+    const pass2 = await callGemini(promptDeb);
+    req.log.info({ rawTextLength: pass2.text.length, rawText: pass2.text }, "Gemini pass2 (DEB section)");
+
+    // Merge both passes
+    const combined = pass1.text + "\n" + (pass2.text.trim() === "AUCUN" ? "" : pass2.text);
+    const stores = parseTranscription(combined);
+
+    req.log.info({ count: stores.length }, "Plan analysis complete");
     res.json({ stores });
   } catch (err) {
     req.log.error({ err }, "analyze-plan route error");
