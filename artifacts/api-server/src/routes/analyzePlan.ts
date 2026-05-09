@@ -116,6 +116,7 @@ Colonnes suivantes = MAGASINS : nombres à 4 ou 5 chiffres UNIQUEMENT (ex: 7879,
 
 IMPORTANT :
 - Les lignes DEB et 99BIS en HAUT du tableau ont aussi des magasins — lis-les attentivement
+- Section CRAFT (travées 86 à 98) : les numéros de travée sont disposés HORIZONTALEMENT en haut, et chaque magasin est juste EN DESSOUS de son numéro. Un seul magasin par travée Craft. Transcris chaque paire séparément : "86 MAGASIN", "87 MAGASIN", etc.
 - Ignore : heures (5H00), M, S, nombres 1-2 chiffres (palettes), flèches →
 - Si tu lis mal un chiffre, transcris quand même ton meilleur essai
 - Lis de haut en bas sans sauter aucune ligne
@@ -128,6 +129,10 @@ DEB2 11839
 99 8999
 100 7450
 103 8176 6317
+86 8214
+87 7879
+88 10032
+89 9571
 306 10892
 X 9037
 402 9668 9684
