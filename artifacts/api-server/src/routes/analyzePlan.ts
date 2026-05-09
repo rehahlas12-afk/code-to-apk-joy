@@ -57,7 +57,7 @@ function parseTranscription(text: string): StoreData[] {
       const isNumericTravee = !isNaN(n) && t.length >= 2 && t.length <= 3 && n >= 10 && n <= 999;
       const isDebTravee = /^DEB\d*$/.test(t);
       const is99Bis = /^99BIS\d*$/.test(t);
-      const isSingleLetter = /^[A-Z]$/.test(t); // travées nommées : X, Y, Z...
+      const isSingleLetter = t === "X"; // travée nommée X
       if (isNumericTravee || isDebTravee || is99Bis || isSingleLetter) {
         travee = t;
         storeStart = i + 1;
