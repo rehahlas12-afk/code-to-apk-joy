@@ -287,6 +287,34 @@ const SearchPage = () => {
         )}
       </div>
 
+      {/* Dedicated travée search bar — ORANGE outline */}
+      <div className="px-2 pt-2">
+        <div className="flex items-center gap-1 bg-gray-900 border-2 border-orange-500 rounded-xl p-1">
+          <span className="text-orange-400 font-black text-sm pl-2 shrink-0">TRAVÉE</span>
+          <input
+            type="text"
+            inputMode="text"
+            value={traveeQuery}
+            onChange={(e) => setTraveeQuery(e.target.value.toUpperCase())}
+            onKeyDown={(e) => e.key === "Enter" && runTraveeSearch(traveeQuery)}
+            placeholder="N° ou lettre (ex: 306, X)"
+            className="min-w-0 flex-1 bg-transparent px-2 py-2 text-base text-white outline-none uppercase"
+          />
+          {traveeQuery && (
+            <button onClick={() => setTraveeQuery("")} className="p-1.5 text-gray-400 shrink-0" aria-label="Effacer">
+              <X size={18} />
+            </button>
+          )}
+          <button
+            onClick={() => runTraveeSearch(traveeQuery)}
+            className="bg-orange-600 text-white rounded-lg p-2 shrink-0"
+            aria-label="Rechercher travée"
+          >
+            <SearchIcon size={20} />
+          </button>
+        </div>
+      </div>
+
       {/* Result display */}
       <div className="flex-1 overflow-y-auto px-2 py-2" onClick={() => setShowSuggestions(false)}>
         {result && (
