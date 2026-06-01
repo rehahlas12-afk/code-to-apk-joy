@@ -131,6 +131,24 @@ const SearchPage = () => {
     speak(`${trimmed} non trouvé`);
   }, [announce, announceTravee, computeResult, speak]);
 
+  const runTraveeSearch = useCallback((q: string) => {
+    const trimmed = q.trim();
+    if (!trimmed) return;
+    setShowSuggestions(false);
+    const tr = searchByTravee(trimmed);
+    if (tr.length > 0) {
+      setResult(null);
+      setTraveeResults(tr);
+      setNotFound(false);
+      announceTravee(tr, trimmed);
+      return;
+    }
+    setResult(null);
+    setTraveeResults(null);
+    setNotFound(true);
+    speak(`Travée ${traveeSpoken(trimmed)} non trouvée`);
+  }, [announceTravee, speak]);
+
   const selectSuggestion = useCallback((s: StoreSuggestion) => {
     setQuery(s.name || s.number);
     setShowSuggestions(false);
