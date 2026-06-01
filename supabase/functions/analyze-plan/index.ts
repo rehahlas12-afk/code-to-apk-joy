@@ -31,19 +31,19 @@ serve(async (req) => {
     const systemPrompt = `Tu es un expert en extraction de données structurées à partir de photos de plans de dispatch/chargement de camions pour le transport STAF.
 
 Le document est un tableau quadrillé (grille) avec des colonnes et des lignes. Chaque ligne contient :
-- Un numéro de travée (2-3 chiffres, ou codes spéciaux comme 99BIS, DEB, DEB4)
+- Un numéro de travée (2-3 chiffres, ou codes spéciaux comme 99BIS, DEB, DEB4, ou une LETTRE seule comme "X", "Y", ou lettre+chiffre comme "X1")
 - Un ou plusieurs numéros de magasin (4-5 chiffres)
 
 Les zones sont :
 - "Zone 1" : travées normales (généralement < 72)
-- "Débord" : travées 72-86 quand rien n'est marqué, ou lignes marquées DEBORD/DEB
+- "Débord" : travées 72-86 quand rien n'est marqué, ou lignes marquées DEBORD/DEB, ainsi que les travées-lettres comme "X" si situées dans la zone débord
 - "Craft" : travées 86-95 uniquement quand la ligne/case est marquée CRAFT/KRAFT/CRAFTER
 
 INSTRUCTIONS CRITIQUES :
 1. Parcours CHAQUE ligne du tableau, de haut en bas, de gauche à droite
 2. Ne saute AUCUNE cellule — chaque numéro compte
 3. Les numéros de magasin ont 4 ou 5 chiffres (ex: 8486, 10892, 6317)
-4. Les numéros de travée ont 2-3 chiffres (ex: 72, 306, 94)
+4. Les numéros de travée ont 2-3 chiffres (ex: 72, 306, 94) OU une lettre seule (ex: X, Y) OU lettre+chiffre (ex: X1, A2). Une case marquée juste "X" est une travée à part entière, traite-la comme les autres travées.
 5. Retourne TOUS les magasins trouvés, même si tu n'es pas sûr à 100%
 6. Si un numéro est partiellement lisible, donne ta meilleure estimation
 7. ATTENTION : le numéro 86 peut exister deux fois. Si une case indique seulement "86" sans CRAFT, c'est "Débord". Si une autre case indique "86 CRAFT" ou "86 KRAFT", c'est une travée différente en "Craft". Ne mélange jamais ces deux travées.
