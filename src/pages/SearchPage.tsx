@@ -361,11 +361,14 @@ const SearchPage = () => {
               <p className="text-6xl font-black text-orange-400 leading-none text-center">{g.travee}</p>
               {zp && <p className="text-lg font-bold text-blue-400 mt-1 uppercase text-center">{zp}</p>}
               <p className="text-sm text-gray-400 text-center mt-2">{g.stores.length} magasin{g.stores.length > 1 ? "s" : ""} :</p>
-              <div className="mt-2 space-y-1">
+              <div className="mt-2 space-y-2">
                 {g.stores.map((st) => (
-                  <div key={st.number} className="flex items-center justify-between bg-gray-800 rounded-lg px-3 py-2">
-                    <span className="font-bold text-white text-base">{st.emplacement}. {st.name || `Magasin ${st.number}`}</span>
-                    <span className="text-green-400 font-bold text-sm">N° {st.number}</span>
+                  <div key={st.number} className="flex items-center justify-between bg-gray-800 rounded-xl px-3 py-3 gap-2">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="text-5xl font-black text-yellow-400 leading-none shrink-0">{st.emplacement}</span>
+                      <span className="font-black text-white text-2xl truncate">{st.name || `Magasin ${st.number}`}</span>
+                    </div>
+                    <span className="text-green-400 font-black text-xl shrink-0">N°{st.number}</span>
                   </div>
                 ))}
               </div>
