@@ -30,6 +30,7 @@ const traveeSpoken = (t: string) => t.replace(/(\d)([A-Za-z])/g, "$1 $2").replac
 const SearchPage = () => {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
+  const [traveeQuery, setTraveeQuery] = useState("");
   const [result, setResult] = useState<SearchResult | null>(null);
   const [traveeResults, setTraveeResults] = useState<TraveeResult[] | null>(null);
   const [notFound, setNotFound] = useState(false);
