@@ -510,10 +510,24 @@ export function searchByTravee(query: string): TraveeResult[] {
   const compact = query.trim().toLowerCase().replace(/\s+/g, "");
   if (!compact) return [];
 
-  // Group stores per (travee, zone)
+  const matches = (travee: string): boolean => {
+    const t = travee.toLowerCase();
+    if (t === compact) return true;
+    // Si la requête est une lettre seule (ex: "x"), match toute travée
+    // qui contient cette lettre comme jeton distinct (ex: "X", "X1", "306X", "X 306")
+    if (/^[a-z]$/.test(compact)) {
+      const tokens = t.split(/[^a-z0-9]+/).filter(Boolean);
+      if (tokens.includes(compact)) return true;
+      // lettre attachée à des chiffres (ex: "306x" ou "x1")
+      const re = new RegExp(`(^|\\d)${compact}(\\d|$)`);
+      if (re.test(t)) return true;
+    }
+    return false;
+  };
+
   const groups = new Map<string, StoreData[]>();
   for (const s of stores) {
-    if (s.travee.toLowerCase() === compact) {
+    if (matches(s.travee)) {
       const key = `${s.travee}|${s.zone}`;
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key)!.push(s);
