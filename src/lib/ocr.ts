@@ -106,7 +106,15 @@ function tokenizeLine(normalizedLine: string): string[] {
 }
 
 function isTraveeToken(token: string): boolean {
-  return /^99BIS\d?$/.test(token) || /^DEB\d?$/.test(token) || /^[1-9]\d{1,2}$/.test(token);
+  return (
+    /^99BIS\d?$/.test(token) ||
+    /^DEB\d?$/.test(token) ||
+    /^[1-9]\d{1,2}$/.test(token) ||
+    /^[A-WYZ]$/.test(token) ||      // travées lettre seule (X, Y, A, etc.)
+    /^X$/.test(token) ||
+    /^[A-Z]\d{1,2}$/.test(token) || // ex: X1, A2
+    /^\d{1,3}[A-Z]$/.test(token)    // ex: 306X (sera traitée comme travée à part)
+  );
 }
 
 function extractTravee(normalizedLine: string, currentTravee: string): string {

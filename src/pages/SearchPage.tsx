@@ -30,6 +30,7 @@ const traveeSpoken = (t: string) => t.replace(/(\d)([A-Za-z])/g, "$1 $2").replac
 const SearchPage = () => {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
+  const [traveeQuery, setTraveeQuery] = useState("");
   const [result, setResult] = useState<SearchResult | null>(null);
   const [traveeResults, setTraveeResults] = useState<TraveeResult[] | null>(null);
   const [notFound, setNotFound] = useState(false);
@@ -129,6 +130,24 @@ const SearchPage = () => {
     setNotFound(true);
     speak(`${trimmed} non trouvé`);
   }, [announce, announceTravee, computeResult, speak]);
+
+  const runTraveeSearch = useCallback((q: string) => {
+    const trimmed = q.trim();
+    if (!trimmed) return;
+    setShowSuggestions(false);
+    const tr = searchByTravee(trimmed);
+    if (tr.length > 0) {
+      setResult(null);
+      setTraveeResults(tr);
+      setNotFound(false);
+      announceTravee(tr, trimmed);
+      return;
+    }
+    setResult(null);
+    setTraveeResults(null);
+    setNotFound(true);
+    speak(`Travée ${traveeSpoken(trimmed)} non trouvée`);
+  }, [announceTravee, speak]);
 
   const selectSuggestion = useCallback((s: StoreSuggestion) => {
     setQuery(s.name || s.number);
@@ -268,6 +287,34 @@ const SearchPage = () => {
         )}
       </div>
 
+      {/* Dedicated travée search bar — ORANGE outline */}
+      <div className="px-2 pt-2">
+        <div className="flex items-center gap-1 bg-gray-900 border-2 border-orange-500 rounded-xl p-1">
+          <span className="text-orange-400 font-black text-sm pl-2 shrink-0">TRAVÉE</span>
+          <input
+            type="text"
+            inputMode="text"
+            value={traveeQuery}
+            onChange={(e) => setTraveeQuery(e.target.value.toUpperCase())}
+            onKeyDown={(e) => e.key === "Enter" && runTraveeSearch(traveeQuery)}
+            placeholder="N° ou lettre (ex: 306, X)"
+            className="min-w-0 flex-1 bg-transparent px-2 py-2 text-base text-white outline-none uppercase"
+          />
+          {traveeQuery && (
+            <button onClick={() => setTraveeQuery("")} className="p-1.5 text-gray-400 shrink-0" aria-label="Effacer">
+              <X size={18} />
+            </button>
+          )}
+          <button
+            onClick={() => runTraveeSearch(traveeQuery)}
+            className="bg-orange-600 text-white rounded-lg p-2 shrink-0"
+            aria-label="Rechercher travée"
+          >
+            <SearchIcon size={20} />
+          </button>
+        </div>
+      </div>
+
       {/* Result display */}
       <div className="flex-1 overflow-y-auto px-2 py-2" onClick={() => setShowSuggestions(false)}>
         {result && (
@@ -314,11 +361,14 @@ const SearchPage = () => {
               <p className="text-6xl font-black text-orange-400 leading-none text-center">{g.travee}</p>
               {zp && <p className="text-lg font-bold text-blue-400 mt-1 uppercase text-center">{zp}</p>}
               <p className="text-sm text-gray-400 text-center mt-2">{g.stores.length} magasin{g.stores.length > 1 ? "s" : ""} :</p>
-              <div className="mt-2 space-y-1">
+              <div className="mt-2 space-y-2">
                 {g.stores.map((st) => (
-                  <div key={st.number} className="flex items-center justify-between bg-gray-800 rounded-lg px-3 py-2">
-                    <span className="font-bold text-white text-base">{st.emplacement}. {st.name || `Magasin ${st.number}`}</span>
-                    <span className="text-green-400 font-bold text-sm">N° {st.number}</span>
+                  <div key={st.number} className="flex items-center justify-between bg-gray-800 rounded-xl px-3 py-3 gap-2">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="text-5xl font-black text-yellow-400 leading-none shrink-0">{st.emplacement}</span>
+                      <span className="font-black text-white text-2xl truncate">{st.name || `Magasin ${st.number}`}</span>
+                    </div>
+                    <span className="text-green-400 font-black text-xl shrink-0">N°{st.number}</span>
                   </div>
                 ))}
               </div>
