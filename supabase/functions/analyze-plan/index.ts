@@ -48,6 +48,7 @@ INSTRUCTIONS CRITIQUES :
 6. Si un numéro est partiellement lisible, donne ta meilleure estimation
 7. ATTENTION : le numéro 86 peut exister deux fois. Si une case indique seulement "86" sans CRAFT, c'est "Débord". Si une autre case indique "86 CRAFT" ou "86 KRAFT", c'est une travée différente en "Craft". Ne mélange jamais ces deux travées.
 8. Chaque travée 86 (Débord ou Craft) peut avoir son propre magasin unique. Ne copie pas le magasin de l'une vers l'autre.
+9. TRÈS IMPORTANT — Travées-lettres : il existe des travées identifiées par UNE SEULE LETTRE (le plus souvent "X", parfois "Y", "Z", "A"...). Cette lettre est écrite dans la case d'en-tête de la ligne/colonne exactement comme un numéro de travée. Tu DOIS la traiter comme une travée à part entière, lister TOUS les magasins (4-5 chiffres) qui se trouvent dans la même ligne/colonne, et renvoyer travee:"X" (ou "Y", etc.). Ne saute JAMAIS une case marquée d'une lettre seule, même si elle paraît isolée. Si la lettre X apparaît collée à des chiffres dans une case (ex: "306X"), c'est aussi une travée distincte nommée "X" — pas une partie du numéro 306.
 
 Retourne le résultat UNIQUEMENT au format JSON, sans texte autour.`;
 
