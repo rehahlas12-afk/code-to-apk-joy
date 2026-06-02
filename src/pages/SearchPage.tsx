@@ -345,6 +345,13 @@ const SearchPage = () => {
           >
             <SearchIcon size={20} />
           </button>
+          <button
+            onClick={listening ? stopListening : startTraveeListening}
+            className={`rounded-lg p-2 shrink-0 ${listening ? "bg-red-600 animate-pulse" : "bg-green-600"}`}
+            aria-label="Recherche vocale travée"
+          >
+            <Mic size={20} />
+          </button>
         </div>
       </div>
 
