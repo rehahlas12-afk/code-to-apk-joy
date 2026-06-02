@@ -199,6 +199,37 @@ const SearchPage = () => {
     setListening(false);
   }, []);
 
+  const startTraveeListening = useCallback(() => {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) {
+      speak("La reconnaissance vocale n'est pas disponible");
+      return;
+    }
+    speak("Quelle travée ?");
+    setTimeout(() => {
+      const rec = new SR();
+      rec.lang = "fr-FR";
+      rec.continuous = false;
+      rec.interimResults = true;
+      rec.onresult = (event: any) => {
+        const text = event.results[0][0].transcript;
+        setTraveeQuery(text.toUpperCase());
+        if (event.results[0].isFinal) {
+          // Garde chiffres + lettres uniquement
+          const cleaned = text.toUpperCase().replace(/[^A-Z0-9]/g, "");
+          runTraveeSearch(cleaned || text.trim());
+          setListening(false);
+        }
+      };
+      rec.onerror = () => setListening(false);
+      rec.onend = () => setListening(false);
+      recognitionRef.current = rec;
+      rec.start();
+      setListening(true);
+    }, 700);
+  }, [runTraveeSearch, speak]);
+
+
   // Auto-déclenche la voix si on arrive avec ?voice=1 (depuis bouton casque global)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
