@@ -77,7 +77,7 @@ const SearchPage = () => {
     let msg = `Magasin ${r.number}`;
     if (r.name) msg += `, ${r.name}`;
     r.matches.forEach((m, idx) => {
-      const zp = zonePhrase(m.zone);
+      const zp = zonePhrase(m.zone, m.travee);
       const traveeRead = zp ? `${traveeSpoken(m.travee)} ${zp}` : `${traveeSpoken(m.travee)}`;
       msg += idx === 0
         ? `, travée ${traveeRead}`
