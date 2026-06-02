@@ -394,24 +394,30 @@ const SearchPage = () => {
         )}
 
         {traveeResults && traveeResults.map((g, i) => {
-          const zp = zonePhrase(g.zone);
+          const zp = zonePhrase(g.zone, g.travee);
           return (
-            <div key={i} className="bg-gray-900 border-2 border-orange-500 rounded-2xl p-3 mb-2">
-              <p className="text-sm text-gray-400 text-center">Travée</p>
-              <p className="text-6xl font-black text-orange-400 leading-none text-center">{g.travee}</p>
-              {zp && <p className="text-lg font-bold text-blue-400 mt-1 uppercase text-center">{zp}</p>}
-              <p className="text-sm text-gray-400 text-center mt-2">{g.stores.length} magasin{g.stores.length > 1 ? "s" : ""} :</p>
-              <div className="mt-2 space-y-2">
+            <div key={i} className="bg-gray-900 border-2 border-orange-500 rounded-2xl p-3 mb-3">
+              <p className="text-base text-gray-400 text-center">Travée</p>
+              <p className="text-8xl font-black text-orange-400 leading-none text-center">{g.travee}</p>
+              {zp && <p className="text-2xl font-bold text-blue-400 mt-2 uppercase text-center">{zp}</p>}
+              <p className="text-lg text-gray-300 text-center mt-3 font-bold">{g.stores.length} magasin{g.stores.length > 1 ? "s" : ""}</p>
+              <div className="mt-3 space-y-3">
                 {g.stores.map((st) => (
-                  <div key={st.number} className="flex items-center justify-between bg-gray-800 rounded-xl px-3 py-3 gap-2">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <span className="text-5xl font-black text-yellow-400 leading-none shrink-0">{st.emplacement}</span>
-                      <span className="font-black text-white text-2xl truncate">{st.name || `Magasin ${st.number}`}</span>
+                  <div key={st.number} className="bg-gray-800 border-2 border-gray-700 rounded-2xl px-3 py-4">
+                    <div className="flex items-center gap-3 mb-2">
+                      <span className="text-7xl font-black text-yellow-400 leading-none shrink-0">{st.emplacement}</span>
+                      <span className="text-base text-gray-400 font-bold">emplacement</span>
                     </div>
-                    <span className="text-green-400 font-black text-xl shrink-0">N°{st.number}</span>
+                    <p className="text-3xl font-black text-white leading-tight break-words">
+                      {st.name || `Magasin ${st.number}`}
+                    </p>
+                    <p className="text-3xl font-black text-green-400 mt-1">N° {st.number}</p>
                   </div>
                 ))}
               </div>
+              <button onClick={() => announceTravee([g], g.travee)} className="mt-3 text-sm text-gray-400 underline block mx-auto">
+                🔊 Réécouter
+              </button>
             </div>
           );
         })}
