@@ -17,7 +17,9 @@ interface SearchResult {
 }
 
 // Speak the zone like a human: "en débord", "kraft", or nothing for Zone 1
-const zonePhrase = (zone: string): string => {
+// Lettres seules (X, Y, Z…) ne sont JAMAIS en débord — toujours Zone 1.
+const zonePhrase = (zone: string, travee?: string): string => {
+  if (travee && /^[A-Za-z]$/.test(travee.trim())) return "";
   const z = (zone || "").toLowerCase();
   if (z.includes("deb") || z.includes("déb")) return "en débord";
   if (z.includes("craft") || z.includes("kraft")) return "kraft";
