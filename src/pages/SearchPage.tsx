@@ -366,7 +366,7 @@ const SearchPage = () => {
 
             <div className="space-y-2">
               {result.matches.map((m, i) => {
-                const zp = zonePhrase(m.zone);
+                const zp = zonePhrase(m.zone, m.travee);
                 return (
                   <div key={i} className="bg-gray-900 border-2 border-green-500 rounded-2xl py-3 px-3">
                     <p className="text-sm text-gray-400">Travée</p>
