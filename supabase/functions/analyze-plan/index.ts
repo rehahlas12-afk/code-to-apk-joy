@@ -133,11 +133,12 @@ Parcours systématiquement chaque ligne et chaque cellule du tableau. Ne rate au
 
     const validStores = stores
       .filter((s: any) => s.number && /^\d{4,5}$/.test(String(s.number).trim()))
-      .map((s: any) => ({
-        number: String(s.number).trim(),
-        travee: String(s.travee || "?").trim(),
-        zone: normalizeZone(s.zone),
-      }));
+      .map((s: any) => {
+        const travee = String(s.travee || "?").trim();
+        // Lettres seules (X, Y, Z…) sont TOUJOURS en Zone 1
+        const zone = /^[A-Za-z]$/.test(travee) ? "Zone 1" : normalizeZone(s.zone);
+        return { number: String(s.number).trim(), travee, zone };
+      });
 
     // Dedupe
     const seen = new Set<string>();
