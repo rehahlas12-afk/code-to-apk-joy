@@ -197,43 +197,76 @@ const PlanViewerPage = () => {
         <h1 className="text-lg font-bold">Visualiser Plan</h1>
       </div>
 
-      {plans.length > 1 && (
+      {plans.length > 0 && (
         <div className="px-4 pb-2">
-          <p className="text-xs text-gray-400 mb-2">Sélectionnez un plan :</p>
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {plans.map((p) => (
-              <button
-                key={p.id}
-                onClick={() => selectPlan(p)}
-                className={`shrink-0 rounded-lg border-2 overflow-hidden w-20 h-20 relative ${
-                  selectedPlan?.id === p.id ? "border-green-500" : "border-gray-700"
-                }`}
-              >
-                <img src={p.imageData} alt="" className="w-full h-full object-cover" />
-                {selectedPlan?.id === p.id && (
-                  <div className="absolute top-1 right-1 bg-green-500 rounded-full p-0.5">
-                    <Check size={10} />
-                  </div>
-                )}
-                <div className="absolute bottom-0 inset-x-0 bg-black/70 text-[9px] text-center py-0.5">
-                  {p.date}
+          {plans.length > 1 && (
+            <p className="text-xs text-gray-400 mb-2">Sélectionnez un plan :</p>
+          )}
+          <div className="flex gap-3 overflow-x-auto pb-1">
+            {plans.map((p) => {
+              const busy = reanalyzingId === p.id;
+              return (
+                <div key={p.id} className="shrink-0 flex flex-col items-center gap-1">
+                  <button
+                    onClick={() => selectPlan(p)}
+                    className={`rounded-lg border-2 overflow-hidden w-20 h-20 relative ${
+                      selectedPlan?.id === p.id ? "border-green-500" : "border-gray-700"
+                    }`}
+                  >
+                    <img src={p.imageData} alt="" className="w-full h-full object-cover" />
+                    {selectedPlan?.id === p.id && (
+                      <div className="absolute top-1 right-1 bg-green-500 rounded-full p-0.5">
+                        <Check size={10} />
+                      </div>
+                    )}
+                    <div className="absolute bottom-0 inset-x-0 bg-black/70 text-[9px] text-center py-0.5">
+                      {p.date}
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => handleReanalyze(p)}
+                    disabled={busy}
+                    className="flex items-center gap-1 text-[10px] font-bold bg-orange-600 hover:bg-orange-700 disabled:opacity-60 text-white rounded-full px-2 py-1 w-20 justify-center"
+                    aria-label="Analyser à nouveau"
+                  >
+                    {busy ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                    {busy ? "…" : "Analyser"}
+                  </button>
                 </div>
-              </button>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
 
       {selectedPlan ? (
         <div className="flex-1 px-4 pb-3 flex flex-col gap-2 min-h-0">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-gray-400">
-              {selectedPlan.date} • {selectedPlan.stores.length} magasins • {Math.round(scale * 100)}%
-            </p>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex-1 min-w-0">
+              <p className="text-3xl font-black text-green-400 leading-tight">
+                {selectedPlan.stores.length} magasins
+              </p>
+              <p className="text-xs text-gray-400">
+                {selectedPlan.date} • {Math.round(scale * 100)}%
+              </p>
+            </div>
+            <button
+              onClick={() => handleReanalyze(selectedPlan)}
+              disabled={reanalyzingId === selectedPlan.id}
+              className="flex items-center gap-1 text-xs font-bold bg-orange-600 hover:bg-orange-700 disabled:opacity-60 text-white rounded-lg px-3 py-2"
+            >
+              {reanalyzingId === selectedPlan.id ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <RefreshCw size={16} />
+              )}
+              Analyser
+            </button>
             <button onClick={() => handleDelete(selectedPlan.id)} className="p-2 text-red-500">
               <Trash2 size={18} />
             </button>
           </div>
+
 
           <div
             ref={containerRef}
