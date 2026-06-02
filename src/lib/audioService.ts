@@ -80,11 +80,22 @@ export async function stopAudioService() {
 
 export async function quitApplication() {
   await stopAudioService();
+  // Capacitor (Android) — ferme complètement l'app et ses services
   try {
     const { App } = await import("@capacitor/app");
     await App.exitApp();
     return;
   } catch {}
-  try { window.close(); } catch {}
-  setTimeout(() => window.location.replace("about:blank"), 50);
+  // Désenregistre tous les service workers (PWA) pour qu'aucun n'écoute en arrière-plan
+  try {
+    if ("serviceWorker" in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map((r) => r.unregister()));
+    }
+  } catch {}
+  try { speechSynthesis.cancel(); } catch {}
+  try { window.open("", "_self"); window.close(); } catch {}
+  setTimeout(() => {
+    try { window.location.replace("about:blank"); } catch {}
+  }, 80);
 }

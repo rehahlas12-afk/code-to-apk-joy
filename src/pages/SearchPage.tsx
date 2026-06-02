@@ -17,7 +17,9 @@ interface SearchResult {
 }
 
 // Speak the zone like a human: "en débord", "kraft", or nothing for Zone 1
-const zonePhrase = (zone: string): string => {
+// Lettres seules (X, Y, Z…) ne sont JAMAIS en débord — toujours Zone 1.
+const zonePhrase = (zone: string, travee?: string): string => {
+  if (travee && /^[A-Za-z]$/.test(travee.trim())) return "";
   const z = (zone || "").toLowerCase();
   if (z.includes("deb") || z.includes("déb")) return "en débord";
   if (z.includes("craft") || z.includes("kraft")) return "kraft";
@@ -75,7 +77,7 @@ const SearchPage = () => {
     let msg = `Magasin ${r.number}`;
     if (r.name) msg += `, ${r.name}`;
     r.matches.forEach((m, idx) => {
-      const zp = zonePhrase(m.zone);
+      const zp = zonePhrase(m.zone, m.travee);
       const traveeRead = zp ? `${traveeSpoken(m.travee)} ${zp}` : `${traveeSpoken(m.travee)}`;
       msg += idx === 0
         ? `, travée ${traveeRead}`
@@ -91,7 +93,7 @@ const SearchPage = () => {
     const total = results.reduce((s, g) => s + g.stores.length, 0);
     let msg = `Travée ${traveeSpoken(travee)}, ${total} magasin${total > 1 ? "s" : ""}`;
     results.forEach((g) => {
-      const zp = zonePhrase(g.zone);
+      const zp = zonePhrase(g.zone, g.travee);
       if (zp) msg += `, ${zp}`;
       g.stores.forEach((st) => {
         msg += `, ${st.name ? st.name : "magasin " + st.number}`;
@@ -196,6 +198,37 @@ const SearchPage = () => {
     recognitionRef.current?.stop();
     setListening(false);
   }, []);
+
+  const startTraveeListening = useCallback(() => {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) {
+      speak("La reconnaissance vocale n'est pas disponible");
+      return;
+    }
+    speak("Quelle travée ?");
+    setTimeout(() => {
+      const rec = new SR();
+      rec.lang = "fr-FR";
+      rec.continuous = false;
+      rec.interimResults = true;
+      rec.onresult = (event: any) => {
+        const text = event.results[0][0].transcript;
+        setTraveeQuery(text.toUpperCase());
+        if (event.results[0].isFinal) {
+          // Garde chiffres + lettres uniquement
+          const cleaned = text.toUpperCase().replace(/[^A-Z0-9]/g, "");
+          runTraveeSearch(cleaned || text.trim());
+          setListening(false);
+        }
+      };
+      rec.onerror = () => setListening(false);
+      rec.onend = () => setListening(false);
+      recognitionRef.current = rec;
+      rec.start();
+      setListening(true);
+    }, 700);
+  }, [runTraveeSearch, speak]);
+
 
   // Auto-déclenche la voix si on arrive avec ?voice=1 (depuis bouton casque global)
   useEffect(() => {
@@ -312,6 +345,13 @@ const SearchPage = () => {
           >
             <SearchIcon size={20} />
           </button>
+          <button
+            onClick={listening ? stopListening : startTraveeListening}
+            className={`rounded-lg p-2 shrink-0 ${listening ? "bg-red-600 animate-pulse" : "bg-green-600"}`}
+            aria-label="Recherche vocale travée"
+          >
+            <Mic size={20} />
+          </button>
         </div>
       </div>
 
@@ -326,7 +366,7 @@ const SearchPage = () => {
 
             <div className="space-y-2">
               {result.matches.map((m, i) => {
-                const zp = zonePhrase(m.zone);
+                const zp = zonePhrase(m.zone, m.travee);
                 return (
                   <div key={i} className="bg-gray-900 border-2 border-green-500 rounded-2xl py-3 px-3">
                     <p className="text-sm text-gray-400">Travée</p>
@@ -354,24 +394,30 @@ const SearchPage = () => {
         )}
 
         {traveeResults && traveeResults.map((g, i) => {
-          const zp = zonePhrase(g.zone);
+          const zp = zonePhrase(g.zone, g.travee);
           return (
-            <div key={i} className="bg-gray-900 border-2 border-orange-500 rounded-2xl p-3 mb-2">
-              <p className="text-sm text-gray-400 text-center">Travée</p>
-              <p className="text-6xl font-black text-orange-400 leading-none text-center">{g.travee}</p>
-              {zp && <p className="text-lg font-bold text-blue-400 mt-1 uppercase text-center">{zp}</p>}
-              <p className="text-sm text-gray-400 text-center mt-2">{g.stores.length} magasin{g.stores.length > 1 ? "s" : ""} :</p>
-              <div className="mt-2 space-y-2">
+            <div key={i} className="bg-gray-900 border-2 border-orange-500 rounded-2xl p-3 mb-3">
+              <p className="text-base text-gray-400 text-center">Travée</p>
+              <p className="text-8xl font-black text-orange-400 leading-none text-center">{g.travee}</p>
+              {zp && <p className="text-2xl font-bold text-blue-400 mt-2 uppercase text-center">{zp}</p>}
+              <p className="text-lg text-gray-300 text-center mt-3 font-bold">{g.stores.length} magasin{g.stores.length > 1 ? "s" : ""}</p>
+              <div className="mt-3 space-y-3">
                 {g.stores.map((st) => (
-                  <div key={st.number} className="flex items-center justify-between bg-gray-800 rounded-xl px-3 py-3 gap-2">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <span className="text-5xl font-black text-yellow-400 leading-none shrink-0">{st.emplacement}</span>
-                      <span className="font-black text-white text-2xl truncate">{st.name || `Magasin ${st.number}`}</span>
+                  <div key={st.number} className="bg-gray-800 border-2 border-gray-700 rounded-2xl px-3 py-4">
+                    <div className="flex items-center gap-3 mb-2">
+                      <span className="text-7xl font-black text-yellow-400 leading-none shrink-0">{st.emplacement}</span>
+                      <span className="text-base text-gray-400 font-bold">emplacement</span>
                     </div>
-                    <span className="text-green-400 font-black text-xl shrink-0">N°{st.number}</span>
+                    <p className="text-3xl font-black text-white leading-tight break-words">
+                      {st.name || `Magasin ${st.number}`}
+                    </p>
+                    <p className="text-3xl font-black text-green-400 mt-1">N° {st.number}</p>
                   </div>
                 ))}
               </div>
+              <button onClick={() => announceTravee([g], g.travee)} className="mt-3 text-sm text-gray-400 underline block mx-auto">
+                🔊 Réécouter
+              </button>
             </div>
           );
         })}

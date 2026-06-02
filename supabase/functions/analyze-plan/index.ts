@@ -35,8 +35,8 @@ Le document est un tableau quadrillé (grille) avec des colonnes et des lignes. 
 - Un ou plusieurs numéros de magasin (4-5 chiffres)
 
 Les zones sont :
-- "Zone 1" : travées normales (généralement < 72)
-- "Débord" : travées 72-86 quand rien n'est marqué, ou lignes marquées DEBORD/DEB, ainsi que les travées-lettres comme "X" si situées dans la zone débord
+- "Zone 1" : travées normales (généralement < 72) ET TOUTES les travées identifiées par une LETTRE SEULE (X, Y, Z, A, etc.). Par exemple la travée "X" se trouve entre 306 et 401 dans la zone normale — c'est une travée comme 401, 402… JAMAIS en débord.
+- "Débord" : UNIQUEMENT les travées numériques 72-86 quand rien n'est marqué, ou lignes explicitement marquées DEBORD/DEB. Les travées-lettres (X, Y…) ne sont JAMAIS en débord.
 - "Craft" : travées 86-95 uniquement quand la ligne/case est marquée CRAFT/KRAFT/CRAFTER
 
 INSTRUCTIONS CRITIQUES :
@@ -133,11 +133,12 @@ Parcours systématiquement chaque ligne et chaque cellule du tableau. Ne rate au
 
     const validStores = stores
       .filter((s: any) => s.number && /^\d{4,5}$/.test(String(s.number).trim()))
-      .map((s: any) => ({
-        number: String(s.number).trim(),
-        travee: String(s.travee || "?").trim(),
-        zone: normalizeZone(s.zone),
-      }));
+      .map((s: any) => {
+        const travee = String(s.travee || "?").trim();
+        // Lettres seules (X, Y, Z…) sont TOUJOURS en Zone 1
+        const zone = /^[A-Za-z]$/.test(travee) ? "Zone 1" : normalizeZone(s.zone);
+        return { number: String(s.number).trim(), travee, zone };
+      });
 
     // Dedupe
     const seen = new Set<string>();
