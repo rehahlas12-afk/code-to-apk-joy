@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Trash2, Check, ZoomIn, ZoomOut, Maximize2 } from "lucide-react";
-import { activatePlan, deletePlan, getActivePlan, getPlans } from "@/lib/store";
+import { ArrowLeft, Trash2, Check, ZoomIn, ZoomOut, Maximize2, RefreshCw, Loader2 } from "lucide-react";
+import { activatePlan, deletePlan, getActivePlan, getPlans, updatePlanStores } from "@/lib/store";
+import { ocrAnalyzePlan } from "@/lib/ocr";
 import TruckLogo from "@/components/TruckLogo";
 import { toast } from "@/hooks/use-toast";
 
@@ -10,6 +11,7 @@ const PlanViewerPage = () => {
   const initialPlans = getPlans();
   const [plans, setPlans] = useState(initialPlans);
   const [selectedPlan, setSelectedPlan] = useState(getActivePlan() || initialPlans[0] || null);
+  const [reanalyzingId, setReanalyzingId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
