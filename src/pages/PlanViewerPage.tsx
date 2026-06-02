@@ -160,6 +160,33 @@ const PlanViewerPage = () => {
     toast({ title: "Plan supprimé" });
   };
 
+  const handleReanalyze = async (plan: typeof selectedPlan) => {
+    if (!plan || reanalyzingId) return;
+    setReanalyzingId(plan.id);
+    toast({ title: "Analyse en cours…", description: "Relecture du plan par l'IA." });
+    try {
+      const stores = await ocrAnalyzePlan(plan.imageData);
+      const updated = updatePlanStores(plan.id, stores);
+      if (updated) {
+        const refreshed = getPlans();
+        setPlans(refreshed);
+        if (selectedPlan?.id === plan.id) setSelectedPlan(updated);
+        toast({
+          title: "Analyse terminée",
+          description: `${stores.length} magasins détectés.`,
+        });
+      }
+    } catch (e) {
+      toast({
+        title: "Échec de l'analyse",
+        description: e instanceof Error ? e.message : "Réessayez plus tard.",
+        variant: "destructive",
+      });
+    } finally {
+      setReanalyzingId(null);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-black flex flex-col text-white">
       <TruckLogo />
