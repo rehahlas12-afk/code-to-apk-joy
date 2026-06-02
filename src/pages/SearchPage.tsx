@@ -93,7 +93,7 @@ const SearchPage = () => {
     const total = results.reduce((s, g) => s + g.stores.length, 0);
     let msg = `Travée ${traveeSpoken(travee)}, ${total} magasin${total > 1 ? "s" : ""}`;
     results.forEach((g) => {
-      const zp = zonePhrase(g.zone);
+      const zp = zonePhrase(g.zone, g.travee);
       if (zp) msg += `, ${zp}`;
       g.stores.forEach((st) => {
         msg += `, ${st.name ? st.name : "magasin " + st.number}`;
