@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Eye, Plus, Trash2, Pencil, FileText, X, Check, CalendarDays } from "lucide-react";
+import { ArrowLeft, Eye, Plus, Trash2, Pencil, FileText, X, Check, CalendarDays, UserCog, LogIn } from "lucide-react";
 import jsPDF from "jspdf";
 import TruckLogo from "@/components/TruckLogo";
 import { toast } from "@/hooks/use-toast";
@@ -11,9 +11,10 @@ interface WorkDay {
   date: string;
   start: string;       // HH:MM
   end: string;         // HH:MM
-  pauseStart: string;  // HH:MM (vide = pas de pause)
+  pauseStart: string;  // HH:MM
   pauseEnd: string;    // HH:MM
   cause: string;
+  rest?: boolean;      // jour de repos
   /** legacy */
   pauseMinutes?: number;
 }
@@ -24,11 +25,11 @@ interface WorkerInfo {
   agent: string;
 }
 
-const DAYS_KEY = "sabrinos_pointage_days";
 const INFO_KEY = "sabrinos_pointage_info";
+const daysKeyFor = (agent: string) => `sabrinos_pointage_days_${(agent || "_").trim().toLowerCase()}`;
 
-const NIGHT_START = 21 * 60;     // 21:00
-const NIGHT_END = 6 * 60;        // 06:00
+const NIGHT_START = 21 * 60;
+const NIGHT_END = 6 * 60;
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -46,7 +47,6 @@ function toMinutes(time: string): number {
   return h * 60 + m;
 }
 
-/** Minutes de nuit dans un intervalle [s,e] en minutes absolus (s<e), 21h→6h jour suivant. */
 function nightInside(startM: number, endM: number): number {
   if (endM <= startM) return 0;
   const windows = [
@@ -65,21 +65,16 @@ function nightInside(startM: number, endM: number): number {
 }
 
 interface Breakdown {
-  total: number;     // heures
-  night: number;     // heures
-  day: number;       // heures
-  pauseMin: number;
-  pauseNightMin: number;
-  pauseDayMin: number;
+  total: number; night: number; day: number;
+  pauseMin: number; pauseNightMin: number; pauseDayMin: number;
 }
 
 function dayBreakdown(d: WorkDay): Breakdown {
-  if (!d.start || !d.end) return { total: 0, night: 0, day: 0, pauseMin: 0, pauseNightMin: 0, pauseDayMin: 0 };
+  if (d.rest || !d.start || !d.end) return { total: 0, night: 0, day: 0, pauseMin: 0, pauseNightMin: 0, pauseDayMin: 0 };
   const startM = toMinutes(d.start);
   let endM = toMinutes(d.end);
   if (endM <= startM) endM += 24 * 60;
 
-  // Pause: prend ps/pe explicites OU rétrocompatibilité pauseMinutes (réparties la journée)
   let pauseTotal = 0, pauseNight = 0;
   if (d.pauseStart && d.pauseEnd) {
     let ps = toMinutes(d.pauseStart);
@@ -106,12 +101,8 @@ function dayBreakdown(d: WorkDay): Breakdown {
   const dayMin = Math.max(0, totalMin - nightMin);
 
   return {
-    total: totalMin / 60,
-    night: nightMin / 60,
-    day: dayMin / 60,
-    pauseMin: pauseTotal,
-    pauseNightMin: pauseNight,
-    pauseDayMin: pauseTotal - pauseNight,
+    total: totalMin / 60, night: nightMin / 60, day: dayMin / 60,
+    pauseMin: pauseTotal, pauseNightMin: pauseNight, pauseDayMin: pauseTotal - pauseNight,
   };
 }
 
@@ -127,25 +118,28 @@ function dowOf(dateStr: string): number {
   return new Date(dateStr + "T12:00:00").getDay(); // 0=dim..6=sam
 }
 
-/** Horaires par défaut selon le jour de la semaine */
-function defaultScheduleFor(dateStr: string): { start: string; end: string; pauseStart: string; pauseEnd: string } {
+/** Horaires par défaut selon le jour (5/7, samedi = repos) */
+function defaultScheduleFor(dateStr: string): { start: string; end: string; pauseStart: string; pauseEnd: string; rest: boolean } {
   const dow = dowOf(dateStr);
-  // Lun(1), Mer(3), Ven(5) : 00:30 → 09:00
+  if (dow === 6) return { start: "", end: "", pauseStart: "", pauseEnd: "", rest: true }; // samedi
+  if (dow === 0) return { start: "", end: "", pauseStart: "", pauseEnd: "", rest: false }; // dimanche libre
   if (dow === 1 || dow === 3 || dow === 5) {
-    return { start: "00:30", end: "09:00", pauseStart: "06:30", pauseEnd: "07:30" };
+    return { start: "00:30", end: "09:00", pauseStart: "06:30", pauseEnd: "07:30", rest: false };
   }
-  // Mar(2), Jeu(4) : 01:30 → 09:30
-  if (dow === 2 || dow === 4) {
-    return { start: "01:30", end: "09:30", pauseStart: "06:30", pauseEnd: "07:30" };
-  }
-  // WE : à saisir
-  return { start: "", end: "", pauseStart: "", pauseEnd: "" };
+  return { start: "01:30", end: "09:30", pauseStart: "06:30", pauseEnd: "07:30", rest: false };
 }
 
 const TimeTrackingPage = () => {
   const navigate = useNavigate();
   const [info, setInfo] = useState<WorkerInfo>(() => readJson(INFO_KEY, { nom: "", prenom: "", agent: "" }));
-  const [days, setDays] = useState<WorkDay[]>(() => readJson(DAYS_KEY, []));
+  const [identified, setIdentified] = useState<boolean>(() => {
+    const i = readJson<WorkerInfo>(INFO_KEY, { nom: "", prenom: "", agent: "" });
+    return !!(i.nom && i.prenom && i.agent);
+  });
+  // formulaire d'identification (séparé pour éviter d'écrire les champs partiels)
+  const [loginForm, setLoginForm] = useState<WorkerInfo>(() => readJson(INFO_KEY, { nom: "", prenom: "", agent: "" }));
+
+  const [days, setDays] = useState<WorkDay[]>(() => readJson(daysKeyFor(info.agent), []));
   const [period, setPeriod] = useState<"10" | "month" | "all">("month");
   const [detailId, setDetailId] = useState<string | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
@@ -158,15 +152,21 @@ const TimeTrackingPage = () => {
 
   const blankForm = (date = today()): WorkDay => {
     const s = defaultScheduleFor(date);
-    return { id: "", date, ...s, cause: "" };
+    return { id: "", date, start: s.start, end: s.end, pauseStart: s.pauseStart, pauseEnd: s.pauseEnd, cause: s.rest ? "Repos" : "", rest: s.rest };
   };
   const [form, setForm] = useState<WorkDay>(blankForm());
 
-  // Recharge auto les horaires par défaut quand on change la date (en mode création)
+  // Recharge horaires par défaut quand on change la date (mode création)
   useEffect(() => {
     if (editId) return;
     const s = defaultScheduleFor(form.date);
-    setForm(f => ({ ...f, start: f.start || s.start, end: f.end || s.end, pauseStart: f.pauseStart || s.pauseStart, pauseEnd: f.pauseEnd || s.pauseEnd }));
+    setForm(f => ({
+      ...f,
+      start: s.start, end: s.end,
+      pauseStart: s.pauseStart, pauseEnd: s.pauseEnd,
+      rest: s.rest,
+      cause: s.rest ? (f.cause || "Repos") : f.cause,
+    }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.date]);
 
@@ -175,37 +175,99 @@ const TimeTrackingPage = () => {
     localStorage.setItem(INFO_KEY, JSON.stringify(next));
   };
 
-  const saveDays = (next: WorkDay[]) => {
+  const persistDays = (next: WorkDay[], agent = info.agent) => {
     const sorted = [...next].sort((a, b) => b.date.localeCompare(a.date));
     setDays(sorted);
-    localStorage.setItem(DAYS_KEY, JSON.stringify(sorted));
+    localStorage.setItem(daysKeyFor(agent), JSON.stringify(sorted));
+    return sorted;
   };
+
+  // Recharge les jours quand on change d'agent
+  useEffect(() => {
+    if (!identified) return;
+    setDays(readJson(daysKeyFor(info.agent), []));
+  }, [info.agent, identified]);
+
+  // Auto-création du jour courant si absent (samedi = repos)
+  const autoSeededRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!identified) return;
+    const key = `${info.agent}|${today()}`;
+    if (autoSeededRef.current === key) return;
+    const existing = readJson<WorkDay[]>(daysKeyFor(info.agent), []);
+    if (!existing.find(d => d.date === today())) {
+      const t = today();
+      const s = defaultScheduleFor(t);
+      const entry: WorkDay = {
+        id: crypto.randomUUID(), date: t,
+        start: s.start, end: s.end, pauseStart: s.pauseStart, pauseEnd: s.pauseEnd,
+        cause: s.rest ? "Repos" : "", rest: s.rest,
+      };
+      persistDays([entry, ...existing], info.agent);
+    }
+    autoSeededRef.current = key;
+  }, [identified, info.agent]);
+
+  // Sauvegarde automatique du formulaire (upsert par date)
+  const autoSaveTimerRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!identified) return;
+    if (!form.date) return;
+    if (autoSaveTimerRef.current) window.clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = window.setTimeout(() => {
+      // En édition : on ne touche pas tant que l'utilisateur n'a pas validé (évite double entrée)
+      if (editId) return;
+      // Si journée vide (ni horaires ni repos), on n'enregistre pas
+      if (!form.rest && !form.start && !form.end) return;
+      const existing = days.find(d => d.date === form.date);
+      const payload: WorkDay = { ...form, id: existing?.id || crypto.randomUUID() };
+      delete payload.pauseMinutes;
+      if (existing) {
+        persistDays(days.map(d => d.id === existing.id ? payload : d));
+      } else {
+        persistDays([payload, ...days]);
+      }
+    }, 600);
+    return () => { if (autoSaveTimerRef.current) window.clearTimeout(autoSaveTimerRef.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form, identified]);
 
   const applyDefaults = () => {
     const s = defaultScheduleFor(form.date);
-    if (!s.start) { toast({ title: "Pas d'horaire par défaut le week-end" }); return; }
-    setForm(f => ({ ...f, ...s }));
-    toast({ title: "Horaires par défaut appliqués" });
+    setForm(f => ({ ...f, ...s, cause: s.rest ? "Repos" : f.cause }));
+    toast({ title: s.rest ? "Jour de repos" : "Horaires par défaut appliqués" });
+  };
+
+  const toggleRest = () => {
+    setForm(f => f.rest
+      ? { ...f, rest: false, cause: f.cause === "Repos" ? "" : f.cause }
+      : { ...f, rest: true, start: "", end: "", pauseStart: "", pauseEnd: "", cause: "Repos" }
+    );
   };
 
   const submitForm = () => {
-    if (!form.date || !form.start || !form.end) {
+    if (!form.rest && (!form.date || !form.start || !form.end)) {
       toast({ title: "Date et horaires obligatoires", variant: "destructive" });
       return;
     }
     const payload: WorkDay = { ...form };
     delete payload.pauseMinutes;
     if (editId) {
-      saveDays(days.map(d => d.id === editId ? { ...payload, id: editId } : d));
+      persistDays(days.map(d => d.id === editId ? { ...payload, id: editId } : d));
       setEditId(null);
       setForm(blankForm());
       toast({ title: "Pointage modifié" });
     } else {
-      const entry = { ...payload, id: crypto.randomUUID() };
-      saveDays([entry, ...days]);
+      const existing = days.find(d => d.date === form.date);
+      const entry = { ...payload, id: existing?.id || crypto.randomUUID() };
+      if (existing) {
+        persistDays(days.map(d => d.id === existing.id ? entry : d));
+      } else {
+        persistDays([entry, ...days]);
+      }
       setForm(blankForm());
       const b = dayBreakdown(entry);
-      toast({ title: "Pointage ajouté", description: `${formatHours(b.total)} (nuit ${formatHours(b.night)})` });
+      toast({ title: "Enregistré", description: entry.rest ? "Repos" : `${formatHours(b.total)} (nuit ${formatHours(b.night)})` });
     }
   };
 
@@ -282,7 +344,6 @@ const TimeTrackingPage = () => {
     doc.text(`Période : ${new Date(pdfRange.from).toLocaleDateString("fr-FR")}  au  ${new Date(pdfRange.to).toLocaleDateString("fr-FR")}`, margin, y);
     y += 22;
 
-    // En-tête tableau
     const cols = [
       { k: "date",  w: 80,  label: "Date" },
       { k: "start", w: 52,  label: "Début" },
@@ -309,24 +370,24 @@ const TimeTrackingPage = () => {
 
     doc.setFontSize(11);
     for (const d of inRange) {
-      if (y > H - margin - 60) {
-        doc.addPage(); y = margin; drawHeader();
-      }
+      if (y > H - margin - 60) { doc.addPage(); y = margin; drawHeader(); }
       const b = dayBreakdown(d);
       const holiday = getHolidayName(d.date);
-      const pauseStr = d.pauseStart && d.pauseEnd
+      const pauseStr = d.rest ? "—" : (d.pauseStart && d.pauseEnd
         ? `${d.pauseStart}-${d.pauseEnd} (${Math.round(b.pauseMin)}m)`
-        : (d.pauseMinutes ? `${d.pauseMinutes}m` : "—");
-      const note = [holiday ? `Férié: ${holiday}` : "", d.cause || ""].filter(Boolean).join(" • ");
+        : (d.pauseMinutes ? `${d.pauseMinutes}m` : "—"));
+      const note = [holiday ? `Férié: ${holiday}` : "", d.rest ? "REPOS" : "", d.cause || ""].filter(Boolean).join(" • ");
       const row = [
         new Date(d.date).toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "2-digit" }),
-        d.start, d.end, pauseStr,
+        d.rest ? "—" : d.start, d.rest ? "—" : d.end, pauseStr,
         formatHours(b.total), formatHours(b.night), formatHours(b.day),
         note,
       ];
-      // Ligne (zébré si férié)
       if (holiday) {
         doc.setFillColor(255, 240, 200);
+        doc.rect(margin, y, W - margin * 2, 20, "F");
+      } else if (d.rest) {
+        doc.setFillColor(225, 235, 255);
         doc.rect(margin, y, W - margin * 2, 20, "F");
       }
       let x = margin + 4;
@@ -336,7 +397,6 @@ const TimeTrackingPage = () => {
         doc.text(doc.splitTextToSize(text, w) as string[], x, y + 14);
         x += cols[i].w;
       }
-      // Ligne séparatrice
       doc.setDrawColor(200);
       doc.line(margin, y + 20, W - margin, y + 20);
       y += 20;
@@ -346,10 +406,8 @@ const TimeTrackingPage = () => {
     if (y > H - margin - 60) { doc.addPage(); y = margin; }
     doc.setFont("helvetica", "bold");
     doc.setFontSize(14);
-    doc.text(`Total : ${formatHours(tot.total)}`, margin, y);
-    y += 18;
-    doc.text(`Heures de nuit : ${formatHours(tot.night)}`, margin, y);
-    y += 18;
+    doc.text(`Total : ${formatHours(tot.total)}`, margin, y); y += 18;
+    doc.text(`Heures de nuit : ${formatHours(tot.night)}`, margin, y); y += 18;
     doc.text(`Heures de jour : ${formatHours(tot.day)}`, margin, y);
 
     const fileName = `pointage_${info.nom || "agent"}_${pdfRange.from}_${pdfRange.to}.pdf`.replace(/\s+/g, "_");
@@ -358,6 +416,73 @@ const TimeTrackingPage = () => {
     toast({ title: "PDF téléchargé", description: fileName });
   };
 
+  const handleLogin = () => {
+    const v: WorkerInfo = {
+      nom: loginForm.nom.trim(),
+      prenom: loginForm.prenom.trim(),
+      agent: loginForm.agent.trim(),
+    };
+    if (!v.nom || !v.prenom || !v.agent) {
+      toast({ title: "Nom, prénom et n° agent requis", variant: "destructive" });
+      return;
+    }
+    saveInfo(v);
+    setIdentified(true);
+  };
+
+  const handleSwitchAgent = () => {
+    setIdentified(false);
+    setLoginForm(info);
+    setEditId(null);
+    setForm(blankForm());
+  };
+
+  // ====================== ÉCRAN D'IDENTIFICATION ======================
+  if (!identified) {
+    return (
+      <div className="min-h-screen bg-black text-white flex flex-col">
+        <TruckLogo />
+        <div className="flex items-center gap-3 px-4 py-2">
+          <button onClick={() => navigate("/")} className="p-2 rounded-lg bg-gray-800">
+            <ArrowLeft size={20} />
+          </button>
+          <h1 className="text-2xl font-black">POINTAGE</h1>
+        </div>
+        <div className="flex-1 flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-gray-900 border border-gray-700 rounded-2xl p-5 space-y-4">
+            <h2 className="text-2xl font-black text-center text-green-400">Identification</h2>
+            <p className="text-sm text-gray-400 text-center">Chaque agent retrouve son propre pointage.</p>
+
+            <label className="block">
+              <span className="text-sm text-gray-300">Nom</span>
+              <input value={loginForm.nom} onChange={(e) => setLoginForm({ ...loginForm, nom: e.target.value })}
+                placeholder="Nom" autoFocus
+                className="mt-1 w-full rounded-lg bg-gray-800 border border-gray-600 px-3 py-3 text-white text-lg" />
+            </label>
+            <label className="block">
+              <span className="text-sm text-gray-300">Prénom</span>
+              <input value={loginForm.prenom} onChange={(e) => setLoginForm({ ...loginForm, prenom: e.target.value })}
+                placeholder="Prénom"
+                className="mt-1 w-full rounded-lg bg-gray-800 border border-gray-600 px-3 py-3 text-white text-lg" />
+            </label>
+            <label className="block">
+              <span className="text-sm text-gray-300">Numéro d'agent</span>
+              <input value={loginForm.agent} onChange={(e) => setLoginForm({ ...loginForm, agent: e.target.value })}
+                placeholder="N° agent" inputMode="text"
+                className="mt-1 w-full rounded-lg bg-gray-800 border border-gray-600 px-3 py-3 text-white text-lg" />
+            </label>
+
+            <button onClick={handleLogin}
+              className="w-full rounded-xl bg-green-700 hover:bg-green-600 p-4 flex items-center justify-center gap-2 font-bold text-lg">
+              <LogIn size={22}/> Valider
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ====================== ÉCRAN POINTAGE ======================
   return (
     <div className="min-h-screen bg-black flex flex-col text-white">
       <TruckLogo />
@@ -365,21 +490,26 @@ const TimeTrackingPage = () => {
         <button onClick={() => navigate("/")} className="p-2 rounded-lg bg-gray-800">
           <ArrowLeft size={20} />
         </button>
-        <h1 className="text-2xl font-black">POINTAGE</h1>
+        <h1 className="text-2xl font-black flex-1">POINTAGE</h1>
+        <button onClick={handleSwitchAgent} className="p-2 rounded-lg bg-gray-800 flex items-center gap-1 text-xs font-bold">
+          <UserCog size={16}/> Changer
+        </button>
       </div>
 
       <div className="flex-1 px-4 pb-4 space-y-3 overflow-y-auto">
-        {/* Identité */}
-        <section className="bg-gray-900 border border-gray-700 rounded-xl p-3 grid grid-cols-1 gap-2">
-          <input value={info.nom} onChange={(e) => saveInfo({ ...info, nom: e.target.value })} placeholder="Nom" className="rounded-lg bg-gray-800 border border-gray-600 px-3 py-3 text-white text-base" />
-          <input value={info.prenom} onChange={(e) => saveInfo({ ...info, prenom: e.target.value })} placeholder="Prénom" className="rounded-lg bg-gray-800 border border-gray-600 px-3 py-3 text-white text-base" />
-          <input value={info.agent} onChange={(e) => saveInfo({ ...info, agent: e.target.value })} placeholder="Numéro d'agent" className="rounded-lg bg-gray-800 border border-gray-600 px-3 py-3 text-white text-base" />
+        {/* Bandeau identité */}
+        <section className="bg-gray-900 border border-green-600 rounded-xl p-3 flex items-center justify-between">
+          <div>
+            <p className="text-lg font-black">{info.nom} {info.prenom}</p>
+            <p className="text-xs text-gray-400">Agent n° <span className="text-green-400 font-bold">{info.agent}</span> • 5/7 (samedi repos)</p>
+          </div>
+          <div className="text-[10px] text-green-400 font-bold">● Sauvegarde auto</div>
         </section>
 
         {/* Saisie */}
         <section className="bg-gray-900 border border-gray-700 rounded-xl p-3 space-y-2">
           <div className="flex items-center justify-between">
-            <p className="font-bold text-base">{editId ? "✏️ Modifier la journée" : "➕ Nouvelle journée"}</p>
+            <p className="font-bold text-base">{editId ? "✏️ Modifier la journée" : "➕ Journée"}</p>
             {editId && (
               <button onClick={cancelEdit} className="text-xs bg-gray-700 px-2 py-1 rounded">Annuler</button>
             )}
@@ -395,29 +525,35 @@ const TimeTrackingPage = () => {
             <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className="mt-1 w-full rounded-lg bg-gray-800 border border-gray-600 px-2 py-3 text-white text-base" />
           </label>
 
-          <button onClick={applyDefaults} className="w-full rounded-lg bg-gray-700 p-2 flex items-center justify-center gap-2 text-sm font-bold">
-            <CalendarDays size={16}/> Appliquer horaires par défaut
-          </button>
-
           <div className="grid grid-cols-2 gap-2">
-            <label className="text-sm text-gray-300">Début travail
-              <input type="time" value={form.start} onChange={(e) => setForm({ ...form, start: e.target.value })} className="mt-1 w-full rounded-lg bg-gray-800 border border-gray-600 px-2 py-3 text-white text-base" />
-            </label>
-            <label className="text-sm text-gray-300">Fin travail
-              <input type="time" value={form.end} onChange={(e) => setForm({ ...form, end: e.target.value })} className="mt-1 w-full rounded-lg bg-gray-800 border border-gray-600 px-2 py-3 text-white text-base" />
-            </label>
-            <label className="text-sm text-gray-300">Pause début
-              <input type="time" value={form.pauseStart} onChange={(e) => setForm({ ...form, pauseStart: e.target.value })} className="mt-1 w-full rounded-lg bg-gray-800 border border-gray-600 px-2 py-3 text-white text-base" />
-            </label>
-            <label className="text-sm text-gray-300">Pause fin
-              <input type="time" value={form.pauseEnd} onChange={(e) => setForm({ ...form, pauseEnd: e.target.value })} className="mt-1 w-full rounded-lg bg-gray-800 border border-gray-600 px-2 py-3 text-white text-base" />
-            </label>
+            <button onClick={applyDefaults} className="rounded-lg bg-gray-700 p-2 flex items-center justify-center gap-2 text-sm font-bold">
+              <CalendarDays size={16}/> Horaires défaut
+            </button>
+            <button onClick={toggleRest} className={`rounded-lg p-2 flex items-center justify-center gap-2 text-sm font-bold ${form.rest ? "bg-blue-700" : "bg-gray-700"}`}>
+              {form.rest ? "🛌 REPOS (toucher pour travailler)" : "Marquer REPOS"}
+            </button>
           </div>
+
+          {!form.rest && (
+            <div className="grid grid-cols-2 gap-2">
+              <label className="text-sm text-gray-300">Début travail
+                <input type="time" value={form.start} onChange={(e) => setForm({ ...form, start: e.target.value })} className="mt-1 w-full rounded-lg bg-gray-800 border border-gray-600 px-2 py-3 text-white text-base" />
+              </label>
+              <label className="text-sm text-gray-300">Fin travail
+                <input type="time" value={form.end} onChange={(e) => setForm({ ...form, end: e.target.value })} className="mt-1 w-full rounded-lg bg-gray-800 border border-gray-600 px-2 py-3 text-white text-base" />
+              </label>
+              <label className="text-sm text-gray-300">Pause début
+                <input type="time" value={form.pauseStart} onChange={(e) => setForm({ ...form, pauseStart: e.target.value })} className="mt-1 w-full rounded-lg bg-gray-800 border border-gray-600 px-2 py-3 text-white text-base" />
+              </label>
+              <label className="text-sm text-gray-300">Pause fin
+                <input type="time" value={form.pauseEnd} onChange={(e) => setForm({ ...form, pauseEnd: e.target.value })} className="mt-1 w-full rounded-lg bg-gray-800 border border-gray-600 px-2 py-3 text-white text-base" />
+              </label>
+            </div>
+          )}
 
           <input value={form.cause} onChange={(e) => setForm({ ...form, cause: e.target.value })} placeholder="Cause / remarque" className="w-full rounded-lg bg-gray-800 border border-gray-600 px-3 py-3 text-white text-base" />
 
-          {/* Aperçu calcul */}
-          {form.start && form.end && (() => {
+          {!form.rest && form.start && form.end && (() => {
             const b = dayBreakdown(form);
             return (
               <div className="bg-gray-800 rounded-lg p-2 text-sm grid grid-cols-3 gap-2 text-center">
@@ -429,7 +565,7 @@ const TimeTrackingPage = () => {
           })()}
 
           <button onClick={submitForm} className="w-full rounded-xl bg-green-700 p-4 flex items-center justify-center gap-2 font-bold text-lg">
-            {editId ? <><Check size={22}/> Enregistrer</> : <><Plus size={22}/> Ajouter</>}
+            {editId ? <><Check size={22}/> Enregistrer modification</> : <><Plus size={22}/> Confirmer (auto-sauvegardé)</>}
           </button>
         </section>
 
@@ -472,17 +608,18 @@ const TimeTrackingPage = () => {
                   const b = dayBreakdown(day);
                   const h = getHolidayName(day.date);
                   return (
-                    <tr key={day.id} className="border-b border-gray-800">
+                    <tr key={day.id} className={`border-b border-gray-800 ${day.rest ? "bg-blue-950/40" : ""}`}>
                       <td className="py-2 pr-1">
-                        {new Date(day.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" })}
+                        {new Date(day.date).toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "2-digit" })}
                         {h && <div className="text-[10px] text-yellow-400 font-bold">🎉 {h}</div>}
+                        {day.rest && <div className="text-[10px] text-blue-300 font-bold">🛌 REPOS</div>}
                       </td>
-                      <td className="py-2 pr-1 font-bold">{formatHours(b.total)}</td>
-                      <td className="py-2 pr-1 text-purple-300">{formatHours(b.night)}</td>
+                      <td className="py-2 pr-1 font-bold">{day.rest ? "—" : formatHours(b.total)}</td>
+                      <td className="py-2 pr-1 text-purple-300">{day.rest ? "—" : formatHours(b.night)}</td>
                       <td className="py-2 flex items-center gap-1">
                         <button onClick={() => setDetailId(day.id)} className="text-blue-400 p-1"><Eye size={14} /></button>
                         <button onClick={() => startEdit(day)} className="text-yellow-400 p-1"><Pencil size={14} /></button>
-                        <button onClick={() => { if (confirm("Supprimer ce pointage ?")) saveDays(days.filter((d) => d.id !== day.id)); }} className="text-red-400 p-1">
+                        <button onClick={() => { if (confirm("Supprimer ce pointage ?")) persistDays(days.filter((d) => d.id !== day.id)); }} className="text-red-400 p-1">
                           <Trash2 size={14} />
                         </button>
                       </td>
@@ -504,18 +641,22 @@ const TimeTrackingPage = () => {
             <h2 className="text-xl font-black text-center mb-2">Détail journée</h2>
             <p className="text-center text-xl font-bold text-blue-400 mb-2">{new Date(detailDay.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}</p>
             {detailHoliday && <p className="text-center text-yellow-400 font-bold mb-2">🎉 Jour férié : {detailHoliday}</p>}
+            {detailDay.rest && <p className="text-center text-blue-300 font-bold mb-2">🛌 REPOS</p>}
             <table className="w-full text-base">
               <tbody>
-                <tr className="border-b border-gray-700"><td className="py-2 text-gray-400">Début</td><td className="py-2 font-bold text-right">{detailDay.start}</td></tr>
-                <tr className="border-b border-gray-700"><td className="py-2 text-gray-400">Fin</td><td className="py-2 font-bold text-right">{detailDay.end}</td></tr>
-                <tr className="border-b border-gray-700"><td className="py-2 text-gray-400">Pause</td><td className="py-2 font-bold text-right">{detailDay.pauseStart && detailDay.pauseEnd ? `${detailDay.pauseStart} → ${detailDay.pauseEnd}` : `${detailDay.pauseMinutes ?? 0} min`}</td></tr>
+                <tr className="border-b border-gray-700"><td className="py-2 text-gray-400">Début</td><td className="py-2 font-bold text-right">{detailDay.rest ? "—" : detailDay.start}</td></tr>
+                <tr className="border-b border-gray-700"><td className="py-2 text-gray-400">Fin</td><td className="py-2 font-bold text-right">{detailDay.rest ? "—" : detailDay.end}</td></tr>
+                <tr className="border-b border-gray-700"><td className="py-2 text-gray-400">Pause</td><td className="py-2 font-bold text-right">{detailDay.rest ? "—" : (detailDay.pauseStart && detailDay.pauseEnd ? `${detailDay.pauseStart} → ${detailDay.pauseEnd}` : `${detailDay.pauseMinutes ?? 0} min`)}</td></tr>
                 <tr className="border-b border-gray-700"><td className="py-2 text-gray-400">Total</td><td className="py-2 font-black text-right text-green-400 text-xl">{formatHours(detailBreakdown.total)}</td></tr>
                 <tr className="border-b border-gray-700"><td className="py-2 text-gray-400">Nuit</td><td className="py-2 font-black text-right text-purple-300 text-xl">{formatHours(detailBreakdown.night)}</td></tr>
                 <tr className="border-b border-gray-700"><td className="py-2 text-gray-400">Jour</td><td className="py-2 font-bold text-right text-yellow-300">{formatHours(detailBreakdown.day)}</td></tr>
                 {detailDay.cause && <tr><td className="py-2 text-gray-400">Cause</td><td className="py-2 text-right">{detailDay.cause}</td></tr>}
               </tbody>
             </table>
-            <button onClick={() => setDetailId(null)} className="mt-4 w-full bg-blue-700 rounded-xl p-3 font-bold">Fermer</button>
+            <div className="grid grid-cols-2 gap-2 mt-4">
+              <button onClick={() => { startEdit(detailDay); setDetailId(null); }} className="bg-yellow-600 rounded-xl p-3 font-bold flex items-center justify-center gap-2"><Pencil size={16}/> Modifier</button>
+              <button onClick={() => setDetailId(null)} className="bg-blue-700 rounded-xl p-3 font-bold">Fermer</button>
+            </div>
           </div>
         </div>
       )}
@@ -543,15 +684,16 @@ const TimeTrackingPage = () => {
                     const b = dayBreakdown(d);
                     const h = getHolidayName(d.date);
                     return (
-                      <tr key={d.id} className="border-b border-gray-800">
+                      <tr key={d.id} className={`border-b border-gray-800 ${d.rest ? "bg-blue-950/40" : ""}`}>
                         <td className="py-1 pr-1">
                           {new Date(d.date).toLocaleDateString("fr-FR")}
                           {h && <div className="text-[9px] text-yellow-400">🎉</div>}
+                          {d.rest && <div className="text-[9px] text-blue-300">🛌</div>}
                         </td>
-                        <td>{d.start}</td><td>{d.end}</td>
-                        <td>{d.pauseStart || `${d.pauseMinutes ?? 0}m`}</td>
-                        <td className="font-bold">{formatHours(b.total)}</td>
-                        <td className="text-purple-300">{formatHours(b.night)}</td>
+                        <td>{d.rest ? "—" : d.start}</td><td>{d.rest ? "—" : d.end}</td>
+                        <td>{d.rest ? "—" : (d.pauseStart || `${d.pauseMinutes ?? 0}m`)}</td>
+                        <td className="font-bold">{d.rest ? "—" : formatHours(b.total)}</td>
+                        <td className="text-purple-300">{d.rest ? "—" : formatHours(b.night)}</td>
                       </tr>
                     );
                   })}
