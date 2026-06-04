@@ -344,9 +344,9 @@ const TimeTrackingPage = () => {
       const minKey = min.toISOString().slice(0, 10);
       return days.filter((day) => day.date >= minKey);
     }
-    const monthKey = now.toISOString().slice(0, 7);
-    return days.filter((day) => day.date.startsWith(monthKey));
-  }, [days, period]);
+    // "month" = mois de paie 25 → 24
+    return days.filter((day) => day.date >= payrollRange.from && day.date <= payrollRange.to);
+  }, [days, period, payrollRange.from, payrollRange.to]);
 
   const totals = filteredDays.reduce((acc, day) => {
     const b = dayBreakdown(day);
