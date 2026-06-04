@@ -626,12 +626,15 @@ const TimeTrackingPage = () => {
             <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className="mt-1 w-full rounded-lg bg-gray-800 border border-gray-600 px-2 py-3 text-white text-base" />
           </label>
 
-          <div className="grid grid-cols-2 gap-2">
-            <button onClick={applyDefaults} className="rounded-lg bg-gray-700 p-2 flex items-center justify-center gap-2 text-sm font-bold">
-              <CalendarDays size={16}/> Horaires défaut
+          <div className="grid grid-cols-3 gap-2">
+            <button onClick={applyDefaults} className="rounded-lg bg-gray-700 p-2 flex items-center justify-center gap-1 text-xs font-bold">
+              <CalendarDays size={14}/> Défaut
             </button>
-            <button onClick={toggleRest} className={`rounded-lg p-2 flex items-center justify-center gap-2 text-sm font-bold ${form.rest ? "bg-blue-700" : "bg-gray-700"}`}>
-              {form.rest ? "🛌 REPOS (toucher pour travailler)" : "Marquer REPOS"}
+            <button onClick={toggleRest} className={`rounded-lg p-2 flex items-center justify-center gap-1 text-xs font-bold ${form.rest ? "bg-blue-700" : "bg-gray-700"}`}>
+              🛌 {form.rest ? "REPOS ✓" : "Repos"}
+            </button>
+            <button onClick={() => setShowAbsenceDialog(true)} className="rounded-lg bg-emerald-700 p-2 flex items-center justify-center gap-1 text-xs font-bold">
+              <Heart size={14}/> Congé/Mal.
             </button>
           </div>
 
