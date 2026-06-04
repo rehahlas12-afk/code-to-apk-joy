@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Eye, Plus, Trash2, Pencil, FileText, X, Check, CalendarDays, UserCog, LogIn } from "lucide-react";
+import { ArrowLeft, Eye, Plus, Trash2, Pencil, FileText, X, Check, CalendarDays, UserCog, LogIn, Heart, Download } from "lucide-react";
 import jsPDF from "jspdf";
 import TruckLogo from "@/components/TruckLogo";
 import { toast } from "@/hooks/use-toast";
 import { getHolidayName } from "@/lib/holidays";
+
+type AbsenceType = "repos" | "conge" | "maladie";
 
 interface WorkDay {
   id: string;
@@ -14,9 +16,23 @@ interface WorkDay {
   pauseStart: string;  // HH:MM
   pauseEnd: string;    // HH:MM
   cause: string;
-  rest?: boolean;      // jour de repos
+  rest?: boolean;            // jour non travaillé (repos / congé / maladie)
+  absenceType?: AbsenceType; // précise le type si non travaillé
   /** legacy */
   pauseMinutes?: number;
+}
+
+const ABSENCE_LABEL: Record<AbsenceType, string> = {
+  repos: "REPOS",
+  conge: "CONGÉ PAYÉ",
+  maladie: "MALADIE",
+};
+const ABSENCE_EMOJI: Record<AbsenceType, string> = { repos: "🛌", conge: "🌴", maladie: "🤒" };
+
+function absenceOf(d: WorkDay): AbsenceType | null {
+  if (d.absenceType) return d.absenceType;
+  if (d.rest) return "repos";
+  return null;
 }
 
 interface WorkerInfo {
@@ -70,7 +86,7 @@ interface Breakdown {
 }
 
 function dayBreakdown(d: WorkDay): Breakdown {
-  if (d.rest || !d.start || !d.end) return { total: 0, night: 0, day: 0, pauseMin: 0, pauseNightMin: 0, pauseDayMin: 0 };
+  if (absenceOf(d) || !d.start || !d.end) return { total: 0, night: 0, day: 0, pauseMin: 0, pauseNightMin: 0, pauseDayMin: 0 };
   const startM = toMinutes(d.start);
   let endM = toMinutes(d.end);
   if (endM <= startM) endM += 24 * 60;
@@ -144,11 +160,21 @@ const TimeTrackingPage = () => {
   const [detailId, setDetailId] = useState<string | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
-  const [pdfRange, setPdfRange] = useState<{ from: string; to: string }>({
-    from: (() => { const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().slice(0,10); })(),
-    to: today(),
-  });
+  // Mois de paie : du 25 du mois précédent au 24 du mois courant
+  const payrollRange = (() => {
+    const now = new Date();
+    const y = now.getFullYear(), m = now.getMonth(), d = now.getDate();
+    const fromDate = d >= 25 ? new Date(y, m, 25) : new Date(y, m - 1, 25);
+    const toDate = d >= 25 ? new Date(y, m + 1, 24) : new Date(y, m, 24);
+    return { from: fromDate.toISOString().slice(0, 10), to: toDate.toISOString().slice(0, 10) };
+  })();
+  const [pdfRange, setPdfRange] = useState<{ from: string; to: string }>(payrollRange);
   const [showPdfDialog, setShowPdfDialog] = useState(false);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
+  const [showAbsenceDialog, setShowAbsenceDialog] = useState(false);
+  const [absenceForm, setAbsenceForm] = useState<{ type: AbsenceType; from: string; to: string; cause: string }>({
+    type: "conge", from: today(), to: today(), cause: "",
+  });
 
   const blankForm = (date = today()): WorkDay => {
     const s = defaultScheduleFor(date);
@@ -240,9 +266,37 @@ const TimeTrackingPage = () => {
 
   const toggleRest = () => {
     setForm(f => f.rest
-      ? { ...f, rest: false, cause: f.cause === "Repos" ? "" : f.cause }
-      : { ...f, rest: true, start: "", end: "", pauseStart: "", pauseEnd: "", cause: "Repos" }
+      ? { ...f, rest: false, absenceType: undefined, cause: f.cause === "Repos" ? "" : f.cause }
+      : { ...f, rest: true, absenceType: "repos", start: "", end: "", pauseStart: "", pauseEnd: "", cause: "Repos" }
     );
+  };
+
+  const applyAbsenceRange = () => {
+    const { type, from, to, cause } = absenceForm;
+    if (!from || !to || from > to) {
+      toast({ title: "Plage de dates invalide", variant: "destructive" });
+      return;
+    }
+    const start = new Date(from + "T12:00:00");
+    const end = new Date(to + "T12:00:00");
+    const entries: WorkDay[] = [];
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const ds = d.toISOString().slice(0, 10);
+      entries.push({
+        id: crypto.randomUUID(), date: ds,
+        start: "", end: "", pauseStart: "", pauseEnd: "",
+        cause: cause || ABSENCE_LABEL[type],
+        rest: true, absenceType: type,
+      });
+    }
+    const byDate = new Map(days.map(d => [d.date, d]));
+    for (const e of entries) {
+      const ex = byDate.get(e.date);
+      byDate.set(e.date, { ...e, id: ex?.id || e.id });
+    }
+    persistDays(Array.from(byDate.values()));
+    setShowAbsenceDialog(false);
+    toast({ title: `${ABSENCE_LABEL[type]} enregistrée`, description: `${entries.length} jour(s)` });
   };
 
   const submitForm = () => {
@@ -290,9 +344,9 @@ const TimeTrackingPage = () => {
       const minKey = min.toISOString().slice(0, 10);
       return days.filter((day) => day.date >= minKey);
     }
-    const monthKey = now.toISOString().slice(0, 7);
-    return days.filter((day) => day.date.startsWith(monthKey));
-  }, [days, period]);
+    // "month" = mois de paie 25 → 24
+    return days.filter((day) => day.date >= payrollRange.from && day.date <= payrollRange.to);
+  }, [days, period, payrollRange.from, payrollRange.to]);
 
   const totals = filteredDays.reduce((acc, day) => {
     const b = dayBreakdown(day);
@@ -311,17 +365,27 @@ const TimeTrackingPage = () => {
     acc.total += b.total; acc.night += b.night; acc.day += b.day; return acc;
   }, { total: 0, night: 0, day: 0 });
 
-  const generatePdf = () => {
+  const buildPdf = () => {
     const inRange = days.filter(d => d.date >= pdfRange.from && d.date <= pdfRange.to)
       .sort((a, b) => a.date.localeCompare(b.date));
     if (inRange.length === 0) {
       toast({ title: "Aucun pointage sur cette période", variant: "destructive" });
-      return;
+      return null;
     }
     const tot = inRange.reduce((acc, d) => {
       const b = dayBreakdown(d);
       acc.total += b.total; acc.night += b.night; acc.day += b.day; return acc;
     }, { total: 0, night: 0, day: 0 });
+    const counts = inRange.reduce((acc, d) => {
+      const a = absenceOf(d);
+      if (a === "conge") acc.conge++;
+      else if (a === "maladie") acc.maladie++;
+      else if (a === "repos") acc.repos++;
+      return acc;
+    }, { conge: 0, maladie: 0, repos: 0 });
+    const holidays = inRange
+      .map(d => ({ date: d.date, name: getHolidayName(d.date) }))
+      .filter(h => h.name);
 
     const doc = new jsPDF({ unit: "pt", format: "a4" });
     const W = doc.internal.pageSize.getWidth();
@@ -334,87 +398,124 @@ const TimeTrackingPage = () => {
     doc.text("Pointage – STAF Transport", margin, y);
     y += 26;
 
-    doc.setFontSize(14);
+    doc.setFontSize(15);
     doc.text(`${info.nom || ""} ${info.prenom || ""}`.trim() || "—", margin, y);
-    y += 18;
+    y += 20;
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(12);
+    doc.setFontSize(13);
     doc.text(`N° agent : ${info.agent || "—"}`, margin, y);
-    y += 16;
+    y += 18;
     doc.text(`Période : ${new Date(pdfRange.from).toLocaleDateString("fr-FR")}  au  ${new Date(pdfRange.to).toLocaleDateString("fr-FR")}`, margin, y);
-    y += 22;
+    y += 24;
 
     const cols = [
-      { k: "date",  w: 80,  label: "Date" },
-      { k: "start", w: 52,  label: "Début" },
-      { k: "end",   w: 52,  label: "Fin" },
-      { k: "pause", w: 90,  label: "Pause" },
-      { k: "tot",   w: 60,  label: "Total" },
-      { k: "nuit",  w: 60,  label: "Nuit" },
-      { k: "jour",  w: 60,  label: "Jour" },
-      { k: "note",  w: W - margin * 2 - (80+52+52+90+60+60+60), label: "Remarque" },
+      { w: 90,  label: "Date" },
+      { w: 60,  label: "Début" },
+      { w: 60,  label: "Fin" },
+      { w: 60,  label: "Pause" },
+      { w: 65,  label: "Total" },
+      { w: 65,  label: "Nuit" },
+      { w: 65,  label: "Jour" },
+      { w: W - margin * 2 - (90+60+60+60+65+65+65), label: "Remarque" },
     ];
     const drawHeader = () => {
       doc.setFillColor(30, 30, 30);
       doc.setTextColor(255, 255, 255);
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(12);
-      doc.rect(margin, y, W - margin * 2, 22, "F");
+      doc.setFontSize(13);
+      doc.rect(margin, y, W - margin * 2, 24, "F");
       let x = margin + 4;
-      for (const c of cols) { doc.text(c.label, x, y + 15); x += c.w; }
-      y += 22;
+      for (const c of cols) { doc.text(c.label, x, y + 16); x += c.w; }
+      y += 24;
       doc.setTextColor(0, 0, 0);
       doc.setFont("helvetica", "normal");
     };
     drawHeader();
 
-    doc.setFontSize(11);
+    doc.setFontSize(12);
     for (const d of inRange) {
-      if (y > H - margin - 60) { doc.addPage(); y = margin; drawHeader(); }
+      if (y > H - margin - 80) { doc.addPage(); y = margin; drawHeader(); }
       const b = dayBreakdown(d);
+      const abs = absenceOf(d);
       const holiday = getHolidayName(d.date);
-      const pauseStr = d.rest ? "—" : (d.pauseStart && d.pauseEnd
-        ? `${d.pauseStart}-${d.pauseEnd} (${Math.round(b.pauseMin)}m)`
-        : (d.pauseMinutes ? `${d.pauseMinutes}m` : "—"));
-      const note = [holiday ? `Férié: ${holiday}` : "", d.rest ? "REPOS" : "", d.cause || ""].filter(Boolean).join(" • ");
+      const pauseStr = abs ? "—" : (b.pauseMin > 0 ? `${Math.round(b.pauseMin)}m` : "—");
+      const noteParts: string[] = [];
+      if (abs) noteParts.push(ABSENCE_LABEL[abs]);
+      if (holiday) noteParts.push(`Férié`);
+      if (d.cause && d.cause !== ABSENCE_LABEL[abs as AbsenceType]) noteParts.push(d.cause);
       const row = [
         new Date(d.date).toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "2-digit" }),
-        d.rest ? "—" : d.start, d.rest ? "—" : d.end, pauseStr,
-        formatHours(b.total), formatHours(b.night), formatHours(b.day),
-        note,
+        abs ? "—" : d.start, abs ? "—" : d.end, pauseStr,
+        abs ? "—" : formatHours(b.total),
+        abs ? "—" : formatHours(b.night),
+        abs ? "—" : formatHours(b.day),
+        noteParts.join(" • "),
       ];
-      if (holiday) {
-        doc.setFillColor(255, 240, 200);
-        doc.rect(margin, y, W - margin * 2, 20, "F");
-      } else if (d.rest) {
-        doc.setFillColor(225, 235, 255);
-        doc.rect(margin, y, W - margin * 2, 20, "F");
-      }
+      if (holiday) { doc.setFillColor(255, 240, 200); doc.rect(margin, y, W - margin * 2, 22, "F"); }
+      else if (abs === "maladie") { doc.setFillColor(255, 220, 220); doc.rect(margin, y, W - margin * 2, 22, "F"); }
+      else if (abs === "conge") { doc.setFillColor(220, 245, 220); doc.rect(margin, y, W - margin * 2, 22, "F"); }
+      else if (abs === "repos") { doc.setFillColor(225, 235, 255); doc.rect(margin, y, W - margin * 2, 22, "F"); }
       let x = margin + 4;
       for (let i = 0; i < cols.length; i++) {
         const text = String(row[i] ?? "");
         const w = cols[i].w - 6;
-        doc.text(doc.splitTextToSize(text, w) as string[], x, y + 14);
+        doc.text(doc.splitTextToSize(text, w) as string[], x, y + 15);
         x += cols[i].w;
       }
       doc.setDrawColor(200);
-      doc.line(margin, y + 20, W - margin, y + 20);
-      y += 20;
+      doc.line(margin, y + 22, W - margin, y + 22);
+      y += 22;
     }
 
-    y += 16;
-    if (y > H - margin - 60) { doc.addPage(); y = margin; }
+    y += 18;
+    if (y > H - margin - 120) { doc.addPage(); y = margin; }
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(14);
-    doc.text(`Total : ${formatHours(tot.total)}`, margin, y); y += 18;
-    doc.text(`Heures de nuit : ${formatHours(tot.night)}`, margin, y); y += 18;
-    doc.text(`Heures de jour : ${formatHours(tot.day)}`, margin, y);
+    doc.setFontSize(15);
+    doc.text(`Total : ${formatHours(tot.total)}`, margin, y); y += 20;
+    doc.text(`Heures de nuit : ${formatHours(tot.night)}`, margin, y); y += 20;
+    doc.text(`Heures de jour : ${formatHours(tot.day)}`, margin, y); y += 24;
 
+    doc.setFontSize(13);
+    doc.text(`Congés payés : ${counts.conge} j   •   Maladie : ${counts.maladie} j   •   Repos : ${counts.repos} j`, margin, y);
+    y += 22;
+
+    if (holidays.length) {
+      if (y > H - margin - 80) { doc.addPage(); y = margin; }
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(13);
+      doc.text("Jours fériés sur la période :", margin, y); y += 18;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(12);
+      for (const h of holidays) {
+        if (y > H - margin - 20) { doc.addPage(); y = margin; }
+        doc.text(`• ${new Date(h.date).toLocaleDateString("fr-FR")} — ${h.name}`, margin + 6, y);
+        y += 16;
+      }
+    }
+
+    return doc;
+  };
+
+  const downloadPdf = () => {
+    const doc = buildPdf();
+    if (!doc) return;
     const fileName = `pointage_${info.nom || "agent"}_${pdfRange.from}_${pdfRange.to}.pdf`.replace(/\s+/g, "_");
     doc.save(fileName);
     setShowPdfDialog(false);
     toast({ title: "PDF téléchargé", description: fileName });
   };
+
+  const previewPdf = () => {
+    const doc = buildPdf();
+    if (!doc) return;
+    if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl);
+    const blob = doc.output("blob");
+    const url = URL.createObjectURL(blob);
+    setPdfPreviewUrl(url);
+  };
+
+  useEffect(() => () => { if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl); }, [pdfPreviewUrl]);
+
 
   const handleLogin = () => {
     const v: WorkerInfo = {
@@ -525,12 +626,15 @@ const TimeTrackingPage = () => {
             <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className="mt-1 w-full rounded-lg bg-gray-800 border border-gray-600 px-2 py-3 text-white text-base" />
           </label>
 
-          <div className="grid grid-cols-2 gap-2">
-            <button onClick={applyDefaults} className="rounded-lg bg-gray-700 p-2 flex items-center justify-center gap-2 text-sm font-bold">
-              <CalendarDays size={16}/> Horaires défaut
+          <div className="grid grid-cols-3 gap-2">
+            <button onClick={applyDefaults} className="rounded-lg bg-gray-700 p-2 flex items-center justify-center gap-1 text-xs font-bold">
+              <CalendarDays size={14}/> Défaut
             </button>
-            <button onClick={toggleRest} className={`rounded-lg p-2 flex items-center justify-center gap-2 text-sm font-bold ${form.rest ? "bg-blue-700" : "bg-gray-700"}`}>
-              {form.rest ? "🛌 REPOS (toucher pour travailler)" : "Marquer REPOS"}
+            <button onClick={toggleRest} className={`rounded-lg p-2 flex items-center justify-center gap-1 text-xs font-bold ${form.rest ? "bg-blue-700" : "bg-gray-700"}`}>
+              🛌 {form.rest ? "REPOS ✓" : "Repos"}
+            </button>
+            <button onClick={() => setShowAbsenceDialog(true)} className="rounded-lg bg-emerald-700 p-2 flex items-center justify-center gap-1 text-xs font-bold">
+              <Heart size={14}/> Congé/Mal.
             </button>
           </div>
 
@@ -575,7 +679,7 @@ const TimeTrackingPage = () => {
             <Eye size={18}/> Visualiser tout
           </button>
           <button onClick={() => setShowPdfDialog(true)} className="bg-purple-700 rounded-xl p-3 flex items-center justify-center gap-2 font-bold">
-            <FileText size={18}/> Télécharger PDF
+            <FileText size={18}/> PDF
           </button>
         </div>
 
@@ -583,7 +687,7 @@ const TimeTrackingPage = () => {
         <section className="bg-gray-900 border border-gray-700 rounded-xl p-3">
           <select value={period} onChange={(e) => setPeriod(e.target.value as "10" | "month" | "all")} className="w-full mb-3 rounded-lg bg-gray-800 border border-gray-600 px-3 py-2 text-white">
             <option value="10">10 derniers jours</option>
-            <option value="month">Ce mois</option>
+            <option value="month">Mois de paie (25 → 24)</option>
             <option value="all">Tout</option>
           </select>
 
@@ -607,15 +711,16 @@ const TimeTrackingPage = () => {
                 {filteredDays.map((day) => {
                   const b = dayBreakdown(day);
                   const h = getHolidayName(day.date);
+                  const abs = absenceOf(day);
                   return (
-                    <tr key={day.id} className={`border-b border-gray-800 ${day.rest ? "bg-blue-950/40" : ""}`}>
+                    <tr key={day.id} className={`border-b border-gray-800 ${abs === "maladie" ? "bg-red-950/40" : abs === "conge" ? "bg-emerald-950/40" : abs ? "bg-blue-950/40" : ""}`}>
                       <td className="py-2 pr-1">
                         {new Date(day.date).toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "2-digit" })}
                         {h && <div className="text-[10px] text-yellow-400 font-bold">🎉 {h}</div>}
-                        {day.rest && <div className="text-[10px] text-blue-300 font-bold">🛌 REPOS</div>}
+                        {abs && <div className={`text-[10px] font-bold ${abs === "maladie" ? "text-red-300" : abs === "conge" ? "text-emerald-300" : "text-blue-300"}`}>{ABSENCE_EMOJI[abs]} {ABSENCE_LABEL[abs]}</div>}
                       </td>
-                      <td className="py-2 pr-1 font-bold">{day.rest ? "—" : formatHours(b.total)}</td>
-                      <td className="py-2 pr-1 text-purple-300">{day.rest ? "—" : formatHours(b.night)}</td>
+                      <td className="py-2 pr-1 font-bold">{abs ? "—" : formatHours(b.total)}</td>
+                      <td className="py-2 pr-1 text-purple-300">{abs ? "—" : formatHours(b.night)}</td>
                       <td className="py-2 flex items-center gap-1">
                         <button onClick={() => setDetailId(day.id)} className="text-blue-400 p-1"><Eye size={14} /></button>
                         <button onClick={() => startEdit(day)} className="text-yellow-400 p-1"><Pencil size={14} /></button>
@@ -709,17 +814,64 @@ const TimeTrackingPage = () => {
       {showPdfDialog && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50" onClick={() => setShowPdfDialog(false)}>
           <div className="bg-gray-900 border-2 border-purple-500 rounded-2xl p-4 max-w-md w-full" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-xl font-black mb-3 text-center">Télécharger PDF</h2>
-            <p className="text-xs text-gray-400 mb-2">Le fichier sera enregistré sur votre téléphone.</p>
-            <label className="block text-sm text-gray-300 mb-2">Du
-              <input type="date" value={pdfRange.from} onChange={(e) => setPdfRange({ ...pdfRange, from: e.target.value })} className="mt-1 w-full rounded-lg bg-gray-800 border border-gray-600 px-2 py-2 text-white" />
-            </label>
-            <label className="block text-sm text-gray-300 mb-3">Au
-              <input type="date" value={pdfRange.to} onChange={(e) => setPdfRange({ ...pdfRange, to: e.target.value })} className="mt-1 w-full rounded-lg bg-gray-800 border border-gray-600 px-2 py-2 text-white" />
-            </label>
+            <h2 className="text-xl font-black mb-2 text-center">Rapport PDF</h2>
+            <p className="text-xs text-gray-400 mb-3 text-center">Par défaut : mois de paie (25 → 24)</p>
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              <label className="block text-sm text-gray-300">Du
+                <input type="date" value={pdfRange.from} onChange={(e) => setPdfRange({ ...pdfRange, from: e.target.value })} className="mt-1 w-full rounded-lg bg-gray-800 border border-gray-600 px-2 py-2 text-white" />
+              </label>
+              <label className="block text-sm text-gray-300">Au
+                <input type="date" value={pdfRange.to} onChange={(e) => setPdfRange({ ...pdfRange, to: e.target.value })} className="mt-1 w-full rounded-lg bg-gray-800 border border-gray-600 px-2 py-2 text-white" />
+              </label>
+            </div>
+            <button onClick={() => setPdfRange(payrollRange)} className="w-full mb-3 text-xs bg-gray-700 rounded-lg py-2 font-bold">↺ Mois de paie en cours</button>
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={previewPdf} className="bg-blue-700 rounded-xl p-3 font-bold flex items-center justify-center gap-2"><Eye size={16}/> Visualiser</button>
+              <button onClick={downloadPdf} className="bg-purple-700 rounded-xl p-3 font-bold flex items-center justify-center gap-2"><Download size={16}/> Télécharger</button>
+            </div>
+            <button onClick={() => setShowPdfDialog(false)} className="w-full mt-2 bg-gray-700 rounded-xl p-2 text-sm font-bold">Fermer</button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Aperçu PDF */}
+      {pdfPreviewUrl && (
+        <div className="fixed inset-0 bg-black z-50 flex flex-col">
+          <div className="flex items-center justify-between p-2 bg-gray-900 border-b border-gray-700">
+            <h2 className="font-black">Aperçu PDF</h2>
             <div className="flex gap-2">
-              <button onClick={() => setShowPdfDialog(false)} className="flex-1 bg-gray-700 rounded-xl p-3 font-bold">Annuler</button>
-              <button onClick={generatePdf} className="flex-1 bg-purple-700 rounded-xl p-3 font-bold">Générer</button>
+              <a href={pdfPreviewUrl} download={`pointage_${info.nom || "agent"}_${pdfRange.from}_${pdfRange.to}.pdf`.replace(/\s+/g, "_")} className="bg-purple-700 rounded-lg px-3 py-2 text-sm font-bold flex items-center gap-1"><Download size={14}/> Télécharger</a>
+              <button onClick={() => { URL.revokeObjectURL(pdfPreviewUrl); setPdfPreviewUrl(null); }} className="bg-gray-700 rounded-lg p-2"><X size={18}/></button>
+            </div>
+          </div>
+          <iframe src={pdfPreviewUrl} title="Aperçu" className="flex-1 w-full bg-white" />
+        </div>
+      )}
+
+      {/* Modal Congé / Maladie */}
+      {showAbsenceDialog && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50" onClick={() => setShowAbsenceDialog(false)}>
+          <div className="bg-gray-900 border-2 border-emerald-500 rounded-2xl p-4 max-w-md w-full space-y-3" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-xl font-black text-center">Congé / Maladie / Repos</h2>
+            <div className="grid grid-cols-3 gap-2">
+              {(["conge", "maladie", "repos"] as AbsenceType[]).map(t => (
+                <button key={t} onClick={() => setAbsenceForm({ ...absenceForm, type: t })}
+                  className={`rounded-lg p-3 text-sm font-bold flex flex-col items-center gap-1 ${absenceForm.type === t ? (t === "maladie" ? "bg-red-700" : t === "conge" ? "bg-emerald-700" : "bg-blue-700") : "bg-gray-700"}`}>
+                  <span className="text-xl">{ABSENCE_EMOJI[t]}</span>
+                  {ABSENCE_LABEL[t]}
+                </button>
+              ))}
+            </div>
+            <label className="block text-sm text-gray-300">Date début
+              <input type="date" value={absenceForm.from} onChange={(e) => setAbsenceForm({ ...absenceForm, from: e.target.value })} className="mt-1 w-full rounded-lg bg-gray-800 border border-gray-600 px-2 py-3 text-white text-base" />
+            </label>
+            <label className="block text-sm text-gray-300">Date fin
+              <input type="date" value={absenceForm.to} onChange={(e) => setAbsenceForm({ ...absenceForm, to: e.target.value })} className="mt-1 w-full rounded-lg bg-gray-800 border border-gray-600 px-2 py-3 text-white text-base" />
+            </label>
+            <input value={absenceForm.cause} onChange={(e) => setAbsenceForm({ ...absenceForm, cause: e.target.value })} placeholder="Remarque (optionnel)" className="w-full rounded-lg bg-gray-800 border border-gray-600 px-3 py-3 text-white text-base" />
+            <div className="flex gap-2">
+              <button onClick={() => setShowAbsenceDialog(false)} className="flex-1 bg-gray-700 rounded-xl p-3 font-bold">Annuler</button>
+              <button onClick={applyAbsenceRange} className="flex-1 bg-emerald-700 rounded-xl p-3 font-bold flex items-center justify-center gap-2"><Check size={18}/> Enregistrer</button>
             </div>
           </div>
         </div>
