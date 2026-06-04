@@ -814,17 +814,64 @@ const TimeTrackingPage = () => {
       {showPdfDialog && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50" onClick={() => setShowPdfDialog(false)}>
           <div className="bg-gray-900 border-2 border-purple-500 rounded-2xl p-4 max-w-md w-full" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-xl font-black mb-3 text-center">Télécharger PDF</h2>
-            <p className="text-xs text-gray-400 mb-2">Le fichier sera enregistré sur votre téléphone.</p>
-            <label className="block text-sm text-gray-300 mb-2">Du
-              <input type="date" value={pdfRange.from} onChange={(e) => setPdfRange({ ...pdfRange, from: e.target.value })} className="mt-1 w-full rounded-lg bg-gray-800 border border-gray-600 px-2 py-2 text-white" />
-            </label>
-            <label className="block text-sm text-gray-300 mb-3">Au
-              <input type="date" value={pdfRange.to} onChange={(e) => setPdfRange({ ...pdfRange, to: e.target.value })} className="mt-1 w-full rounded-lg bg-gray-800 border border-gray-600 px-2 py-2 text-white" />
-            </label>
+            <h2 className="text-xl font-black mb-2 text-center">Rapport PDF</h2>
+            <p className="text-xs text-gray-400 mb-3 text-center">Par défaut : mois de paie (25 → 24)</p>
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              <label className="block text-sm text-gray-300">Du
+                <input type="date" value={pdfRange.from} onChange={(e) => setPdfRange({ ...pdfRange, from: e.target.value })} className="mt-1 w-full rounded-lg bg-gray-800 border border-gray-600 px-2 py-2 text-white" />
+              </label>
+              <label className="block text-sm text-gray-300">Au
+                <input type="date" value={pdfRange.to} onChange={(e) => setPdfRange({ ...pdfRange, to: e.target.value })} className="mt-1 w-full rounded-lg bg-gray-800 border border-gray-600 px-2 py-2 text-white" />
+              </label>
+            </div>
+            <button onClick={() => setPdfRange(payrollRange)} className="w-full mb-3 text-xs bg-gray-700 rounded-lg py-2 font-bold">↺ Mois de paie en cours</button>
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={previewPdf} className="bg-blue-700 rounded-xl p-3 font-bold flex items-center justify-center gap-2"><Eye size={16}/> Visualiser</button>
+              <button onClick={downloadPdf} className="bg-purple-700 rounded-xl p-3 font-bold flex items-center justify-center gap-2"><Download size={16}/> Télécharger</button>
+            </div>
+            <button onClick={() => setShowPdfDialog(false)} className="w-full mt-2 bg-gray-700 rounded-xl p-2 text-sm font-bold">Fermer</button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Aperçu PDF */}
+      {pdfPreviewUrl && (
+        <div className="fixed inset-0 bg-black z-50 flex flex-col">
+          <div className="flex items-center justify-between p-2 bg-gray-900 border-b border-gray-700">
+            <h2 className="font-black">Aperçu PDF</h2>
             <div className="flex gap-2">
-              <button onClick={() => setShowPdfDialog(false)} className="flex-1 bg-gray-700 rounded-xl p-3 font-bold">Annuler</button>
-              <button onClick={generatePdf} className="flex-1 bg-purple-700 rounded-xl p-3 font-bold">Générer</button>
+              <a href={pdfPreviewUrl} download={`pointage_${info.nom || "agent"}_${pdfRange.from}_${pdfRange.to}.pdf`.replace(/\s+/g, "_")} className="bg-purple-700 rounded-lg px-3 py-2 text-sm font-bold flex items-center gap-1"><Download size={14}/> Télécharger</a>
+              <button onClick={() => { URL.revokeObjectURL(pdfPreviewUrl); setPdfPreviewUrl(null); }} className="bg-gray-700 rounded-lg p-2"><X size={18}/></button>
+            </div>
+          </div>
+          <iframe src={pdfPreviewUrl} title="Aperçu" className="flex-1 w-full bg-white" />
+        </div>
+      )}
+
+      {/* Modal Congé / Maladie */}
+      {showAbsenceDialog && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50" onClick={() => setShowAbsenceDialog(false)}>
+          <div className="bg-gray-900 border-2 border-emerald-500 rounded-2xl p-4 max-w-md w-full space-y-3" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-xl font-black text-center">Congé / Maladie / Repos</h2>
+            <div className="grid grid-cols-3 gap-2">
+              {(["conge", "maladie", "repos"] as AbsenceType[]).map(t => (
+                <button key={t} onClick={() => setAbsenceForm({ ...absenceForm, type: t })}
+                  className={`rounded-lg p-3 text-sm font-bold flex flex-col items-center gap-1 ${absenceForm.type === t ? (t === "maladie" ? "bg-red-700" : t === "conge" ? "bg-emerald-700" : "bg-blue-700") : "bg-gray-700"}`}>
+                  <span className="text-xl">{ABSENCE_EMOJI[t]}</span>
+                  {ABSENCE_LABEL[t]}
+                </button>
+              ))}
+            </div>
+            <label className="block text-sm text-gray-300">Date début
+              <input type="date" value={absenceForm.from} onChange={(e) => setAbsenceForm({ ...absenceForm, from: e.target.value })} className="mt-1 w-full rounded-lg bg-gray-800 border border-gray-600 px-2 py-3 text-white text-base" />
+            </label>
+            <label className="block text-sm text-gray-300">Date fin
+              <input type="date" value={absenceForm.to} onChange={(e) => setAbsenceForm({ ...absenceForm, to: e.target.value })} className="mt-1 w-full rounded-lg bg-gray-800 border border-gray-600 px-2 py-3 text-white text-base" />
+            </label>
+            <input value={absenceForm.cause} onChange={(e) => setAbsenceForm({ ...absenceForm, cause: e.target.value })} placeholder="Remarque (optionnel)" className="w-full rounded-lg bg-gray-800 border border-gray-600 px-3 py-3 text-white text-base" />
+            <div className="flex gap-2">
+              <button onClick={() => setShowAbsenceDialog(false)} className="flex-1 bg-gray-700 rounded-xl p-3 font-bold">Annuler</button>
+              <button onClick={applyAbsenceRange} className="flex-1 bg-emerald-700 rounded-xl p-3 font-bold flex items-center justify-center gap-2"><Check size={18}/> Enregistrer</button>
             </div>
           </div>
         </div>
