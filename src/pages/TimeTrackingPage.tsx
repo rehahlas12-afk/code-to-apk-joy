@@ -266,9 +266,37 @@ const TimeTrackingPage = () => {
 
   const toggleRest = () => {
     setForm(f => f.rest
-      ? { ...f, rest: false, cause: f.cause === "Repos" ? "" : f.cause }
-      : { ...f, rest: true, start: "", end: "", pauseStart: "", pauseEnd: "", cause: "Repos" }
+      ? { ...f, rest: false, absenceType: undefined, cause: f.cause === "Repos" ? "" : f.cause }
+      : { ...f, rest: true, absenceType: "repos", start: "", end: "", pauseStart: "", pauseEnd: "", cause: "Repos" }
     );
+  };
+
+  const applyAbsenceRange = () => {
+    const { type, from, to, cause } = absenceForm;
+    if (!from || !to || from > to) {
+      toast({ title: "Plage de dates invalide", variant: "destructive" });
+      return;
+    }
+    const start = new Date(from + "T12:00:00");
+    const end = new Date(to + "T12:00:00");
+    const entries: WorkDay[] = [];
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const ds = d.toISOString().slice(0, 10);
+      entries.push({
+        id: crypto.randomUUID(), date: ds,
+        start: "", end: "", pauseStart: "", pauseEnd: "",
+        cause: cause || ABSENCE_LABEL[type],
+        rest: true, absenceType: type,
+      });
+    }
+    const byDate = new Map(days.map(d => [d.date, d]));
+    for (const e of entries) {
+      const ex = byDate.get(e.date);
+      byDate.set(e.date, { ...e, id: ex?.id || e.id });
+    }
+    persistDays(Array.from(byDate.values()));
+    setShowAbsenceDialog(false);
+    toast({ title: `${ABSENCE_LABEL[type]} enregistrée`, description: `${entries.length} jour(s)` });
   };
 
   const submitForm = () => {
