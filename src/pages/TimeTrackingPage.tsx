@@ -160,11 +160,21 @@ const TimeTrackingPage = () => {
   const [detailId, setDetailId] = useState<string | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
-  const [pdfRange, setPdfRange] = useState<{ from: string; to: string }>({
-    from: (() => { const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().slice(0,10); })(),
-    to: today(),
-  });
+  // Mois de paie : du 25 du mois précédent au 24 du mois courant
+  const payrollRange = (() => {
+    const now = new Date();
+    const y = now.getFullYear(), m = now.getMonth(), d = now.getDate();
+    const fromDate = d >= 25 ? new Date(y, m, 25) : new Date(y, m - 1, 25);
+    const toDate = d >= 25 ? new Date(y, m + 1, 24) : new Date(y, m, 24);
+    return { from: fromDate.toISOString().slice(0, 10), to: toDate.toISOString().slice(0, 10) };
+  })();
+  const [pdfRange, setPdfRange] = useState<{ from: string; to: string }>(payrollRange);
   const [showPdfDialog, setShowPdfDialog] = useState(false);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
+  const [showAbsenceDialog, setShowAbsenceDialog] = useState(false);
+  const [absenceForm, setAbsenceForm] = useState<{ type: AbsenceType; from: string; to: string; cause: string }>({
+    type: "conge", from: today(), to: today(), cause: "",
+  });
 
   const blankForm = (date = today()): WorkDay => {
     const s = defaultScheduleFor(date);
