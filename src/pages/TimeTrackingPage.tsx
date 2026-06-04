@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Eye, Plus, Trash2, Pencil, FileText, X, Check, CalendarDays, UserCog, LogIn, Heart, Stethoscope, Download } from "lucide-react";
+import { ArrowLeft, Eye, Plus, Trash2, Pencil, FileText, X, Check, CalendarDays, UserCog, LogIn, Heart, Download } from "lucide-react";
 import jsPDF from "jspdf";
 import TruckLogo from "@/components/TruckLogo";
 import { toast } from "@/hooks/use-toast";
