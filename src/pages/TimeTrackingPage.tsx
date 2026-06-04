@@ -365,17 +365,27 @@ const TimeTrackingPage = () => {
     acc.total += b.total; acc.night += b.night; acc.day += b.day; return acc;
   }, { total: 0, night: 0, day: 0 });
 
-  const generatePdf = () => {
+  const buildPdf = () => {
     const inRange = days.filter(d => d.date >= pdfRange.from && d.date <= pdfRange.to)
       .sort((a, b) => a.date.localeCompare(b.date));
     if (inRange.length === 0) {
       toast({ title: "Aucun pointage sur cette période", variant: "destructive" });
-      return;
+      return null;
     }
     const tot = inRange.reduce((acc, d) => {
       const b = dayBreakdown(d);
       acc.total += b.total; acc.night += b.night; acc.day += b.day; return acc;
     }, { total: 0, night: 0, day: 0 });
+    const counts = inRange.reduce((acc, d) => {
+      const a = absenceOf(d);
+      if (a === "conge") acc.conge++;
+      else if (a === "maladie") acc.maladie++;
+      else if (a === "repos") acc.repos++;
+      return acc;
+    }, { conge: 0, maladie: 0, repos: 0 });
+    const holidays = inRange
+      .map(d => ({ date: d.date, name: getHolidayName(d.date) }))
+      .filter(h => h.name);
 
     const doc = new jsPDF({ unit: "pt", format: "a4" });
     const W = doc.internal.pageSize.getWidth();
@@ -388,87 +398,124 @@ const TimeTrackingPage = () => {
     doc.text("Pointage – STAF Transport", margin, y);
     y += 26;
 
-    doc.setFontSize(14);
+    doc.setFontSize(15);
     doc.text(`${info.nom || ""} ${info.prenom || ""}`.trim() || "—", margin, y);
-    y += 18;
+    y += 20;
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(12);
+    doc.setFontSize(13);
     doc.text(`N° agent : ${info.agent || "—"}`, margin, y);
-    y += 16;
+    y += 18;
     doc.text(`Période : ${new Date(pdfRange.from).toLocaleDateString("fr-FR")}  au  ${new Date(pdfRange.to).toLocaleDateString("fr-FR")}`, margin, y);
-    y += 22;
+    y += 24;
 
     const cols = [
-      { k: "date",  w: 80,  label: "Date" },
-      { k: "start", w: 52,  label: "Début" },
-      { k: "end",   w: 52,  label: "Fin" },
-      { k: "pause", w: 90,  label: "Pause" },
-      { k: "tot",   w: 60,  label: "Total" },
-      { k: "nuit",  w: 60,  label: "Nuit" },
-      { k: "jour",  w: 60,  label: "Jour" },
-      { k: "note",  w: W - margin * 2 - (80+52+52+90+60+60+60), label: "Remarque" },
+      { w: 90,  label: "Date" },
+      { w: 60,  label: "Début" },
+      { w: 60,  label: "Fin" },
+      { w: 60,  label: "Pause" },
+      { w: 65,  label: "Total" },
+      { w: 65,  label: "Nuit" },
+      { w: 65,  label: "Jour" },
+      { w: W - margin * 2 - (90+60+60+60+65+65+65), label: "Remarque" },
     ];
     const drawHeader = () => {
       doc.setFillColor(30, 30, 30);
       doc.setTextColor(255, 255, 255);
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(12);
-      doc.rect(margin, y, W - margin * 2, 22, "F");
+      doc.setFontSize(13);
+      doc.rect(margin, y, W - margin * 2, 24, "F");
       let x = margin + 4;
-      for (const c of cols) { doc.text(c.label, x, y + 15); x += c.w; }
-      y += 22;
+      for (const c of cols) { doc.text(c.label, x, y + 16); x += c.w; }
+      y += 24;
       doc.setTextColor(0, 0, 0);
       doc.setFont("helvetica", "normal");
     };
     drawHeader();
 
-    doc.setFontSize(11);
+    doc.setFontSize(12);
     for (const d of inRange) {
-      if (y > H - margin - 60) { doc.addPage(); y = margin; drawHeader(); }
+      if (y > H - margin - 80) { doc.addPage(); y = margin; drawHeader(); }
       const b = dayBreakdown(d);
+      const abs = absenceOf(d);
       const holiday = getHolidayName(d.date);
-      const pauseStr = d.rest ? "—" : (d.pauseStart && d.pauseEnd
-        ? `${d.pauseStart}-${d.pauseEnd} (${Math.round(b.pauseMin)}m)`
-        : (d.pauseMinutes ? `${d.pauseMinutes}m` : "—"));
-      const note = [holiday ? `Férié: ${holiday}` : "", d.rest ? "REPOS" : "", d.cause || ""].filter(Boolean).join(" • ");
+      const pauseStr = abs ? "—" : (b.pauseMin > 0 ? `${Math.round(b.pauseMin)}m` : "—");
+      const noteParts: string[] = [];
+      if (abs) noteParts.push(ABSENCE_LABEL[abs]);
+      if (holiday) noteParts.push(`Férié`);
+      if (d.cause && d.cause !== ABSENCE_LABEL[abs as AbsenceType]) noteParts.push(d.cause);
       const row = [
         new Date(d.date).toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "2-digit" }),
-        d.rest ? "—" : d.start, d.rest ? "—" : d.end, pauseStr,
-        formatHours(b.total), formatHours(b.night), formatHours(b.day),
-        note,
+        abs ? "—" : d.start, abs ? "—" : d.end, pauseStr,
+        abs ? "—" : formatHours(b.total),
+        abs ? "—" : formatHours(b.night),
+        abs ? "—" : formatHours(b.day),
+        noteParts.join(" • "),
       ];
-      if (holiday) {
-        doc.setFillColor(255, 240, 200);
-        doc.rect(margin, y, W - margin * 2, 20, "F");
-      } else if (d.rest) {
-        doc.setFillColor(225, 235, 255);
-        doc.rect(margin, y, W - margin * 2, 20, "F");
-      }
+      if (holiday) { doc.setFillColor(255, 240, 200); doc.rect(margin, y, W - margin * 2, 22, "F"); }
+      else if (abs === "maladie") { doc.setFillColor(255, 220, 220); doc.rect(margin, y, W - margin * 2, 22, "F"); }
+      else if (abs === "conge") { doc.setFillColor(220, 245, 220); doc.rect(margin, y, W - margin * 2, 22, "F"); }
+      else if (abs === "repos") { doc.setFillColor(225, 235, 255); doc.rect(margin, y, W - margin * 2, 22, "F"); }
       let x = margin + 4;
       for (let i = 0; i < cols.length; i++) {
         const text = String(row[i] ?? "");
         const w = cols[i].w - 6;
-        doc.text(doc.splitTextToSize(text, w) as string[], x, y + 14);
+        doc.text(doc.splitTextToSize(text, w) as string[], x, y + 15);
         x += cols[i].w;
       }
       doc.setDrawColor(200);
-      doc.line(margin, y + 20, W - margin, y + 20);
-      y += 20;
+      doc.line(margin, y + 22, W - margin, y + 22);
+      y += 22;
     }
 
-    y += 16;
-    if (y > H - margin - 60) { doc.addPage(); y = margin; }
+    y += 18;
+    if (y > H - margin - 120) { doc.addPage(); y = margin; }
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(14);
-    doc.text(`Total : ${formatHours(tot.total)}`, margin, y); y += 18;
-    doc.text(`Heures de nuit : ${formatHours(tot.night)}`, margin, y); y += 18;
-    doc.text(`Heures de jour : ${formatHours(tot.day)}`, margin, y);
+    doc.setFontSize(15);
+    doc.text(`Total : ${formatHours(tot.total)}`, margin, y); y += 20;
+    doc.text(`Heures de nuit : ${formatHours(tot.night)}`, margin, y); y += 20;
+    doc.text(`Heures de jour : ${formatHours(tot.day)}`, margin, y); y += 24;
 
+    doc.setFontSize(13);
+    doc.text(`Congés payés : ${counts.conge} j   •   Maladie : ${counts.maladie} j   •   Repos : ${counts.repos} j`, margin, y);
+    y += 22;
+
+    if (holidays.length) {
+      if (y > H - margin - 80) { doc.addPage(); y = margin; }
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(13);
+      doc.text("Jours fériés sur la période :", margin, y); y += 18;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(12);
+      for (const h of holidays) {
+        if (y > H - margin - 20) { doc.addPage(); y = margin; }
+        doc.text(`• ${new Date(h.date).toLocaleDateString("fr-FR")} — ${h.name}`, margin + 6, y);
+        y += 16;
+      }
+    }
+
+    return doc;
+  };
+
+  const downloadPdf = () => {
+    const doc = buildPdf();
+    if (!doc) return;
     const fileName = `pointage_${info.nom || "agent"}_${pdfRange.from}_${pdfRange.to}.pdf`.replace(/\s+/g, "_");
     doc.save(fileName);
     setShowPdfDialog(false);
     toast({ title: "PDF téléchargé", description: fileName });
   };
+
+  const previewPdf = () => {
+    const doc = buildPdf();
+    if (!doc) return;
+    if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl);
+    const blob = doc.output("blob");
+    const url = URL.createObjectURL(blob);
+    setPdfPreviewUrl(url);
+  };
+
+  useEffect(() => () => { if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl); }, [pdfPreviewUrl]);
+
 
   const handleLogin = () => {
     const v: WorkerInfo = {
