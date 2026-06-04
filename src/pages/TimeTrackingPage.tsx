@@ -711,15 +711,16 @@ const TimeTrackingPage = () => {
                 {filteredDays.map((day) => {
                   const b = dayBreakdown(day);
                   const h = getHolidayName(day.date);
+                  const abs = absenceOf(day);
                   return (
-                    <tr key={day.id} className={`border-b border-gray-800 ${day.rest ? "bg-blue-950/40" : ""}`}>
+                    <tr key={day.id} className={`border-b border-gray-800 ${abs === "maladie" ? "bg-red-950/40" : abs === "conge" ? "bg-emerald-950/40" : abs ? "bg-blue-950/40" : ""}`}>
                       <td className="py-2 pr-1">
                         {new Date(day.date).toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "2-digit" })}
                         {h && <div className="text-[10px] text-yellow-400 font-bold">🎉 {h}</div>}
-                        {day.rest && <div className="text-[10px] text-blue-300 font-bold">🛌 REPOS</div>}
+                        {abs && <div className={`text-[10px] font-bold ${abs === "maladie" ? "text-red-300" : abs === "conge" ? "text-emerald-300" : "text-blue-300"}`}>{ABSENCE_EMOJI[abs]} {ABSENCE_LABEL[abs]}</div>}
                       </td>
-                      <td className="py-2 pr-1 font-bold">{day.rest ? "—" : formatHours(b.total)}</td>
-                      <td className="py-2 pr-1 text-purple-300">{day.rest ? "—" : formatHours(b.night)}</td>
+                      <td className="py-2 pr-1 font-bold">{abs ? "—" : formatHours(b.total)}</td>
+                      <td className="py-2 pr-1 text-purple-300">{abs ? "—" : formatHours(b.night)}</td>
                       <td className="py-2 flex items-center gap-1">
                         <button onClick={() => setDetailId(day.id)} className="text-blue-400 p-1"><Eye size={14} /></button>
                         <button onClick={() => startEdit(day)} className="text-yellow-400 p-1"><Pencil size={14} /></button>
