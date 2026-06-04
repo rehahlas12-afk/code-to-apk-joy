@@ -679,7 +679,7 @@ const TimeTrackingPage = () => {
             <Eye size={18}/> Visualiser tout
           </button>
           <button onClick={() => setShowPdfDialog(true)} className="bg-purple-700 rounded-xl p-3 flex items-center justify-center gap-2 font-bold">
-            <FileText size={18}/> Télécharger PDF
+            <FileText size={18}/> PDF
           </button>
         </div>
 
@@ -687,7 +687,7 @@ const TimeTrackingPage = () => {
         <section className="bg-gray-900 border border-gray-700 rounded-xl p-3">
           <select value={period} onChange={(e) => setPeriod(e.target.value as "10" | "month" | "all")} className="w-full mb-3 rounded-lg bg-gray-800 border border-gray-600 px-3 py-2 text-white">
             <option value="10">10 derniers jours</option>
-            <option value="month">Ce mois</option>
+            <option value="month">Mois de paie (25 → 24)</option>
             <option value="all">Tout</option>
           </select>
 
