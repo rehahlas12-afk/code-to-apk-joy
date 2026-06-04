@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Eye, Plus, Trash2, Pencil, FileText, X, Check, CalendarDays, UserCog, LogIn } from "lucide-react";
+import { ArrowLeft, Eye, Plus, Trash2, Pencil, FileText, X, Check, CalendarDays, UserCog, LogIn, Heart, Stethoscope, Download } from "lucide-react";
 import jsPDF from "jspdf";
 import TruckLogo from "@/components/TruckLogo";
 import { toast } from "@/hooks/use-toast";
 import { getHolidayName } from "@/lib/holidays";
+
+type AbsenceType = "repos" | "conge" | "maladie";
 
 interface WorkDay {
   id: string;
@@ -14,9 +16,23 @@ interface WorkDay {
   pauseStart: string;  // HH:MM
   pauseEnd: string;    // HH:MM
   cause: string;
-  rest?: boolean;      // jour de repos
+  rest?: boolean;            // jour non travaillé (repos / congé / maladie)
+  absenceType?: AbsenceType; // précise le type si non travaillé
   /** legacy */
   pauseMinutes?: number;
+}
+
+const ABSENCE_LABEL: Record<AbsenceType, string> = {
+  repos: "REPOS",
+  conge: "CONGÉ PAYÉ",
+  maladie: "MALADIE",
+};
+const ABSENCE_EMOJI: Record<AbsenceType, string> = { repos: "🛌", conge: "🌴", maladie: "🤒" };
+
+function absenceOf(d: WorkDay): AbsenceType | null {
+  if (d.absenceType) return d.absenceType;
+  if (d.rest) return "repos";
+  return null;
 }
 
 interface WorkerInfo {
