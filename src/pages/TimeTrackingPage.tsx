@@ -86,7 +86,7 @@ interface Breakdown {
 }
 
 function dayBreakdown(d: WorkDay): Breakdown {
-  if (d.rest || !d.start || !d.end) return { total: 0, night: 0, day: 0, pauseMin: 0, pauseNightMin: 0, pauseDayMin: 0 };
+  if (absenceOf(d) || !d.start || !d.end) return { total: 0, night: 0, day: 0, pauseMin: 0, pauseNightMin: 0, pauseDayMin: 0 };
   const startM = toMinutes(d.start);
   let endM = toMinutes(d.end);
   if (endM <= startM) endM += 24 * 60;
