@@ -1,4 +1,4 @@
-name: Build Android APK
+ilname: Build Android APK
 
 on:
   push:
@@ -34,7 +34,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-         node-version: "20"
+         node-version: "22"
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
