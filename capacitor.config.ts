@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from "@capacitor/cli";
 
 const config: CapacitorConfig = {
-  appId: "app.lovable.23dcaa6440794653945fbb1961e32b87",
+  appId: "com.monapp.joy",
   appName: "code-to-apk-joy",
   webDir: "dist",
   server: {
