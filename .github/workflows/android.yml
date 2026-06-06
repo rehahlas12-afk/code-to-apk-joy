@@ -42,7 +42,9 @@ jobs:
         run: npm install --legacy-peer-deps
 
       - name: Build web assets (Vite)
-        run: npm run build
+        run: |
+          npm run build
+          rm -f dist/tessdata/fra.traineddata.gz
 
       - name: Add Android platform if missing
         run: |
