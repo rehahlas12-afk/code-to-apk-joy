@@ -46,6 +46,18 @@ jobs:
             npx cap add android
           fi
 
+      - name: Generate Android launcher icons & splash from resources/icon.png
+        run: |
+          if [ -f "resources/icon.png" ]; then
+            npx --yes @capacitor/assets generate --android \
+              --iconBackgroundColor "#000000" \
+              --iconBackgroundColorDark "#000000" \
+              --splashBackgroundColor "#000000" \
+              --splashBackgroundColorDark "#000000" || echo "Asset generation failed (non-fatal)"
+          else
+            echo "No resources/icon.png found, skipping icon generation"
+          fi
+
       - name: Sync Capacitor (Android)
         run: npx cap sync android
 
