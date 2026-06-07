@@ -213,23 +213,74 @@ const TimeTrackingPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.date, mode]);
 
-  const saveInfo = (next: WorkerInfo) => { setInfo(next); localStorage.setItem(INFO_KEY, JSON.stringify(next)); };
+  // === Auto-sauvegarde silencieuse (fichier Documents survivant à la désinstallation) ===
+  const AUTO_BACKUP_FILE = "staf-pointage-auto.json";
+  const autoBackupTimer = useRef<number | null>(null);
+  const writeAutoBackup = async () => {
+    if (!Capacitor.isNativePlatform()) return;
+    try {
+      const dump: Record<string, string> = {};
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (!k) continue;
+        if (k === INFO_KEY || k.startsWith("sabrinos_pointage_")) {
+          const v = localStorage.getItem(k);
+          if (v !== null) dump[k] = v;
+        }
+      }
+      const payload = { type: "staf_pointage_backup", version: 1, exportedAt: new Date().toISOString(), data: dump };
+      await Filesystem.writeFile({ path: AUTO_BACKUP_FILE, data: JSON.stringify(payload), directory: Directory.Documents, encoding: "utf8" as any });
+    } catch { /* silencieux */ }
+  };
+  const scheduleAutoBackup = () => {
+    if (autoBackupTimer.current) window.clearTimeout(autoBackupTimer.current);
+    autoBackupTimer.current = window.setTimeout(writeAutoBackup, 800);
+  };
+
+  // Auto-restauration au démarrage si localStorage est vide mais fichier existe
+  const [autoRestoreChecked, setAutoRestoreChecked] = useState(false);
+  useEffect(() => {
+    (async () => {
+      if (!Capacitor.isNativePlatform()) { setAutoRestoreChecked(true); return; }
+      const hasInfo = !!localStorage.getItem(INFO_KEY);
+      if (hasInfo) { setAutoRestoreChecked(true); return; }
+      try {
+        const res = await Filesystem.readFile({ path: AUTO_BACKUP_FILE, directory: Directory.Documents, encoding: "utf8" as any });
+        const text = typeof res.data === "string" ? res.data : "";
+        const parsed = JSON.parse(text);
+        const data: Record<string, string> = parsed?.data && typeof parsed.data === "object" ? parsed.data : parsed;
+        const entries = Object.entries(data).filter(([k]) => k === INFO_KEY || k.startsWith("sabrinos_pointage_"));
+        if (entries.length > 0) {
+          for (const [k, v] of entries) localStorage.setItem(k, String(v));
+          toast({ title: "✅ Données restaurées automatiquement", description: `${entries.length} entrées récupérées` });
+          setTimeout(() => window.location.reload(), 400);
+          return;
+        }
+      } catch { /* pas de fichier */ }
+      setAutoRestoreChecked(true);
+    })();
+  }, []);
+
+  const saveInfo = (next: WorkerInfo) => { setInfo(next); localStorage.setItem(INFO_KEY, JSON.stringify(next)); scheduleAutoBackup(); };
 
   const persistDays = (next: WorkDay[], agent = info.agent) => {
     const sorted = [...next].sort((a, b) => b.date.localeCompare(a.date));
     setDays(sorted);
     localStorage.setItem(daysKeyFor(agent), JSON.stringify(sorted));
+    scheduleAutoBackup();
     return sorted;
   };
 
   const persistMode = (m: SaveMode, agent = info.agent) => {
     localStorage.setItem(modeKeyFor(agent), m);
     setMode(m);
+    scheduleAutoBackup();
   };
 
   const persistTemplate = (tpl: DayTemplate[], agent = info.agent) => {
     localStorage.setItem(tplKeyFor(agent), JSON.stringify(tpl));
     setTemplate(tpl);
+    scheduleAutoBackup();
   };
 
   // === Sauvegarde / Restauration des pointages (tous agents) ===
