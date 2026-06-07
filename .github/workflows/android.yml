@@ -48,35 +48,6 @@ jobs:
       - name: Sync Capacitor (Android)
         run: npx cap sync android
 
-      - name: Patch Android Permissions & WebView Micro
-        run: |
-          # 1. Ajout des permissions dans le Manifest
-          sed -i '/<\/manifest>/i <uses-permission android:name="android.permission.RECORD_AUDIO" />\n<uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />' android/app/src/main/AndroidManifest.xml
-          
-          # 2. Patch de MainActivity.java pour forcer l'autorisation de la WebView
-          cat << 'EOF' > android/app/src/main/java/com/sabrinis/app/MainActivity.java
-          package com.sabrinis.app;
-
-          import android.os.Bundle;
-          import android.webkit.PermissionRequest;
-          import android.webkit.WebChromeClient;
-          import com.getcapacitor.BridgeActivity;
-
-          public class MainActivity extends BridgeActivity {
-              @Override
-              public void onCreate(Bundle savedInstanceState) {
-                  super.onCreate(savedInstanceState);
-                  
-                  this.bridge.getWebView().setWebChromeClient(new WebChromeClient() {
-                      @Override
-                      public void onPermissionRequest(final PermissionRequest request) {
-                          request.grant(request.getResources());
-                      }
-                  });
-              }
-          }
-          EOF
-
       - name: Grant execute permission to gradlew
         run: chmod +x android/gradlew
 
