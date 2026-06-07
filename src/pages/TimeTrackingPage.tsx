@@ -213,23 +213,26 @@ const TimeTrackingPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.date, mode]);
 
-  const saveInfo = (next: WorkerInfo) => { setInfo(next); localStorage.setItem(INFO_KEY, JSON.stringify(next)); };
+  const saveInfo = (next: WorkerInfo) => { setInfo(next); localStorage.setItem(INFO_KEY, JSON.stringify(next)); scheduleAutoBackup(); };
 
   const persistDays = (next: WorkDay[], agent = info.agent) => {
     const sorted = [...next].sort((a, b) => b.date.localeCompare(a.date));
     setDays(sorted);
     localStorage.setItem(daysKeyFor(agent), JSON.stringify(sorted));
+    scheduleAutoBackup();
     return sorted;
   };
 
   const persistMode = (m: SaveMode, agent = info.agent) => {
     localStorage.setItem(modeKeyFor(agent), m);
     setMode(m);
+    scheduleAutoBackup();
   };
 
   const persistTemplate = (tpl: DayTemplate[], agent = info.agent) => {
     localStorage.setItem(tplKeyFor(agent), JSON.stringify(tpl));
     setTemplate(tpl);
+    scheduleAutoBackup();
   };
 
   // === Sauvegarde / Restauration des pointages (tous agents) ===
