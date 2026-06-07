@@ -697,6 +697,14 @@ const TimeTrackingPage = () => {
               <CalendarDays size={14}/> Modifier le modèle hebdomadaire
             </button>
           )}
+          <div className="grid grid-cols-2 gap-2 pt-1">
+            <button onClick={handleExportBackup} className="text-xs bg-purple-700 hover:bg-purple-600 rounded-lg py-2 px-2 font-bold flex items-center justify-center gap-2">
+              <Save size={14}/> Sauvegarder pointages
+            </button>
+            <button onClick={handleImportBackup} className="text-xs bg-purple-600 hover:bg-purple-500 rounded-lg py-2 px-2 font-bold flex items-center justify-center gap-2">
+              <Upload size={14}/> Restaurer pointages
+            </button>
+          </div>
         </section>
 
         {/* Saisie */}
