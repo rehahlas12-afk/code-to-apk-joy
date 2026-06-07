@@ -9,4 +9,3 @@ navigator.mediaDevices.getUserMedia({ audio: true })
   .catch((err) => console.log("Erreur micro:", err));
 
 createRoot(document.getElementById('root')!).render(<App />);
-
