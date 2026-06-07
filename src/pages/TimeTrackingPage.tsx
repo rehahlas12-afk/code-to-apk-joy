@@ -820,6 +820,7 @@ const TimeTrackingPage = () => {
           <div className="bg-gray-900 border-2 border-purple-500 rounded-2xl p-4 max-w-md w-full" onClick={e => e.stopPropagation()}>
             <h2 className="text-xl font-black mb-2 text-center">Rapport PDF</h2>
             <p className="text-xs text-gray-400 mb-3 text-center">Par défaut : mois de paie (25 → 24)</p>
+            {Capacitor.isNativePlatform() && <p className="text-xs text-green-300 mb-3 text-center">Sur téléphone : choisissez “Fichiers”, “Drive” ou “WhatsApp” après Télécharger.</p>}
             <div className="grid grid-cols-2 gap-2 mb-3">
               <label className="block text-sm text-gray-300">Du
                 <input type="date" value={pdfRange.from} onChange={e => setPdfRange({ ...pdfRange, from: e.target.value })} className="mt-1 w-full rounded-lg bg-gray-800 border border-gray-600 px-2 py-2 text-white" /></label>
