@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Eye, Plus, Trash2, Pencil, FileText, X, Check, CalendarDays, UserCog, LogIn, Heart, Download, Settings2, Zap, Hand } from "lucide-react";
+import { ArrowLeft, Eye, Plus, Trash2, Pencil, FileText, X, Check, CalendarDays, UserCog, LogIn, Heart, Download, Upload, Settings2, Zap, Hand, Save } from "lucide-react";
 import jsPDF from "jspdf";
 import { Capacitor } from "@capacitor/core";
 import { Directory, Filesystem } from "@capacitor/filesystem";
@@ -230,6 +230,68 @@ const TimeTrackingPage = () => {
   const persistTemplate = (tpl: DayTemplate[], agent = info.agent) => {
     localStorage.setItem(tplKeyFor(agent), JSON.stringify(tpl));
     setTemplate(tpl);
+  };
+
+  // === Sauvegarde / Restauration des pointages (tous agents) ===
+  const collectBackup = () => {
+    const dump: Record<string, string> = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k) continue;
+      if (k === INFO_KEY || k.startsWith("sabrinos_pointage_")) {
+        const v = localStorage.getItem(k);
+        if (v !== null) dump[k] = v;
+      }
+    }
+    return dump;
+  };
+
+  const handleExportBackup = async () => {
+    const dump = collectBackup();
+    const count = Object.keys(dump).length;
+    if (count === 0) { toast({ title: "Aucune donnée à sauvegarder" }); return; }
+    const payload = { type: "staf_pointage_backup", version: 1, exportedAt: new Date().toISOString(), data: dump };
+    const json = JSON.stringify(payload, null, 2);
+    const fileName = `staf-pointage-${new Date().toISOString().slice(0,10)}.json`;
+    try {
+      if (Capacitor.isNativePlatform()) {
+        const saved = await Filesystem.writeFile({ path: fileName, data: json, directory: Directory.Documents, encoding: "utf8" as any });
+        await Share.share({ title: fileName, text: "Sauvegarde Pointage", url: saved.uri, dialogTitle: "Enregistrer ou partager la sauvegarde" });
+      } else {
+        const blob = new Blob([json], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a"); a.href = url; a.download = fileName; a.click();
+        URL.revokeObjectURL(url);
+      }
+      toast({ title: `✅ Sauvegarde créée`, description: `${count} entrées` });
+    } catch (e: any) {
+      toast({ title: "❌ Erreur sauvegarde", description: String(e?.message || e), variant: "destructive" });
+    }
+  };
+
+  const handleImportBackup = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "application/json,.json";
+    input.onchange = async (e: any) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const parsed = JSON.parse(text);
+        const data: Record<string, string> = parsed?.data && typeof parsed.data === "object" ? parsed.data : parsed;
+        const entries = Object.entries(data).filter(([k]) => k === INFO_KEY || k.startsWith("sabrinos_pointage_"));
+        if (entries.length === 0) throw new Error("Fichier vide ou invalide");
+        const ok = window.confirm(`Restaurer ${entries.length} entrées ? Les pointages actuels seront remplacés.`);
+        if (!ok) return;
+        for (const [k, v] of entries) localStorage.setItem(k, String(v));
+        toast({ title: `✅ Restauration réussie`, description: `${entries.length} entrées — rechargement…` });
+        setTimeout(() => window.location.reload(), 600);
+      } catch (err: any) {
+        toast({ title: "❌ Erreur restauration", description: String(err?.message || err), variant: "destructive" });
+      }
+    };
+    input.click();
   };
 
   // Recharge données quand on change d'agent / connexion
@@ -635,6 +697,14 @@ const TimeTrackingPage = () => {
               <CalendarDays size={14}/> Modifier le modèle hebdomadaire
             </button>
           )}
+          <div className="grid grid-cols-2 gap-2 pt-1">
+            <button onClick={handleExportBackup} className="text-xs bg-purple-700 hover:bg-purple-600 rounded-lg py-2 px-2 font-bold flex items-center justify-center gap-2">
+              <Save size={14}/> Sauvegarder pointages
+            </button>
+            <button onClick={handleImportBackup} className="text-xs bg-purple-600 hover:bg-purple-500 rounded-lg py-2 px-2 font-bold flex items-center justify-center gap-2">
+              <Upload size={14}/> Restaurer pointages
+            </button>
+          </div>
         </section>
 
         {/* Saisie */}
