@@ -22,7 +22,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
 
       - name: Setup Java (JDK 21)
@@ -30,9 +30,6 @@ jobs:
         with:
           distribution: "temurin"
           java-version: "21"
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
 
       - name: Install npm dependencies
         run: npm install --legacy-peer-deps
