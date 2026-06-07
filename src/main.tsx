@@ -1,11 +1,20 @@
 import { createRoot } from 'react-dom/client';
 import App from "./App.tsx";
 import "./index.css";
-import { Clipboard } from '@capacitor/clipboard';
 
-// Demande l'autorisation du micro au démarrage de l'application
-navigator.mediaDevices.getUserMedia({ audio: true })
-  .then(() => console.log("Micro autorisé"))
-  .catch((err) => console.log("Erreur micro:", err));
+// Fonction magique pour forcer Android à demander le micro
+async function requestMicrophonePermission() {
+  try {
+    if (typeof navigator !== 'undefined' && navigator.mediaDevices) {
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+      console.log("Permission micro accordée !");
+    }
+  } catch (err) {
+    console.log("Demande de micro :", err);
+  }
+}
+
+// On lance la demande immédiatement au démarrage
+requestMicrophonePermission();
 
 createRoot(document.getElementById('root')!).render(<App />);
