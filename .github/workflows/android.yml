@@ -30,11 +30,7 @@ jobs:
         with:
           distribution: "temurin"
           java-version: "21"
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-         node-version: "22"
+
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
@@ -44,13 +40,42 @@ jobs:
       - name: Build web assets (Vite)
         run: |
           npm run build
-          rm -f dist/tessdata/fra.traineddata.gz
+          rm -f dist/tessdata/fra.traineddata
 
       - name: Add Android platform if missing
         run: |
           if [ ! -d "android" ]; then
             npx cap add android
           fi
+
+      - name: Patch Android Permissions & WebView Micro
+        run: |
+          # 1. Ajout des permissions dans le Manifest
+          sed -i '/<\/manifest>/i <uses-permission android:name="android.permission.RECORD_AUDIO" />\n<uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />' android/app/src/main/AndroidManifest.xml
+          
+          # 2. Patch de MainActivity.java pour forcer l'autorisation de la WebView
+          cat << 'EOF' > android/app/src/main/java/com/sabrinis/app/MainActivity.java
+          package com.sabrinis.app;
+
+          import android.os.Bundle;
+          import android.webkit.PermissionRequest;
+          import android.webkit.WebChromeClient;
+          import com.getcapacitor.BridgeActivity;
+
+          public class MainActivity extends BridgeActivity {
+              @Override
+              public void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+                  
+                  this.bridge.getWebView().setWebChromeClient(new WebChromeClient() {
+                      @Override
+                      public void onPermissionRequest(final PermissionRequest request) {
+                          request.grant(request.getResources());
+                      }
+                  });
+              }
+          }
+          EOF
 
       - name: Sync Capacitor (Android)
         run: npx cap sync android
@@ -60,10 +85,10 @@ jobs:
 
       - name: Build debug APK
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+        run: ./gradlew assembleDebug --no-daemon
 
       - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/artifact@v4
         with:
           name: app-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
@@ -74,7 +99,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
-          name: APK build ${{ github.run_number }}
+          name: APK Build ${{ github.run_number }}
           files: android/app/build/outputs/apk/debug/app-debug.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
