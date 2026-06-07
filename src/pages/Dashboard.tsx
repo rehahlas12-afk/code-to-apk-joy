@@ -90,29 +90,29 @@ const Dashboard = () => {
             <span className="text-base font-bold text-center leading-tight">Pointage nom prénom</span>
           </button>
           <button
-            onClick={handleQuit}
-            className="bg-red-700 text-white rounded-xl p-6 flex flex-col items-center gap-3 shadow-lg active:scale-95 transition-transform"
+            onClick={handleExportNames}
+            className="bg-purple-700 text-white rounded-xl p-6 flex flex-col items-center gap-3 shadow-lg active:scale-95 transition-transform"
           >
-            <LogOut size={36} />
-            <span className="text-base font-bold text-center leading-tight">Quitter l'app</span>
+            <Download size={36} />
+            <span className="text-base font-bold text-center leading-tight">Sauvegarder noms</span>
           </button>
         </div>
 
-        {/* Sauvegarde / restauration des noms magasins */}
+        {/* Kit bas : Restaurer + Quitter l'app (compact) */}
         <div className="mt-4 grid grid-cols-2 gap-3">
-          <button
-            onClick={handleExportNames}
-            className="bg-purple-700 text-white rounded-xl p-4 flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform"
-          >
-            <Download size={22} />
-            <span className="text-sm font-bold">Sauvegarder noms</span>
-          </button>
           <button
             onClick={handleImportNames}
             className="bg-purple-600 text-white rounded-xl p-4 flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform"
           >
             <Upload size={22} />
             <span className="text-sm font-bold">Restaurer noms</span>
+          </button>
+          <button
+            onClick={handleQuit}
+            className="bg-red-700 text-white rounded-xl p-4 flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform"
+          >
+            <LogOut size={22} />
+            <span className="text-sm font-bold">Quitter l'app</span>
           </button>
         </div>
       </div>
