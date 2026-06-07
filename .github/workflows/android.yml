@@ -1,4 +1,4 @@
-name: Build Android APK
+  name: Build Android APK
 
 on:
   push:
@@ -45,6 +45,9 @@ jobs:
             npx cap add android
           fi
 
+      - name: Sync Capacitor (Android)
+        run: npx cap sync android
+
       - name: Patch Android Permissions & WebView Micro
         run: |
           # 1. Ajout des permissions dans le Manifest
@@ -74,9 +77,6 @@ jobs:
           }
           EOF
 
-      - name: Sync Capacitor (Android)
-        run: npx cap sync android
-
       - name: Grant execute permission to gradlew
         run: chmod +x android/gradlew
 
@@ -101,3 +101,4 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
             
+              
