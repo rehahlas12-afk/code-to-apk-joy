@@ -15,10 +15,9 @@ const IMAGES: Record<string, string> = {
   eau: pallet120100.url,
   demi: pallet8060.url,
   demi_eau: pallet10060.url,
-  demi_lait: pallet8060.url,
 };
 
-type EntryType = "roll" | "demi" | "normale" | "eau" | "demi_eau" | "demi_lait";
+type EntryType = "roll" | "demi" | "normale" | "eau" | "demi_eau";
 
 interface PalletEntry {
   type: EntryType;
@@ -41,7 +40,6 @@ const RATIO: Record<EntryType, number> = {
   roll: 0.64,
   demi: 0.5,
   demi_eau: 0.5,
-  demi_lait: 0.5,
   normale: 1,
   eau: 1.5, // grosse palette d'eau = 1.5 palettes
 };
@@ -50,7 +48,6 @@ const LABEL: Record<EntryType, string> = {
   roll: "Rolls",
   demi: "Palette 80/60",
   demi_eau: "Palette 100/60",
-  demi_lait: "Palette 80/60",
   normale: "Palette 120/80",
   eau: "Palette 120/100",
 };
@@ -68,7 +65,7 @@ function calcSingle(e: PalletEntry): number {
 
 // Regroupement automatique : appaire les demis, gère le cas "1 eau seule = 1 normale"
 function smartTotal(list: PalletEntry[]): { total: number; breakdown: string[] } {
-  const counts: Record<EntryType, number> = { roll: 0, demi: 0, demi_eau: 0, demi_lait: 0, normale: 0, eau: 0 };
+  const counts: Record<EntryType, number> = { roll: 0, demi: 0, demi_eau: 0, normale: 0, eau: 0 };
   for (const e of list) counts[e.type] += e.quantity;
 
   const breakdown: string[] = [];
@@ -91,15 +88,8 @@ function smartTotal(list: PalletEntry[]): { total: number; breakdown: string[] }
     else breakdown.push(`${reste} demi eau → ${v.toFixed(2)} pal`);
   }
 
-  // Demi lait : 2 = 1 normale
-  if (counts.demi_lait > 0) {
-    const norm = Math.floor(counts.demi_lait / 2);
-    const reste = counts.demi_lait % 2;
-    const v = norm * RATIO.normale + reste * RATIO.demi_lait;
-    total += v;
-    if (norm > 0) breakdown.push(`${counts.demi_lait} demi lait → ${norm} normale${reste ? " + 1 demi" : ""} = ${v.toFixed(2)} pal`);
-    else breakdown.push(`${reste} demi lait → ${v.toFixed(2)} pal`);
-  }
+
+
 
   // Demi générique : 2 = 1 normale
   if (counts.demi > 0) {
@@ -122,7 +112,7 @@ function smartTotal(list: PalletEntry[]): { total: number; breakdown: string[] }
   if (counts.eau > 0) {
     const onlyOneEau = counts.eau === 1
       && counts.normale === 0 && counts.demi === 0
-      && counts.demi_eau === 0 && counts.demi_lait === 0
+      && counts.demi_eau === 0
       && counts.roll === 0;
     if (onlyOneEau) {
       total += 1;
@@ -221,7 +211,7 @@ const PalletCalcPage = () => {
           let type: EntryType = "normale";
           if (seg.includes("roll") || seg.includes("rouleau")) type = "roll";
           else if (seg.includes("demi") && seg.includes("eau")) type = "demi_eau";
-          else if (seg.includes("demi") && seg.includes("lait")) type = "demi_lait";
+          else if (seg.includes("demi") && seg.includes("lait")) type = "demi";
           else if (seg.includes("demi")) type = "demi";
           else if (seg.includes("eau")) type = "eau";
           addEntry(type, qty);
@@ -335,13 +325,15 @@ const PalletCalcPage = () => {
             <ChevronDown size={28} className="text-gray-400" />
           </button>
 
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
             <input
               type="number"
+              inputMode="numeric"
+              maxLength={3}
               value={manualQty}
-              onChange={(e) => setManualQty(e.target.value)}
+              onChange={(e) => setManualQty(e.target.value.slice(0, 3))}
               placeholder="Qté"
-              className="flex-1 rounded-xl border-2 border-gray-500 bg-gray-800 px-4 py-4 text-2xl font-black text-center text-white"
+              className="w-24 rounded-xl border-2 border-gray-500 bg-gray-800 px-2 py-4 text-2xl font-black text-center text-white"
             />
             <button
               onClick={() => {
@@ -350,9 +342,9 @@ const PalletCalcPage = () => {
                   setManualQty("");
                 }
               }}
-              className="bg-blue-600 text-white rounded-xl px-8 py-4 text-2xl font-black"
+              className="flex-1 bg-blue-600 text-white rounded-xl py-4 text-2xl font-black"
             >
-              +
+              + Ajouter
             </button>
           </div>
         </div>
@@ -373,7 +365,7 @@ const PalletCalcPage = () => {
                 </button>
               </div>
               <div className="p-3 space-y-2">
-                {(["roll","normale","eau","demi","demi_eau","demi_lait"] as EntryType[]).map((t) => (
+                {(["roll","normale","eau","demi","demi_eau"] as EntryType[]).map((t) => (
                   <button
                     key={t}
                     onClick={() => { setManualType(t); setPickerOpen(false); }}
@@ -384,7 +376,6 @@ const PalletCalcPage = () => {
                     <img src={IMAGES[t]} alt="" className="w-20 h-20 rounded-lg object-cover bg-white" />
                     <div className="flex-1 text-left">
                       <p className="text-lg font-bold text-white">{LABEL[t]}</p>
-                      {t === "demi_lait" && <p className="text-xs text-gray-400">(lait)</p>}
                     </div>
                   </button>
                 ))}

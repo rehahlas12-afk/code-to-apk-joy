@@ -142,10 +142,10 @@ const Dashboard = () => {
           onClick={() => setMenuOpen(false)}
         >
           <div
-            className="absolute top-0 right-0 h-full w-72 bg-white text-black flex flex-col shadow-2xl animate-in slide-in-from-right"
+            className="absolute top-0 right-0 h-full w-72 bg-black text-white flex flex-col shadow-2xl animate-in slide-in-from-right border-l-2 border-white"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between p-4 border-b-2 border-black">
+            <div className="flex items-center justify-between p-4 border-b-2 border-white">
               <span className="font-black text-lg">MENU</span>
               <button onClick={() => setMenuOpen(false)} aria-label="Fermer">
                 <X size={28} strokeWidth={3} />
@@ -156,7 +156,7 @@ const Dashboard = () => {
                 <button
                   key={item.path}
                   onClick={() => go(item.path)}
-                  className="w-full flex items-center gap-3 p-3 rounded-lg border-2 border-black bg-white active:bg-gray-200"
+                  className="w-full flex items-center gap-3 p-3 rounded-lg border-2 border-white bg-black text-white active:bg-gray-800"
                 >
                   <item.icon size={24} strokeWidth={2.5} />
                   <span className="font-bold text-base">{item.label}</span>
@@ -164,23 +164,23 @@ const Dashboard = () => {
               ))}
               <button
                 onClick={() => { setMenuOpen(false); handleExportNames(); }}
-                className="w-full flex items-center gap-3 p-3 rounded-lg border-2 border-black bg-white active:bg-gray-200"
+                className="w-full flex items-center gap-3 p-3 rounded-lg border-2 border-white bg-black text-white active:bg-gray-800"
               >
                 <Download size={24} strokeWidth={2.5} />
                 <span className="font-bold text-base">Sauvegarder noms</span>
               </button>
               <button
                 onClick={() => { setMenuOpen(false); handleImportNames(); }}
-                className="w-full flex items-center gap-3 p-3 rounded-lg border-2 border-black bg-white active:bg-gray-200"
+                className="w-full flex items-center gap-3 p-3 rounded-lg border-2 border-white bg-black text-white active:bg-gray-800"
               >
                 <Upload size={24} strokeWidth={2.5} />
                 <span className="font-bold text-base">Restaurer noms</span>
               </button>
             </div>
-            <div className="p-3 border-t-2 border-black">
+            <div className="p-3 border-t-2 border-white">
               <button
                 onClick={() => { setMenuOpen(false); handleQuit(); }}
-                className="w-full flex items-center justify-center gap-3 p-4 rounded-lg bg-black text-white active:bg-gray-800"
+                className="w-full flex items-center justify-center gap-3 p-4 rounded-lg bg-white text-black active:bg-gray-300"
               >
                 <LogOut size={24} strokeWidth={2.5} />
                 <span className="font-black text-lg">Quitter l'app</span>
