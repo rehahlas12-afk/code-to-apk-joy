@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Camera, Search, Eye, Plus, Calculator, Image, LogOut, Download, Upload, CalendarClock, Menu, X } from "lucide-react";
+import { Camera, Search, Eye, Plus, Calculator, Image, LogOut, Download, Upload, CalendarClock, Menu, X, FileText } from "lucide-react";
 import TruckLogo from "@/components/TruckLogo";
 import { getStoreNames, setStoreNames, type StoreName } from "@/lib/store";
 import { quitApplication } from "@/lib/appExit";
@@ -71,6 +71,7 @@ const Dashboard = () => {
   const menuItems = [
     ...buttons,
     { label: "Pointage nom prénom", icon: CalendarClock, path: "/time-tracking", color: "bg-gray-700" },
+    { label: "Demande de congé", icon: FileText, path: "/conges", color: "bg-amber-700" },
   ];
 
   const go = (path: string) => { setMenuOpen(false); navigate(path); };

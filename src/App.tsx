@@ -10,6 +10,7 @@ import StoreNamesPage from "./pages/StoreNamesPage";
 import PalletCalcPage from "./pages/PalletCalcPage";
 import GalleryPage from "./pages/GalleryPage";
 import TimeTrackingPage from "./pages/TimeTrackingPage";
+import CongesPage from "./pages/CongesPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -30,6 +31,7 @@ const App = () => (
           <Route path="/pallet-calc" element={<PalletCalcPage />} />
           <Route path="/gallery" element={<GalleryPage />} />
           <Route path="/time-tracking" element={<TimeTrackingPage />} />
+          <Route path="/conges" element={<CongesPage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
