@@ -142,7 +142,7 @@ const Dashboard = () => {
           onClick={() => setMenuOpen(false)}
         >
           <div
-            className="absolute top-0 right-0 h-full w-72 bg-black text-white flex flex-col shadow-2xl animate-in slide-in-from-right border-l-2 border-white"
+            className="absolute top-0 left-0 h-full w-72 bg-black text-white flex flex-col shadow-2xl animate-in slide-in-from-left border-r-2 border-white"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between p-4 border-b-2 border-white">
