@@ -71,6 +71,7 @@ const Dashboard = () => {
   const menuItems = [
     ...buttons,
     { label: "Pointage nom prénom", icon: CalendarClock, path: "/time-tracking", color: "bg-gray-700" },
+    { label: "Demande de congé", icon: FileText, path: "/conges", color: "bg-amber-700" },
   ];
 
   const go = (path: string) => { setMenuOpen(false); navigate(path); };
