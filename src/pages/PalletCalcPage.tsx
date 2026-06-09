@@ -65,7 +65,7 @@ function calcSingle(e: PalletEntry): number {
 
 // Regroupement automatique : appaire les demis, gère le cas "1 eau seule = 1 normale"
 function smartTotal(list: PalletEntry[]): { total: number; breakdown: string[] } {
-  const counts: Record<EntryType, number> = { roll: 0, demi: 0, demi_eau: 0, demi_lait: 0, normale: 0, eau: 0 };
+  const counts: Record<EntryType, number> = { roll: 0, demi: 0, demi_eau: 0, normale: 0, eau: 0 };
   for (const e of list) counts[e.type] += e.quantity;
 
   const breakdown: string[] = [];
