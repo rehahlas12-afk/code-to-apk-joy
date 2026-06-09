@@ -6,6 +6,9 @@ import { toast } from "@/hooks/use-toast";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import formImg from "@/assets/conge-form.jpg.asset.json";
+import { Capacitor } from "@capacitor/core";
+import { Filesystem, Directory } from "@capacitor/filesystem";
+import { Share } from "@capacitor/share";
 
 const STORAGE_KEY = "staf_conge_info";
 
@@ -70,9 +73,32 @@ const CongesPage = () => {
       let w = pageW, h = pageW / ratio;
       if (h > pageH) { h = pageH; w = pageH * ratio; }
       pdf.addImage(imgData, "JPEG", (pageW - w) / 2, (pageH - h) / 2, w, h);
-      const fname = `Conge_${info.nom || "STAF"}_${info.prenom || ""}_${new Date().toISOString().slice(0,10)}.pdf`;
-      pdf.save(fname.replace(/\s+/g, "_"));
-      toast({ title: "✅ PDF téléchargé" });
+      const fname = `Conge_${info.nom || "STAF"}_${info.prenom || ""}_${new Date().toISOString().slice(0,10)}.pdf`.replace(/\s+/g, "_");
+
+      if (Capacitor.isNativePlatform()) {
+        // Sur Android/iOS : écrit le fichier puis ouvre le partage (enregistrer/envoyer)
+        const dataUri = pdf.output("datauristring");
+        const base64 = dataUri.split(",")[1];
+        const written = await Filesystem.writeFile({
+          path: fname,
+          data: base64,
+          directory: Directory.Cache,
+        });
+        try {
+          await Share.share({
+            title: "Demande de congé",
+            text: `Demande de congé ${info.nom} ${info.prenom}`.trim(),
+            url: written.uri,
+            dialogTitle: "Partager / Enregistrer le PDF",
+          });
+          toast({ title: "✅ PDF prêt à partager" });
+        } catch {
+          toast({ title: "✅ PDF enregistré", description: written.uri });
+        }
+      } else {
+        pdf.save(fname);
+        toast({ title: "✅ PDF téléchargé" });
+      }
     } catch (err: any) {
       toast({ title: "Erreur", description: err?.message || "Impossible de générer le PDF", variant: "destructive" });
     }
