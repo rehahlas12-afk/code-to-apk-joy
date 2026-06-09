@@ -1,8 +1,22 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Mic, MicOff, Calculator, Trash2, Save, X } from "lucide-react";
+import { ArrowLeft, Mic, MicOff, Calculator, Trash2, Save, X, ChevronDown } from "lucide-react";
 import TruckLogo from "@/components/TruckLogo";
 import { toast } from "@/hooks/use-toast";
+import palletRolls from "@/assets/pallets/pallet-rolls.jpg.asset.json";
+import pallet12080 from "@/assets/pallets/pallet-120-80.jpg.asset.json";
+import pallet120100 from "@/assets/pallets/pallet-120-100.jpg.asset.json";
+import pallet10060 from "@/assets/pallets/pallet-100-60.jpg.asset.json";
+import pallet8060 from "@/assets/pallets/pallet-80-60.jpg.asset.json";
+
+const IMAGES: Record<string, string> = {
+  roll: palletRolls.url,
+  normale: pallet12080.url,
+  eau: pallet120100.url,
+  demi: pallet8060.url,
+  demi_eau: pallet10060.url,
+  demi_lait: pallet8060.url,
+};
 
 type EntryType = "roll" | "demi" | "normale" | "eau" | "demi_eau" | "demi_lait";
 
@@ -269,6 +283,7 @@ const PalletCalcPage = () => {
   };
 
   const [manualType, setManualType] = useState<EntryType>("normale");
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [manualQty, setManualQty] = useState("");
 
   return (
@@ -309,18 +324,17 @@ const PalletCalcPage = () => {
 
         <div className="bg-gray-900 border-2 border-gray-600 rounded-2xl p-4 space-y-3">
           <p className="text-base font-bold text-gray-300 text-center">Ajouter une palette</p>
-          <select
-            value={manualType}
-            onChange={(e) => setManualType(e.target.value as EntryType)}
-            className="w-full rounded-xl border-2 border-gray-500 bg-gray-800 px-4 py-4 text-xl font-bold text-white"
+
+          <button
+            type="button"
+            onClick={() => setPickerOpen(true)}
+            className="w-full rounded-xl border-2 border-gray-500 bg-gray-800 px-3 py-3 flex items-center gap-3 text-left"
           >
-            <option value="roll">Rolls</option>
-            <option value="normale">Palette 120/80</option>
-            <option value="eau">Palette 120/100</option>
-            <option value="demi">Palette 80/60</option>
-            <option value="demi_eau">Palette 100/60</option>
-            <option value="demi_lait">Palette 80/60 (lait)</option>
-          </select>
+            <img src={IMAGES[manualType]} alt="" className="w-14 h-14 rounded-lg object-cover bg-white" />
+            <span className="flex-1 text-xl font-bold text-white">{LABEL[manualType as EntryType]}</span>
+            <ChevronDown size={28} className="text-gray-400" />
+          </button>
+
           <div className="flex gap-2">
             <input
               type="number"
@@ -342,6 +356,42 @@ const PalletCalcPage = () => {
             </button>
           </div>
         </div>
+
+        {pickerOpen && (
+          <div
+            className="fixed inset-0 z-50 bg-black/80 flex items-end sm:items-center justify-center p-4"
+            onClick={() => setPickerOpen(false)}
+          >
+            <div
+              className="bg-gray-900 border-2 border-gray-600 rounded-2xl w-full max-w-md max-h-[85vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between p-4 border-b border-gray-700 sticky top-0 bg-gray-900">
+                <span className="font-black text-lg text-white">Choisir une palette</span>
+                <button onClick={() => setPickerOpen(false)} className="text-white">
+                  <X size={28} />
+                </button>
+              </div>
+              <div className="p-3 space-y-2">
+                {(["roll","normale","eau","demi","demi_eau","demi_lait"] as EntryType[]).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => { setManualType(t); setPickerOpen(false); }}
+                    className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 ${
+                      manualType === t ? "border-blue-500 bg-blue-900/30" : "border-gray-700 bg-gray-800"
+                    }`}
+                  >
+                    <img src={IMAGES[t]} alt="" className="w-20 h-20 rounded-lg object-cover bg-white" />
+                    <div className="flex-1 text-left">
+                      <p className="text-lg font-bold text-white">{LABEL[t]}</p>
+                      {t === "demi_lait" && <p className="text-xs text-gray-400">(lait)</p>}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="space-y-1">
           {entries.map((e, i) => (
