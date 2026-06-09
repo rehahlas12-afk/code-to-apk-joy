@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Camera, Search, Eye, Plus, Calculator, Image, LogOut, Download, Upload, CalendarClock } from "lucide-react";
+import { Camera, Search, Eye, Plus, Calculator, Image, LogOut, Download, Upload, CalendarClock, Menu, X } from "lucide-react";
 import TruckLogo from "@/components/TruckLogo";
 import { getStoreNames, setStoreNames, type StoreName } from "@/lib/store";
 import { quitApplication } from "@/lib/appExit";
@@ -16,6 +17,7 @@ const buttons = [
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const handleQuit = async () => {
     const ok = window.confirm("Voulez-vous quitter l'application ?");
@@ -53,7 +55,6 @@ const Dashboard = () => {
         const data = JSON.parse(text);
         if (!Array.isArray(data)) throw new Error("Format invalide");
         const valid = data.filter((n: any) => n && n.number && n.name) as StoreName[];
-        // Merge with existing
         const existing = getStoreNames();
         const map = new Map(existing.map(n => [n.number, n.name]));
         valid.forEach(n => map.set(String(n.number), String(n.name)));
@@ -67,9 +68,26 @@ const Dashboard = () => {
     input.click();
   };
 
+  const menuItems = [
+    ...buttons,
+    { label: "Pointage nom prénom", icon: CalendarClock, path: "/time-tracking", color: "bg-gray-700" },
+  ];
+
+  const go = (path: string) => { setMenuOpen(false); navigate(path); };
+
   return (
-    <div className="min-h-screen bg-black flex flex-col">
+    <div className="min-h-screen bg-black flex flex-col relative">
       <TruckLogo />
+
+      {/* Bouton menu hamburger en haut à droite */}
+      <button
+        onClick={() => setMenuOpen(true)}
+        aria-label="Ouvrir le menu"
+        className="absolute top-3 right-3 z-30 bg-white text-black rounded-xl p-3 shadow-lg active:scale-95"
+      >
+        <Menu size={28} strokeWidth={3} />
+      </button>
+
       <div className="flex-1 p-4">
         <div className="grid grid-cols-2 gap-3">
           {buttons.map((btn) => (
@@ -98,7 +116,6 @@ const Dashboard = () => {
           </button>
         </div>
 
-        {/* Kit bas : Restaurer + Quitter l'app (compact) */}
         <div className="mt-4 grid grid-cols-2 gap-3">
           <button
             onClick={handleImportNames}
@@ -116,6 +133,61 @@ const Dashboard = () => {
           </button>
         </div>
       </div>
+
+      {/* Menu latéral droit (noir & blanc) */}
+      {menuOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/60"
+          onClick={() => setMenuOpen(false)}
+        >
+          <div
+            className="absolute top-0 right-0 h-full w-72 bg-white text-black flex flex-col shadow-2xl animate-in slide-in-from-right"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-4 border-b-2 border-black">
+              <span className="font-black text-lg">MENU</span>
+              <button onClick={() => setMenuOpen(false)} aria-label="Fermer">
+                <X size={28} strokeWidth={3} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-3 space-y-2">
+              {menuItems.map((item) => (
+                <button
+                  key={item.path}
+                  onClick={() => go(item.path)}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg border-2 border-black bg-white active:bg-gray-200"
+                >
+                  <item.icon size={24} strokeWidth={2.5} />
+                  <span className="font-bold text-base">{item.label}</span>
+                </button>
+              ))}
+              <button
+                onClick={() => { setMenuOpen(false); handleExportNames(); }}
+                className="w-full flex items-center gap-3 p-3 rounded-lg border-2 border-black bg-white active:bg-gray-200"
+              >
+                <Download size={24} strokeWidth={2.5} />
+                <span className="font-bold text-base">Sauvegarder noms</span>
+              </button>
+              <button
+                onClick={() => { setMenuOpen(false); handleImportNames(); }}
+                className="w-full flex items-center gap-3 p-3 rounded-lg border-2 border-black bg-white active:bg-gray-200"
+              >
+                <Upload size={24} strokeWidth={2.5} />
+                <span className="font-bold text-base">Restaurer noms</span>
+              </button>
+            </div>
+            <div className="p-3 border-t-2 border-black">
+              <button
+                onClick={() => { setMenuOpen(false); handleQuit(); }}
+                className="w-full flex items-center justify-center gap-3 p-4 rounded-lg bg-black text-white active:bg-gray-800"
+              >
+                <LogOut size={24} strokeWidth={2.5} />
+                <span className="font-black text-lg">Quitter l'app</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
