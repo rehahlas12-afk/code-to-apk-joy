@@ -64,7 +64,27 @@ const CongesPage = () => {
   const handleDownload = async () => {
     if (!sheetRef.current) return;
     try {
-      const canvas = await html2canvas(sheetRef.current, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
+      // Pré-charge l'image du formulaire en CORS et attend que toutes les <img> soient prêtes
+      const imgs = Array.from(sheetRef.current.querySelectorAll("img"));
+      await Promise.all(
+        imgs.map((im) => {
+          im.crossOrigin = "anonymous";
+          if (!im.src) im.src = formImg.url;
+          if (im.complete && im.naturalWidth > 0) return Promise.resolve();
+          return new Promise<void>((res) => {
+            im.onload = () => res();
+            im.onerror = () => res();
+          });
+        })
+      );
+
+      const canvas = await html2canvas(sheetRef.current, {
+        scale: 2,
+        backgroundColor: "#ffffff",
+        useCORS: true,
+        allowTaint: false,
+        logging: false,
+      });
       const imgData = canvas.toDataURL("image/jpeg", 0.92);
       const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
       const pageW = pdf.internal.pageSize.getWidth();
@@ -155,7 +175,7 @@ const CongesPage = () => {
             style={{ width: "1000px", position: "relative" }}
             className="bg-white"
           >
-            <img src={formImg.url} alt="Formulaire congé" style={{ width: "100%", display: "block" }} />
+            <img src={formImg.url} alt="Formulaire congé" crossOrigin="anonymous" style={{ width: "100%", display: "block" }} />
 
             {/* Date (haut) */}
             <span className={overlay} style={{ top: "5.5%", left: "82%", fontSize: 18 }}>{today}</span>
