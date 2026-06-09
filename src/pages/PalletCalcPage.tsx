@@ -283,6 +283,7 @@ const PalletCalcPage = () => {
   };
 
   const [manualType, setManualType] = useState<EntryType>("normale");
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [manualQty, setManualQty] = useState("");
 
   return (
