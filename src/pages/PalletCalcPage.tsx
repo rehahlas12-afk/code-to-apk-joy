@@ -40,7 +40,6 @@ const RATIO: Record<EntryType, number> = {
   roll: 0.64,
   demi: 0.5,
   demi_eau: 0.5,
-  demi_lait: 0.5,
   normale: 1,
   eau: 1.5, // grosse palette d'eau = 1.5 palettes
 };
@@ -49,7 +48,6 @@ const LABEL: Record<EntryType, string> = {
   roll: "Rolls",
   demi: "Palette 80/60",
   demi_eau: "Palette 100/60",
-  demi_lait: "Palette 80/60",
   normale: "Palette 120/80",
   eau: "Palette 120/100",
 };
