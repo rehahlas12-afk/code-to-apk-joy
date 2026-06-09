@@ -363,7 +363,7 @@ const PalletCalcPage = () => {
                 </button>
               </div>
               <div className="p-3 space-y-2">
-                {(["roll","normale","eau","demi","demi_eau","demi_lait"] as EntryType[]).map((t) => (
+                {(["roll","normale","eau","demi","demi_eau"] as EntryType[]).map((t) => (
                   <button
                     key={t}
                     onClick={() => { setManualType(t); setPickerOpen(false); }}
@@ -374,7 +374,6 @@ const PalletCalcPage = () => {
                     <img src={IMAGES[t]} alt="" className="w-20 h-20 rounded-lg object-cover bg-white" />
                     <div className="flex-1 text-left">
                       <p className="text-lg font-bold text-white">{LABEL[t]}</p>
-                      {t === "demi_lait" && <p className="text-xs text-gray-400">(lait)</p>}
                     </div>
                   </button>
                 ))}
