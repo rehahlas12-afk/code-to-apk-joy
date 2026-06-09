@@ -80,11 +80,11 @@ const Dashboard = () => {
     <div className="min-h-screen bg-black flex flex-col relative">
       <TruckLogo />
 
-      {/* Bouton menu hamburger en haut à droite */}
+      {/* Bouton menu hamburger en haut à gauche (blanc sur noir) */}
       <button
         onClick={() => setMenuOpen(true)}
         aria-label="Ouvrir le menu"
-        className="absolute top-3 right-3 z-30 bg-white text-black rounded-xl p-3 shadow-lg active:scale-95"
+        className="absolute top-3 left-3 z-30 bg-black text-white border-2 border-white rounded-xl p-3 shadow-lg active:scale-95"
       >
         <Menu size={28} strokeWidth={3} />
       </button>
