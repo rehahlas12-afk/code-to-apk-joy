@@ -211,7 +211,7 @@ const PalletCalcPage = () => {
           let type: EntryType = "normale";
           if (seg.includes("roll") || seg.includes("rouleau")) type = "roll";
           else if (seg.includes("demi") && seg.includes("eau")) type = "demi_eau";
-          else if (seg.includes("demi") && seg.includes("lait")) type = "demi_lait";
+          else if (seg.includes("demi") && seg.includes("lait")) type = "demi";
           else if (seg.includes("demi")) type = "demi";
           else if (seg.includes("eau")) type = "eau";
           addEntry(type, qty);
