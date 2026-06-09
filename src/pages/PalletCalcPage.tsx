@@ -88,15 +88,8 @@ function smartTotal(list: PalletEntry[]): { total: number; breakdown: string[] }
     else breakdown.push(`${reste} demi eau → ${v.toFixed(2)} pal`);
   }
 
-  // Demi lait : 2 = 1 normale
-  if (counts.demi_lait > 0) {
-    const norm = Math.floor(counts.demi_lait / 2);
-    const reste = counts.demi_lait % 2;
-    const v = norm * RATIO.normale + reste * RATIO.demi_lait;
-    total += v;
-    if (norm > 0) breakdown.push(`${counts.demi_lait} demi lait → ${norm} normale${reste ? " + 1 demi" : ""} = ${v.toFixed(2)} pal`);
-    else breakdown.push(`${reste} demi lait → ${v.toFixed(2)} pal`);
-  }
+
+
 
   // Demi générique : 2 = 1 normale
   if (counts.demi > 0) {
