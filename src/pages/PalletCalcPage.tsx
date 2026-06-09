@@ -321,6 +321,7 @@ const PalletCalcPage = () => {
           <p className="text-xs text-gray-400 bg-gray-900 rounded-lg p-2">{transcript}</p>
         )}
 
+        <div className="bg-gray-900 border-2 border-gray-600 rounded-2xl p-4 space-y-3">
           <p className="text-base font-bold text-gray-300 text-center">Ajouter une palette</p>
 
           <button
