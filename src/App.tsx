@@ -10,6 +10,7 @@ import StoreNamesPage from "./pages/StoreNamesPage";
 import PalletCalcPage from "./pages/PalletCalcPage";
 import GalleryPage from "./pages/GalleryPage";
 import TimeTrackingPage from "./pages/TimeTrackingPage";
+import CongesPage from "./pages/CongesPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
