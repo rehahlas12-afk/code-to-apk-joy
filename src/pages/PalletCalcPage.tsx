@@ -33,12 +33,12 @@ const RATIO: Record<EntryType, number> = {
 };
 
 const LABEL: Record<EntryType, string> = {
-  roll: "Roll",
-  demi: "Demi palette",
-  demi_eau: "Demi eau",
-  demi_lait: "Demi lait",
-  normale: "Palette normale",
-  eau: "Palette d'eau",
+  roll: "Rolls",
+  demi: "Palette 80/60",
+  demi_eau: "Palette 100/60",
+  demi_lait: "Palette 80/60",
+  normale: "Palette 120/80",
+  eau: "Palette 120/100",
 };
 
 function getSavedCalcs(): SavedCalc[] {
