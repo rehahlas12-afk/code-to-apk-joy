@@ -142,17 +142,17 @@ const CongesPage = () => {
             {/* Lieu */}
             <span className={overlay} style={{ top: "22%", left: "20%", fontSize: 18 }}>{info.lieu}</span>
 
-            {/* Date 1 (montée ~3 lignes) */}
-            <span className={overlay} style={{ top: "29%", left: "20%", fontSize: 18 }}>{fmt(info.date1Du)}</span>
-            <span className={overlay} style={{ top: "29%", left: "47%", fontSize: 18 }}>{fmt(info.date1Au)}</span>
+            {/* Date 1 (montée encore d'une ligne) */}
+            <span className={overlay} style={{ top: "26%", left: "20%", fontSize: 18 }}>{fmt(info.date1Du)}</span>
+            <span className={overlay} style={{ top: "26%", left: "47%", fontSize: 18 }}>{fmt(info.date1Au)}</span>
 
-            {/* Date 2 */}
-            <span className={overlay} style={{ top: "37%", left: "20%", fontSize: 18 }}>{fmt(info.date2Du)}</span>
-            <span className={overlay} style={{ top: "37%", left: "47%", fontSize: 18 }}>{fmt(info.date2Au)}</span>
+            {/* Date 2 (+2 lignes) */}
+            <span className={overlay} style={{ top: "32%", left: "20%", fontSize: 18 }}>{fmt(info.date2Du)}</span>
+            <span className={overlay} style={{ top: "32%", left: "47%", fontSize: 18 }}>{fmt(info.date2Au)}</span>
 
-            {/* Date 3 */}
-            <span className={overlay} style={{ top: "45%", left: "20%", fontSize: 18 }}>{fmt(info.date3Du)}</span>
-            <span className={overlay} style={{ top: "45%", left: "47%", fontSize: 18 }}>{fmt(info.date3Au)}</span>
+            {/* Date 3 (+2 lignes) */}
+            <span className={overlay} style={{ top: "38%", left: "20%", fontSize: 18 }}>{fmt(info.date3Du)}</span>
+            <span className={overlay} style={{ top: "38%", left: "47%", fontSize: 18 }}>{fmt(info.date3Au)}</span>
           </div>
         </div>
       </div>
