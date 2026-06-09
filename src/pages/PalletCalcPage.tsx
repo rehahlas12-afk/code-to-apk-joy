@@ -328,13 +328,19 @@ const PalletCalcPage = () => {
             onChange={(e) => setManualType(e.target.value as EntryType)}
             className="w-full rounded-xl border-2 border-gray-500 bg-gray-800 px-4 py-4 text-xl font-bold text-white"
           >
-            <option value="roll">Rolls</option>
-            <option value="normale">Palette 120/80</option>
-            <option value="eau">Palette 120/100</option>
-            <option value="demi">Palette 80/60</option>
-            <option value="demi_eau">Palette 100/60</option>
-            <option value="demi_lait">Palette 80/60 (lait)</option>
-          </select>
+        <div className="bg-gray-900 border-2 border-gray-600 rounded-2xl p-4 space-y-3">
+          <p className="text-base font-bold text-gray-300 text-center">Ajouter une palette</p>
+
+          <button
+            type="button"
+            onClick={() => setPickerOpen(true)}
+            className="w-full rounded-xl border-2 border-gray-500 bg-gray-800 px-3 py-3 flex items-center gap-3 text-left"
+          >
+            <img src={IMAGES[manualType]} alt="" className="w-14 h-14 rounded-lg object-cover bg-white" />
+            <span className="flex-1 text-xl font-bold text-white">{LABEL[manualType as EntryType]}</span>
+            <ChevronDown size={28} className="text-gray-400" />
+          </button>
+
           <div className="flex gap-2">
             <input
               type="number"
@@ -343,6 +349,56 @@ const PalletCalcPage = () => {
               placeholder="Qté"
               className="flex-1 rounded-xl border-2 border-gray-500 bg-gray-800 px-4 py-4 text-2xl font-black text-center text-white"
             />
+            <button
+              onClick={() => {
+                if (manualQty) {
+                  addEntry(manualType, parseInt(manualQty));
+                  setManualQty("");
+                }
+              }}
+              className="bg-blue-600 text-white rounded-xl px-8 py-4 text-2xl font-black"
+            >
+              +
+            </button>
+          </div>
+        </div>
+
+        {pickerOpen && (
+          <div
+            className="fixed inset-0 z-50 bg-black/80 flex items-end sm:items-center justify-center p-4"
+            onClick={() => setPickerOpen(false)}
+          >
+            <div
+              className="bg-gray-900 border-2 border-gray-600 rounded-2xl w-full max-w-md max-h-[85vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between p-4 border-b border-gray-700 sticky top-0 bg-gray-900">
+                <span className="font-black text-lg text-white">Choisir une palette</span>
+                <button onClick={() => setPickerOpen(false)} className="text-white">
+                  <X size={28} />
+                </button>
+              </div>
+              <div className="p-3 space-y-2">
+                {(["roll","normale","eau","demi","demi_eau","demi_lait"] as EntryType[]).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => { setManualType(t); setPickerOpen(false); }}
+                    className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 ${
+                      manualType === t ? "border-blue-500 bg-blue-900/30" : "border-gray-700 bg-gray-800"
+                    }`}
+                  >
+                    <img src={IMAGES[t]} alt="" className="w-20 h-20 rounded-lg object-cover bg-white" />
+                    <div className="flex-1 text-left">
+                      <p className="text-lg font-bold text-white">{LABEL[t]}</p>
+                      {t === "demi_lait" && <p className="text-xs text-gray-400">(lait)</p>}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+        </>}
             <button
               onClick={() => {
                 if (manualQty) {
