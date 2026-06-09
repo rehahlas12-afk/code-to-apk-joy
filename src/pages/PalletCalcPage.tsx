@@ -398,20 +398,6 @@ const PalletCalcPage = () => {
             </div>
           </div>
         )}
-        </>}
-            <button
-              onClick={() => {
-                if (manualQty) {
-                  addEntry(manualType, parseInt(manualQty));
-                  setManualQty("");
-                }
-              }}
-              className="bg-blue-600 text-white rounded-xl px-8 py-4 text-2xl font-black"
-            >
-              +
-            </button>
-          </div>
-        </div>
 
         <div className="space-y-1">
           {entries.map((e, i) => (
