@@ -134,25 +134,25 @@ const CongesPage = () => {
             {/* Date (haut) */}
             <span className={overlay} style={{ top: "5.5%", left: "82%", fontSize: 18 }}>{today}</span>
 
-            {/* Nom / Prénom / Code */}
-            <span className={overlay} style={{ top: "16%", left: "8%", fontSize: 18 }}>{info.nom}</span>
-            <span className={overlay} style={{ top: "16%", left: "42%", fontSize: 18 }}>{info.prenom}</span>
-            <span className={overlay} style={{ top: "16%", left: "82%", fontSize: 18 }}>{info.code}</span>
+            {/* Nom / Prénom / Code (décalés à droite, montés d'1 ligne) */}
+            <span className={overlay} style={{ top: "14%", left: "14%", fontSize: 18 }}>{info.nom}</span>
+            <span className={overlay} style={{ top: "14%", left: "48%", fontSize: 18 }}>{info.prenom}</span>
+            <span className={overlay} style={{ top: "14%", left: "84%", fontSize: 18 }}>{info.code}</span>
 
             {/* Lieu */}
             <span className={overlay} style={{ top: "22%", left: "20%", fontSize: 18 }}>{info.lieu}</span>
 
-            {/* Date 1 */}
-            <span className={overlay} style={{ top: "35%", left: "20%", fontSize: 18 }}>{fmt(info.date1Du)}</span>
-            <span className={overlay} style={{ top: "35%", left: "47%", fontSize: 18 }}>{fmt(info.date1Au)}</span>
+            {/* Date 1 (montée ~3 lignes) */}
+            <span className={overlay} style={{ top: "29%", left: "20%", fontSize: 18 }}>{fmt(info.date1Du)}</span>
+            <span className={overlay} style={{ top: "29%", left: "47%", fontSize: 18 }}>{fmt(info.date1Au)}</span>
 
             {/* Date 2 */}
-            <span className={overlay} style={{ top: "43%", left: "20%", fontSize: 18 }}>{fmt(info.date2Du)}</span>
-            <span className={overlay} style={{ top: "43%", left: "47%", fontSize: 18 }}>{fmt(info.date2Au)}</span>
+            <span className={overlay} style={{ top: "37%", left: "20%", fontSize: 18 }}>{fmt(info.date2Du)}</span>
+            <span className={overlay} style={{ top: "37%", left: "47%", fontSize: 18 }}>{fmt(info.date2Au)}</span>
 
             {/* Date 3 */}
-            <span className={overlay} style={{ top: "51%", left: "20%", fontSize: 18 }}>{fmt(info.date3Du)}</span>
-            <span className={overlay} style={{ top: "51%", left: "47%", fontSize: 18 }}>{fmt(info.date3Au)}</span>
+            <span className={overlay} style={{ top: "45%", left: "20%", fontSize: 18 }}>{fmt(info.date3Du)}</span>
+            <span className={overlay} style={{ top: "45%", left: "47%", fontSize: 18 }}>{fmt(info.date3Au)}</span>
           </div>
         </div>
       </div>
