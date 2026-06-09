@@ -112,7 +112,7 @@ function smartTotal(list: PalletEntry[]): { total: number; breakdown: string[] }
   if (counts.eau > 0) {
     const onlyOneEau = counts.eau === 1
       && counts.normale === 0 && counts.demi === 0
-      && counts.demi_eau === 0 && counts.demi_lait === 0
+      && counts.demi_eau === 0
       && counts.roll === 0;
     if (onlyOneEau) {
       total += 1;
