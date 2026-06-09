@@ -80,11 +80,11 @@ const Dashboard = () => {
     <div className="min-h-screen bg-black flex flex-col relative">
       <TruckLogo />
 
-      {/* Bouton menu hamburger en haut à droite */}
+      {/* Bouton menu hamburger en haut à gauche (blanc sur noir) */}
       <button
         onClick={() => setMenuOpen(true)}
         aria-label="Ouvrir le menu"
-        className="absolute top-3 right-3 z-30 bg-white text-black rounded-xl p-3 shadow-lg active:scale-95"
+        className="absolute top-3 left-3 z-30 bg-black text-white border-2 border-white rounded-xl p-3 shadow-lg active:scale-95"
       >
         <Menu size={28} strokeWidth={3} />
       </button>
@@ -142,7 +142,7 @@ const Dashboard = () => {
           onClick={() => setMenuOpen(false)}
         >
           <div
-            className="absolute top-0 right-0 h-full w-72 bg-black text-white flex flex-col shadow-2xl animate-in slide-in-from-right border-l-2 border-white"
+            className="absolute top-0 left-0 h-full w-72 bg-black text-white flex flex-col shadow-2xl animate-in slide-in-from-left border-r-2 border-white"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between p-4 border-b-2 border-white">
