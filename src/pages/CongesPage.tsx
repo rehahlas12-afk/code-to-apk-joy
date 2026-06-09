@@ -4,8 +4,7 @@ import { ArrowLeft, Download } from "lucide-react";
 import TruckLogo from "@/components/TruckLogo";
 import { toast } from "@/hooks/use-toast";
 import jsPDF from "jspdf";
-import html2canvas from "html2canvas";
-import formImg from "@/assets/conge-form.jpg.asset.json";
+import formImgUrl from "@/assets/conge-form.jpg";
 import { Capacitor } from "@capacitor/core";
 import { Filesystem, Directory } from "@capacitor/filesystem";
 import { Share } from "@capacitor/share";
@@ -37,6 +36,21 @@ function fmt(d: string) {
   return `${day}/${m}/${y}`;
 }
 
+const loadFormImage = () =>
+  new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("Image du formulaire introuvable"));
+    img.src = formImgUrl;
+  });
+
+const sanitizeFileName = (name: string) =>
+  name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9._-]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
 const CongesPage = () => {
   const navigate = useNavigate();
   const sheetRef = useRef<HTMLDivElement>(null);
@@ -62,61 +76,74 @@ const CongesPage = () => {
     setInfo(prev => ({ ...prev, [k]: e.target.value }));
 
   const handleDownload = async () => {
-    if (!sheetRef.current) return;
     try {
-      // Pré-charge l'image du formulaire en CORS et attend que toutes les <img> soient prêtes
-      const imgs = Array.from(sheetRef.current.querySelectorAll("img"));
-      await Promise.all(
-        imgs.map((im) => {
-          im.crossOrigin = "anonymous";
-          if (!im.src) im.src = formImg.url;
-          if (im.complete && im.naturalWidth > 0) return Promise.resolve();
-          return new Promise<void>((res) => {
-            im.onload = () => res();
-            im.onerror = () => res();
-          });
-        })
-      );
-
-      const canvas = await html2canvas(sheetRef.current, {
-        scale: 2,
-        backgroundColor: "#ffffff",
-        useCORS: true,
-        allowTaint: false,
-        logging: false,
-      });
-      const imgData = canvas.toDataURL("image/jpeg", 0.92);
+      const formImage = await loadFormImage();
       const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
       const pageW = pdf.internal.pageSize.getWidth();
       const pageH = pdf.internal.pageSize.getHeight();
-      const ratio = canvas.width / canvas.height;
-      let w = pageW, h = pageW / ratio;
-      if (h > pageH) { h = pageH; w = pageH * ratio; }
-      pdf.addImage(imgData, "JPEG", (pageW - w) / 2, (pageH - h) / 2, w, h);
-      const fname = `Conge_${info.nom || "STAF"}_${info.prenom || ""}_${new Date().toISOString().slice(0,10)}.pdf`.replace(/\s+/g, "_");
+      const ratio = formImage.naturalWidth / formImage.naturalHeight;
+      let w = pageW;
+      let h = pageW / ratio;
+      if (h > pageH) {
+        h = pageH;
+        w = pageH * ratio;
+      }
+      const x0 = (pageW - w) / 2;
+      const y0 = (pageH - h) / 2;
+
+      pdf.addImage(formImage, "JPEG", x0, y0, w, h);
+      pdf.setTextColor(0, 0, 0);
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(14);
+      const textY = (topPercent: number) => y0 + (h * topPercent) / 100 + 4.4;
+      const textX = (leftPercent: number) => x0 + (w * leftPercent) / 100;
+      const write = (txt: string, top: number, left: number) => {
+        if (txt) pdf.text(txt, textX(left), textY(top));
+      };
+
+      write(today, 5.5, 82);
+      write(info.nom, 14, 14);
+      write(info.prenom, 14, 48);
+      write(info.code, 14, 84);
+      write(info.lieu, 22, 20);
+      write(fmt(info.date1Du), 26, 20);
+      write(fmt(info.date1Au), 26, 47);
+      write(fmt(info.date2Du), 32, 20);
+      write(fmt(info.date2Au), 32, 47);
+      write(fmt(info.date3Du), 38, 20);
+      write(fmt(info.date3Au), 38, 47);
+
+      const fname = sanitizeFileName(`Conge_${info.nom || "STAF"}_${info.prenom || ""}_${new Date().toISOString().slice(0,10)}.pdf`);
 
       if (Capacitor.isNativePlatform()) {
-        // Sur Android/iOS : écrit le fichier puis ouvre le partage (enregistrer/envoyer)
-        const dataUri = pdf.output("datauristring");
-        const base64 = dataUri.split(",")[1];
-        const written = await Filesystem.writeFile({
+        const base64 = pdf.output("datauristring").split(",")[1];
+        await Filesystem.writeFile({
           path: fname,
           data: base64,
           directory: Directory.Cache,
         });
+        const file = await Filesystem.getUri({ path: fname, directory: Directory.Cache });
         try {
           await Share.share({
             title: "Demande de congé",
             text: `Demande de congé ${info.nom} ${info.prenom}`.trim(),
-            url: written.uri,
+            url: file.uri,
             dialogTitle: "Partager / Enregistrer le PDF",
           });
           toast({ title: "✅ PDF prêt à partager" });
         } catch {
-          toast({ title: "✅ PDF enregistré", description: written.uri });
+          toast({ title: "✅ PDF enregistré", description: file.uri });
         }
       } else {
-        pdf.save(fname);
+        const blob = pdf.output("blob");
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = fname;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
         toast({ title: "✅ PDF téléchargé" });
       }
     } catch (err: any) {
@@ -175,7 +202,7 @@ const CongesPage = () => {
             style={{ width: "1000px", position: "relative" }}
             className="bg-white"
           >
-            <img src={formImg.url} alt="Formulaire congé" crossOrigin="anonymous" style={{ width: "100%", display: "block" }} />
+            <img src={formImgUrl} alt="Formulaire congé" style={{ width: "100%", display: "block" }} />
 
             {/* Date (haut) */}
             <span className={overlay} style={{ top: "5.5%", left: "82%", fontSize: 18 }}>{today}</span>
