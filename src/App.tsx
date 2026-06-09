@@ -31,6 +31,7 @@ const App = () => (
           <Route path="/pallet-calc" element={<PalletCalcPage />} />
           <Route path="/gallery" element={<GalleryPage />} />
           <Route path="/time-tracking" element={<TimeTrackingPage />} />
+          <Route path="/conges" element={<CongesPage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
