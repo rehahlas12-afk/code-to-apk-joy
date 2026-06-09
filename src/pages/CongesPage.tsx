@@ -175,7 +175,7 @@ const CongesPage = () => {
             style={{ width: "1000px", position: "relative" }}
             className="bg-white"
           >
-            <img src={formImg.url} alt="Formulaire congé" style={{ width: "100%", display: "block" }} />
+            <img src={formImg.url} alt="Formulaire congé" crossOrigin="anonymous" style={{ width: "100%", display: "block" }} />
 
             {/* Date (haut) */}
             <span className={overlay} style={{ top: "5.5%", left: "82%", fontSize: 18 }}>{today}</span>
