@@ -33,12 +33,12 @@ const RATIO: Record<EntryType, number> = {
 };
 
 const LABEL: Record<EntryType, string> = {
-  roll: "Roll",
-  demi: "Demi palette",
-  demi_eau: "Demi eau",
-  demi_lait: "Demi lait",
-  normale: "Palette normale",
-  eau: "Palette d'eau",
+  roll: "Rolls",
+  demi: "Palette 80/60",
+  demi_eau: "Palette 100/60",
+  demi_lait: "Palette 80/60",
+  normale: "Palette 120/80",
+  eau: "Palette 120/100",
 };
 
 function getSavedCalcs(): SavedCalc[] {
@@ -307,26 +307,27 @@ const PalletCalcPage = () => {
           <p className="text-xs text-gray-400 bg-gray-900 rounded-lg p-2">{transcript}</p>
         )}
 
-        <div className="bg-gray-900 border border-gray-700 rounded-xl p-3 space-y-2">
+        <div className="bg-gray-900 border-2 border-gray-600 rounded-2xl p-4 space-y-3">
+          <p className="text-base font-bold text-gray-300 text-center">Ajouter une palette</p>
+          <select
+            value={manualType}
+            onChange={(e) => setManualType(e.target.value as EntryType)}
+            className="w-full rounded-xl border-2 border-gray-500 bg-gray-800 px-4 py-4 text-xl font-bold text-white"
+          >
+            <option value="roll">Rolls</option>
+            <option value="normale">Palette 120/80</option>
+            <option value="eau">Palette 120/100</option>
+            <option value="demi">Palette 80/60</option>
+            <option value="demi_eau">Palette 100/60</option>
+            <option value="demi_lait">Palette 80/60 (lait)</option>
+          </select>
           <div className="flex gap-2">
-            <select
-              value={manualType}
-              onChange={(e) => setManualType(e.target.value as EntryType)}
-              className="flex-1 rounded-lg border border-gray-600 bg-gray-800 px-2 py-2 text-sm text-white"
-            >
-              <option value="roll">Roll</option>
-              <option value="normale">Palette normale</option>
-              <option value="eau">Palette d'eau</option>
-              <option value="demi">Demi palette</option>
-              <option value="demi_eau">Demi eau</option>
-              <option value="demi_lait">Demi lait</option>
-            </select>
             <input
               type="number"
               value={manualQty}
               onChange={(e) => setManualQty(e.target.value)}
               placeholder="Qté"
-              className="w-20 rounded-lg border border-gray-600 bg-gray-800 px-2 py-2 text-sm text-center text-white"
+              className="flex-1 rounded-xl border-2 border-gray-500 bg-gray-800 px-4 py-4 text-2xl font-black text-center text-white"
             />
             <button
               onClick={() => {
@@ -335,7 +336,7 @@ const PalletCalcPage = () => {
                   setManualQty("");
                 }
               }}
-              className="bg-blue-600 text-white rounded-lg px-4 py-2 text-sm font-bold"
+              className="bg-blue-600 text-white rounded-xl px-8 py-4 text-2xl font-black"
             >
               +
             </button>
