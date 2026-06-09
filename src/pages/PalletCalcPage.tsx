@@ -15,10 +15,9 @@ const IMAGES: Record<string, string> = {
   eau: pallet120100.url,
   demi: pallet8060.url,
   demi_eau: pallet10060.url,
-  demi_lait: pallet8060.url,
 };
 
-type EntryType = "roll" | "demi" | "normale" | "eau" | "demi_eau" | "demi_lait";
+type EntryType = "roll" | "demi" | "normale" | "eau" | "demi_eau";
 
 interface PalletEntry {
   type: EntryType;
