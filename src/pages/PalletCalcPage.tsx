@@ -325,13 +325,15 @@ const PalletCalcPage = () => {
             <ChevronDown size={28} className="text-gray-400" />
           </button>
 
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
             <input
               type="number"
+              inputMode="numeric"
+              maxLength={3}
               value={manualQty}
-              onChange={(e) => setManualQty(e.target.value)}
+              onChange={(e) => setManualQty(e.target.value.slice(0, 3))}
               placeholder="Qté"
-              className="flex-1 rounded-xl border-2 border-gray-500 bg-gray-800 px-4 py-4 text-2xl font-black text-center text-white"
+              className="w-24 rounded-xl border-2 border-gray-500 bg-gray-800 px-2 py-4 text-2xl font-black text-center text-white"
             />
             <button
               onClick={() => {
@@ -340,9 +342,9 @@ const PalletCalcPage = () => {
                   setManualQty("");
                 }
               }}
-              className="bg-blue-600 text-white rounded-xl px-8 py-4 text-2xl font-black"
+              className="flex-1 bg-blue-600 text-white rounded-xl py-4 text-2xl font-black"
             >
-              +
+              + Ajouter
             </button>
           </div>
         </div>
