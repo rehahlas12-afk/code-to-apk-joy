@@ -139,6 +139,19 @@ const Dashboard = () => {
             <span className="text-sm font-bold">Quitter l'app</span>
           </button>
         </div>
+
+        {/* Bouton de partage du plan (WhatsApp / SMS / Email…) */}
+        <button
+          onClick={handleShare}
+          className="mt-4 w-full bg-green-600 text-white rounded-xl p-4 flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform"
+        >
+          <Share2 size={24} />
+          <span className="text-base font-black">Partager le plan (WhatsApp…)</span>
+        </button>
+
+        <p className="mt-3 text-center text-xs text-gray-500">
+          App ouverte {openCount} fois sur ce téléphone
+        </p>
       </div>
 
       {/* Menu latéral droit (noir & blanc) */}
