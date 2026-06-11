@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Camera, Search, Eye, Plus, Calculator, Image, LogOut, Download, Upload, CalendarClock, Menu, X, FileText } from "lucide-react";
+import { Camera, Search, Eye, Plus, Calculator, Image, LogOut, Download, Upload, CalendarClock, Menu, X, Share2 } from "lucide-react";
 import TruckLogo from "@/components/TruckLogo";
 import { getStoreNames, setStoreNames, type StoreName } from "@/lib/store";
 import { quitApplication } from "@/lib/appExit";
 import { toast } from "@/hooks/use-toast";
+import { sharePlanActive, getOpenCount } from "@/lib/shareUtils";
 
 const buttons = [
   { label: "Scanner Plan", icon: Camera, path: "/camera", color: "bg-blue-600" },
