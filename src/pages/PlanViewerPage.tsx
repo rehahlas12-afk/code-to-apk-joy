@@ -317,9 +317,18 @@ const PlanViewerPage = () => {
               <button
                 onClick={reset}
                 className="bg-black/80 border border-gray-600 rounded-full p-3 text-white shadow-lg"
-                aria-label="Réinitialiser"
+                aria-label="Réinitialiser zoom"
+                title="Réinitialiser zoom"
               >
-                <Maximize2 size={22} />
+                <RefreshCw size={22} />
+              </button>
+              <button
+                onClick={() => { reset(); setFullscreen(f => !f); }}
+                className="bg-green-700 border border-green-400 rounded-full p-3 text-white shadow-lg"
+                aria-label={fullscreen ? "Quitter plein écran" : "Plein écran"}
+                title={fullscreen ? "Quitter plein écran" : "Plein écran"}
+              >
+                {fullscreen ? <Minimize2 size={22} /> : <Maximize2 size={22} />}
               </button>
             </div>
           </div>
