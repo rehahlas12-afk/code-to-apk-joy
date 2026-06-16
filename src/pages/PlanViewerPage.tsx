@@ -201,7 +201,7 @@ const PlanViewerPage = () => {
         <h1 className="text-lg font-bold">{fullscreen ? "Plein écran" : "Visualiser Plan"}</h1>
       </div>
 
-      {plans.length > 0 && (
+      {plans.length > 0 && !fullscreen && (
         <div className="px-4 pb-2">
           {plans.length > 1 && (
             <p className="text-xs text-gray-400 mb-2">Sélectionnez un plan :</p>
