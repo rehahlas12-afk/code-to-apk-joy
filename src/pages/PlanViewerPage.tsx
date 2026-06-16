@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Trash2, Check, ZoomIn, ZoomOut, Maximize2, RefreshCw, Loader2 } from "lucide-react";
+import { ArrowLeft, Trash2, Check, ZoomIn, ZoomOut, Maximize2, Minimize2, RefreshCw, Loader2 } from "lucide-react";
 import { activatePlan, deletePlan, getActivePlan, getPlans, updatePlanStores } from "@/lib/store";
 import { ocrAnalyzePlan } from "@/lib/ocr";
 import TruckLogo from "@/components/TruckLogo";
@@ -12,6 +12,7 @@ const PlanViewerPage = () => {
   const [plans, setPlans] = useState(initialPlans);
   const [selectedPlan, setSelectedPlan] = useState(getActivePlan() || initialPlans[0] || null);
   const [reanalyzingId, setReanalyzingId] = useState<string | null>(null);
+  const [fullscreen, setFullscreen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
@@ -188,16 +189,19 @@ const PlanViewerPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-black flex flex-col text-white">
-      <TruckLogo />
+    <div className={`min-h-screen bg-black flex flex-col text-white ${fullscreen ? "fixed inset-0 z-50" : ""}`}>
+      {!fullscreen && <TruckLogo />}
       <div className="flex items-center gap-3 px-4 py-2">
-        <button onClick={() => navigate("/")} className="p-2 rounded-lg bg-gray-800">
+        <button
+          onClick={() => (fullscreen ? setFullscreen(false) : navigate("/"))}
+          className="p-2 rounded-lg bg-gray-800"
+        >
           <ArrowLeft size={20} />
         </button>
-        <h1 className="text-lg font-bold">Visualiser Plan</h1>
+        <h1 className="text-lg font-bold">{fullscreen ? "Plein écran" : "Visualiser Plan"}</h1>
       </div>
 
-      {plans.length > 0 && (
+      {plans.length > 0 && !fullscreen && (
         <div className="px-4 pb-2">
           {plans.length > 1 && (
             <p className="text-xs text-gray-400 mb-2">Sélectionnez un plan :</p>
@@ -241,31 +245,36 @@ const PlanViewerPage = () => {
 
       {selectedPlan ? (
         <div className="flex-1 px-4 pb-3 flex flex-col gap-2 min-h-0">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex-1 min-w-0">
-              <p className="text-3xl font-black text-green-400 leading-tight">
-                {selectedPlan.stores.length} magasins
-              </p>
-              <p className="text-xs text-gray-400">
-                {selectedPlan.date} • {Math.round(scale * 100)}%
-              </p>
+          {!fullscreen && (
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex-1 min-w-0">
+                <p className="text-3xl font-black text-green-400 leading-tight">
+                  {selectedPlan.stores.length} magasins
+                </p>
+                <p className="text-2xl font-black text-orange-400 leading-tight">
+                  {selectedPlan.stores.length} tournées
+                </p>
+                <p className="text-xs text-gray-400">
+                  {selectedPlan.date} • {Math.round(scale * 100)}%
+                </p>
+              </div>
+              <button
+                onClick={() => handleReanalyze(selectedPlan)}
+                disabled={reanalyzingId === selectedPlan.id}
+                className="flex items-center gap-1 text-xs font-bold bg-orange-600 hover:bg-orange-700 disabled:opacity-60 text-white rounded-lg px-3 py-2"
+              >
+                {reanalyzingId === selectedPlan.id ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <RefreshCw size={16} />
+                )}
+                Analyser
+              </button>
+              <button onClick={() => handleDelete(selectedPlan.id)} className="p-2 text-red-500">
+                <Trash2 size={18} />
+              </button>
             </div>
-            <button
-              onClick={() => handleReanalyze(selectedPlan)}
-              disabled={reanalyzingId === selectedPlan.id}
-              className="flex items-center gap-1 text-xs font-bold bg-orange-600 hover:bg-orange-700 disabled:opacity-60 text-white rounded-lg px-3 py-2"
-            >
-              {reanalyzingId === selectedPlan.id ? (
-                <Loader2 size={16} className="animate-spin" />
-              ) : (
-                <RefreshCw size={16} />
-              )}
-              Analyser
-            </button>
-            <button onClick={() => handleDelete(selectedPlan.id)} className="p-2 text-red-500">
-              <Trash2 size={18} />
-            </button>
-          </div>
+          )}
 
 
           <div
@@ -308,9 +317,18 @@ const PlanViewerPage = () => {
               <button
                 onClick={reset}
                 className="bg-black/80 border border-gray-600 rounded-full p-3 text-white shadow-lg"
-                aria-label="Réinitialiser"
+                aria-label="Réinitialiser zoom"
+                title="Réinitialiser zoom"
               >
-                <Maximize2 size={22} />
+                <RefreshCw size={22} />
+              </button>
+              <button
+                onClick={() => { reset(); setFullscreen(f => !f); }}
+                className="bg-green-700 border border-green-400 rounded-full p-3 text-white shadow-lg"
+                aria-label={fullscreen ? "Quitter plein écran" : "Plein écran"}
+                title={fullscreen ? "Quitter plein écran" : "Plein écran"}
+              >
+                {fullscreen ? <Minimize2 size={22} /> : <Maximize2 size={22} />}
               </button>
             </div>
           </div>

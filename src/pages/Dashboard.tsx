@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Camera, Search, Eye, Plus, Calculator, Image, LogOut, Download, Upload, CalendarClock, Menu, X, Share2 } from "lucide-react";
+import { Camera, Search, Eye, Plus, Calculator, Image, LogOut, Download, Upload, CalendarClock, Menu, X, Share2, FileText } from "lucide-react";
 import TruckLogo from "@/components/TruckLogo";
 import { getStoreNames, setStoreNames, type StoreName } from "@/lib/store";
 import { quitApplication } from "@/lib/appExit";
 import { toast } from "@/hooks/use-toast";
-import { sharePlanActive, getOpenCount } from "@/lib/shareUtils";
+import { sharePlanActive, sharePlanAsPDF, getOpenCount } from "@/lib/shareUtils";
 
 const buttons = [
   { label: "Scanner Plan", icon: Camera, path: "/camera", color: "bg-blue-600" },
@@ -79,6 +79,11 @@ const Dashboard = () => {
     const r = await sharePlanActive();
     toast({ title: r.ok ? "✅ " + r.message : "⚠️ " + r.message, variant: r.ok ? "default" : "destructive" });
   };
+  const handleSharePDF = async () => {
+    toast({ title: "📄 Préparation du PDF…" });
+    const r = await sharePlanAsPDF();
+    toast({ title: r.ok ? "✅ " + r.message : "⚠️ " + r.message, variant: r.ok ? "default" : "destructive" });
+  };
 
   const go = (path: string) => { setMenuOpen(false); navigate(path); };
 
@@ -140,14 +145,23 @@ const Dashboard = () => {
           </button>
         </div>
 
-        {/* Bouton de partage du plan (WhatsApp / SMS / Email…) */}
-        <button
-          onClick={handleShare}
-          className="mt-4 w-full bg-green-600 text-white rounded-xl p-4 flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform"
-        >
-          <Share2 size={24} />
-          <span className="text-base font-black">Partager le plan (WhatsApp…)</span>
-        </button>
+        {/* Partage du plan : image (WhatsApp/SMS) + PDF */}
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          <button
+            onClick={handleShare}
+            className="bg-green-600 text-white rounded-xl p-4 flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform"
+          >
+            <Share2 size={22} />
+            <span className="text-sm font-black">Partager image</span>
+          </button>
+          <button
+            onClick={handleSharePDF}
+            className="bg-emerald-700 text-white rounded-xl p-4 flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform"
+          >
+            <FileText size={22} />
+            <span className="text-sm font-black">Partager PDF</span>
+          </button>
+        </div>
 
         <p className="mt-3 text-center text-xs text-gray-500">
           App ouverte {openCount} fois sur ce téléphone

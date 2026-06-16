@@ -1,6 +1,7 @@
 import { Capacitor } from "@capacitor/core";
 import { Filesystem, Directory } from "@capacitor/filesystem";
 import { Share } from "@capacitor/share";
+import jsPDF from "jspdf";
 import { getActivePlan } from "@/lib/store";
 
 const OPEN_COUNT_KEY = "staf_open_count";
@@ -16,7 +17,41 @@ export function getOpenCount(): number {
   return Number(localStorage.getItem(OPEN_COUNT_KEY) || "0");
 }
 
-/** Partage le plan actif via le menu natif (WhatsApp, SMS, etc.) ou WhatsApp web en fallback. */
+function loadImg(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+async function buildPlanPDF(): Promise<{ blob: Blob; base64: string; fname: string } | null> {
+  const plan = getActivePlan();
+  if (!plan?.imageData) return null;
+  const img = await loadImg(plan.imageData);
+  const isLandscape = img.width > img.height;
+  const pdf = new jsPDF({ orientation: isLandscape ? "landscape" : "portrait", unit: "mm", format: "a4" });
+  const pageW = pdf.internal.pageSize.getWidth();
+  const pageH = pdf.internal.pageSize.getHeight();
+  const margin = 8;
+  const maxW = pageW - margin * 2;
+  const maxH = pageH - margin * 2 - 10;
+  const ratio = Math.min(maxW / img.width, maxH / img.height);
+  const w = img.width * ratio;
+  const h = img.height * ratio;
+  const x = (pageW - w) / 2;
+  const y = margin + 8;
+  pdf.setFontSize(11);
+  pdf.text(`Plan STAF — ${plan.date} ${plan.time} — ${plan.stores.length} magasins / ${plan.stores.length} tournées`, margin, margin + 4);
+  pdf.addImage(plan.imageData, "JPEG", x, y, w, h, undefined, "FAST");
+  const blob = pdf.output("blob");
+  const base64 = (pdf.output("datauristring") as string).split(",")[1];
+  const fname = `plan-staf-${Date.now()}.pdf`;
+  return { blob, base64, fname };
+}
+
+/** Partage le plan actif en image via le menu natif (WhatsApp, SMS, etc.) */
 export async function sharePlanActive(): Promise<{ ok: boolean; message: string }> {
   const plan = getActivePlan();
   if (!plan?.imageData) {
@@ -26,29 +61,17 @@ export async function sharePlanActive(): Promise<{ ok: boolean; message: string 
 
   if (Capacitor.isNativePlatform()) {
     try {
-      const base64 = plan.imageData.includes(",")
-        ? plan.imageData.split(",")[1]
-        : plan.imageData;
+      const base64 = plan.imageData.includes(",") ? plan.imageData.split(",")[1] : plan.imageData;
       const fname = `plan-staf-${Date.now()}.jpg`;
-      await Filesystem.writeFile({
-        path: fname,
-        data: base64,
-        directory: Directory.Cache,
-      });
+      await Filesystem.writeFile({ path: fname, data: base64, directory: Directory.Cache });
       const file = await Filesystem.getUri({ path: fname, directory: Directory.Cache });
-      await Share.share({
-        title: "Plan STAF",
-        text,
-        url: file.uri,
-        dialogTitle: "Partager le plan (WhatsApp, SMS, Email…)",
-      });
+      await Share.share({ title: "Plan STAF", text, url: file.uri, dialogTitle: "Partager le plan" });
       return { ok: true, message: "Plan partagé" };
     } catch (e: any) {
       return { ok: false, message: e?.message || "Partage annulé" };
     }
   }
 
-  // Web fallback
   try {
     const res = await fetch(plan.imageData);
     const blob = await res.blob();
@@ -59,7 +82,36 @@ export async function sharePlanActive(): Promise<{ ok: boolean; message: string 
       return { ok: true, message: "Plan partagé" };
     }
   } catch {}
-  // WhatsApp web ultime fallback (texte seul)
   window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
   return { ok: true, message: "Ouverture de WhatsApp" };
+}
+
+/** Partage le plan actif en PDF (téléchargeable + partageable). */
+export async function sharePlanAsPDF(): Promise<{ ok: boolean; message: string }> {
+  const built = await buildPlanPDF();
+  if (!built) return { ok: false, message: "Aucun plan actif. Scanne un plan d'abord." };
+  const { blob, base64, fname } = built;
+  const text = "Plan STAF Transport (PDF)";
+
+  if (Capacitor.isNativePlatform()) {
+    try {
+      await Filesystem.writeFile({ path: fname, data: base64, directory: Directory.Cache });
+      const file = await Filesystem.getUri({ path: fname, directory: Directory.Cache });
+      await Share.share({ title: "Plan STAF (PDF)", text, url: file.uri, dialogTitle: "Partager le PDF" });
+      return { ok: true, message: "PDF partagé" };
+    } catch (e: any) {
+      return { ok: false, message: e?.message || "Partage annulé" };
+    }
+  }
+
+  // Web: download
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fname;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  return { ok: true, message: "PDF téléchargé" };
 }
