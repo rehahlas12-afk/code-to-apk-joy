@@ -1,18 +1,22 @@
 import { useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Camera, Upload } from "lucide-react";
+import { ArrowLeft, Camera, Upload, Sun, Moon, ImageIcon } from "lucide-react";
 import { getPlanStorageErrorMessage, isQuotaExceededError, savePlan } from "@/lib/store";
 import { ocrAnalyzePlan } from "@/lib/ocr";
 import { optimizePlanImage, readAndOptimizeImageFile } from "@/lib/planImage";
 import { toast } from "@/hooks/use-toast";
 import TruckLogo from "@/components/TruckLogo";
 
+type Mode = "original" | "clair" | "sombre";
+
 const CameraPage = () => {
   const navigate = useNavigate();
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [streaming, setStreaming] = useState(false);
+  const [originalImage, setOriginalImage] = useState<string | null>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [mode, setMode] = useState<Mode>("original");
   const [analyzing, setAnalyzing] = useState(false);
   const [ocrProgress, setOcrProgress] = useState(0);
 
