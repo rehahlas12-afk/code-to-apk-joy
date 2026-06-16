@@ -42,6 +42,52 @@ const CameraPage = () => {
     }
   }, []);
 
+  const applyMode = useCallback(async (src: string, m: Mode): Promise<string> => {
+    if (m === "original") return src;
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const c = document.createElement("canvas");
+        c.width = img.width; c.height = img.height;
+        const ctx = c.getContext("2d")!;
+        ctx.drawImage(img, 0, 0);
+        const d = ctx.getImageData(0, 0, c.width, c.height);
+        const px = d.data;
+        if (m === "sombre") {
+          // Invert + boost contrast → fond noir, texte blanc
+          for (let i = 0; i < px.length; i += 4) {
+            const r = 255 - px[i], g = 255 - px[i + 1], b = 255 - px[i + 2];
+            const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+            const v = lum < 90 ? 0 : lum > 170 ? 255 : Math.round((lum - 90) * 255 / 80);
+            px[i] = v; px[i + 1] = v; px[i + 2] = v;
+          }
+        } else {
+          // Clair : N&B haute lisibilité
+          for (let i = 0; i < px.length; i += 4) {
+            const lum = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
+            const v = lum < 110 ? 0 : lum > 180 ? 255 : Math.round((lum - 110) * 255 / 70);
+            px[i] = v; px[i + 1] = v; px[i + 2] = v;
+          }
+        }
+        ctx.putImageData(d, 0, 0);
+        resolve(c.toDataURL("image/jpeg", 0.92));
+      };
+      img.onerror = reject;
+      img.src = src;
+    });
+  }, []);
+
+  const changeMode = useCallback(async (m: Mode) => {
+    if (!originalImage) return;
+    setMode(m);
+    try {
+      const out = await applyMode(originalImage, m);
+      setCapturedImage(out);
+    } catch {
+      toast({ title: "Impossible d'appliquer le mode", variant: "destructive" });
+    }
+  }, [originalImage, applyMode]);
+
   const capture = useCallback(async () => {
     if (!videoRef.current) return;
 
@@ -53,7 +99,9 @@ const CameraPage = () => {
 
     try {
       const dataUrl = await optimizePlanImage(canvas.toDataURL("image/jpeg", 0.92));
+      setOriginalImage(dataUrl);
       setCapturedImage(dataUrl);
+      setMode("original");
       stopCamera();
     } catch (error) {
       console.error("Capture error:", error);
@@ -67,7 +115,9 @@ const CameraPage = () => {
 
     try {
       const optimizedImage = await readAndOptimizeImageFile(file);
+      setOriginalImage(optimizedImage);
       setCapturedImage(optimizedImage);
+      setMode("original");
       stopCamera();
     } catch (error) {
       console.error("File upload error:", error);
