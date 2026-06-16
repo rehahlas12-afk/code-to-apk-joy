@@ -12,6 +12,7 @@ const PlanViewerPage = () => {
   const [plans, setPlans] = useState(initialPlans);
   const [selectedPlan, setSelectedPlan] = useState(getActivePlan() || initialPlans[0] || null);
   const [reanalyzingId, setReanalyzingId] = useState<string | null>(null);
+  const [fullscreen, setFullscreen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
