@@ -205,11 +205,32 @@ const CameraPage = () => {
           </>
         ) : (
           <>
-            <div className="flex-1 rounded-xl overflow-hidden min-h-0">
+            <div className="flex-1 rounded-xl overflow-hidden min-h-0 bg-black">
               <img src={capturedImage} alt="Plan capturé" className="w-full h-full object-contain" />
             </div>
+            {/* Choix du mode d'affichage du plan */}
+            <div className="grid grid-cols-3 gap-2 shrink-0">
+              <button
+                onClick={() => changeMode("original")}
+                className={`rounded-xl p-3 flex flex-col items-center gap-1 font-bold text-xs border-2 ${mode === "original" ? "bg-blue-600 border-white" : "bg-gray-800 border-gray-700"}`}
+              >
+                <ImageIcon size={20} /> Original
+              </button>
+              <button
+                onClick={() => changeMode("clair")}
+                className={`rounded-xl p-3 flex flex-col items-center gap-1 font-bold text-xs border-2 ${mode === "clair" ? "bg-yellow-500 text-black border-white" : "bg-gray-800 border-gray-700"}`}
+              >
+                <Sun size={20} /> Clair
+              </button>
+              <button
+                onClick={() => changeMode("sombre")}
+                className={`rounded-xl p-3 flex flex-col items-center gap-1 font-bold text-xs border-2 ${mode === "sombre" ? "bg-indigo-700 border-white" : "bg-gray-800 border-gray-700"}`}
+              >
+                <Moon size={20} /> Sombre
+              </button>
+            </div>
             <div className="flex gap-3 shrink-0">
-              <button onClick={() => setCapturedImage(null)} className="flex-1 bg-gray-700 rounded-xl p-4 font-bold text-lg">
+              <button onClick={() => { setCapturedImage(null); setOriginalImage(null); setMode("original"); }} className="flex-1 bg-gray-700 rounded-xl p-4 font-bold text-lg">
                 Reprendre
               </button>
               <button onClick={analyzePlan} disabled={analyzing} className="flex-1 bg-green-600 text-white rounded-xl p-4 font-bold text-lg disabled:opacity-50">
