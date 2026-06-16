@@ -79,6 +79,11 @@ const Dashboard = () => {
     const r = await sharePlanActive();
     toast({ title: r.ok ? "✅ " + r.message : "⚠️ " + r.message, variant: r.ok ? "default" : "destructive" });
   };
+  const handleSharePDF = async () => {
+    toast({ title: "📄 Préparation du PDF…" });
+    const r = await sharePlanAsPDF();
+    toast({ title: r.ok ? "✅ " + r.message : "⚠️ " + r.message, variant: r.ok ? "default" : "destructive" });
+  };
 
   const go = (path: string) => { setMenuOpen(false); navigate(path); };
 
