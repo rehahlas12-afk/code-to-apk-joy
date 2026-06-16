@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Trash2, Check, ZoomIn, ZoomOut, Maximize2, RefreshCw, Loader2 } from "lucide-react";
+import { ArrowLeft, Trash2, Check, ZoomIn, ZoomOut, Maximize2, Minimize2, RefreshCw, Loader2 } from "lucide-react";
 import { activatePlan, deletePlan, getActivePlan, getPlans, updatePlanStores } from "@/lib/store";
 import { ocrAnalyzePlan } from "@/lib/ocr";
 import TruckLogo from "@/components/TruckLogo";
