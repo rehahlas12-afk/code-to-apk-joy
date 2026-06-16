@@ -189,13 +189,16 @@ const PlanViewerPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-black flex flex-col text-white">
-      <TruckLogo />
+    <div className={`min-h-screen bg-black flex flex-col text-white ${fullscreen ? "fixed inset-0 z-50" : ""}`}>
+      {!fullscreen && <TruckLogo />}
       <div className="flex items-center gap-3 px-4 py-2">
-        <button onClick={() => navigate("/")} className="p-2 rounded-lg bg-gray-800">
+        <button
+          onClick={() => (fullscreen ? setFullscreen(false) : navigate("/"))}
+          className="p-2 rounded-lg bg-gray-800"
+        >
           <ArrowLeft size={20} />
         </button>
-        <h1 className="text-lg font-bold">Visualiser Plan</h1>
+        <h1 className="text-lg font-bold">{fullscreen ? "Plein écran" : "Visualiser Plan"}</h1>
       </div>
 
       {plans.length > 0 && (
