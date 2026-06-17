@@ -1,8 +1,8 @@
 import { Capacitor } from "@capacitor/core";
-import { Filesystem, Directory } from "@capacitor/filesystem";
 import { Share } from "@capacitor/share";
 import jsPDF from "jspdf";
 import { getActivePlan } from "@/lib/store";
+import { base64FromDataUrl, saveBase64ToPhone, sharePhoneFile } from "@/lib/nativeFile";
 
 const OPEN_COUNT_KEY = "staf_open_count";
 const OPEN_COUNT_LAST_KEY = "staf_open_count_last";
@@ -61,12 +61,10 @@ export async function sharePlanActive(): Promise<{ ok: boolean; message: string 
 
   if (Capacitor.isNativePlatform()) {
     try {
-      const base64 = plan.imageData.includes(",") ? plan.imageData.split(",")[1] : plan.imageData;
       const fname = `plan-staf-${Date.now()}.jpg`;
-      await Filesystem.writeFile({ path: fname, data: base64, directory: Directory.Cache });
-      const file = await Filesystem.getUri({ path: fname, directory: Directory.Cache });
-      await Share.share({ title: "Plan STAF", text, url: file.uri, dialogTitle: "Partager le plan" });
-      return { ok: true, message: "Plan partagé" };
+      const saved = await saveBase64ToPhone(fname, base64FromDataUrl(plan.imageData));
+      await sharePhoneFile({ uri: saved.uri, title: "Plan STAF", text, dialogTitle: "Partager le plan", mimeType: "image/jpeg" });
+      return { ok: true, message: `Plan enregistré dans ${saved.label}` };
     } catch (e: any) {
       return { ok: false, message: e?.message || "Partage annulé" };
     }
@@ -95,10 +93,9 @@ export async function sharePlanAsPDF(): Promise<{ ok: boolean; message: string }
 
   if (Capacitor.isNativePlatform()) {
     try {
-      await Filesystem.writeFile({ path: fname, data: base64, directory: Directory.Cache });
-      const file = await Filesystem.getUri({ path: fname, directory: Directory.Cache });
-      await Share.share({ title: "Plan STAF (PDF)", text, url: file.uri, dialogTitle: "Partager le PDF" });
-      return { ok: true, message: "PDF partagé" };
+      const saved = await saveBase64ToPhone(fname, base64);
+      await sharePhoneFile({ uri: saved.uri, title: "Plan STAF (PDF)", text, dialogTitle: "Partager le PDF", mimeType: "application/pdf" });
+      return { ok: true, message: `PDF enregistré dans ${saved.label}` };
     } catch (e: any) {
       return { ok: false, message: e?.message || "Partage annulé" };
     }
