@@ -6,6 +6,9 @@ import { VitePWA } from "vite-plugin-pwa";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
+  define: {
+    __APP_BUILD__: JSON.stringify(process.env.GITHUB_RUN_NUMBER || "0"),
+  },
   server: {
     host: "::",
     port: 8080,
