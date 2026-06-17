@@ -13,6 +13,7 @@ import TimeTrackingPage from "./pages/TimeTrackingPage";
 import NotFound from "./pages/NotFound";
 import { useEffect } from "react";
 import { incrementOpenCount } from "@/lib/shareUtils";
+import UpdateBanner from "@/components/UpdateBanner";
 
 const queryClient = new QueryClient();
 
@@ -22,6 +23,7 @@ const App = () => {
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
+      <UpdateBanner />
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Dashboard />} />
