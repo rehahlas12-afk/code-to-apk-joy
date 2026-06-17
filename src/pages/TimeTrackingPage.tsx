@@ -8,7 +8,7 @@ import { Share } from "@capacitor/share";
 import TruckLogo from "@/components/TruckLogo";
 import { toast } from "@/hooks/use-toast";
 import { getHolidayName } from "@/lib/holidays";
-import { saveBase64ToPhone, sharePhoneFile } from "@/lib/nativeFile";
+import { saveBase64ToPhone, saveTextToPhone, sharePhoneFile } from "@/lib/nativeFile";
 
 type AbsenceType = "repos" | "conge" | "maladie";
 type SaveMode = "auto" | "manual";
@@ -324,8 +324,10 @@ const TimeTrackingPage = () => {
     const fileName = `staf-pointage-${new Date().toISOString().slice(0,10)}.json`;
     try {
       if (Capacitor.isNativePlatform()) {
-        const saved = await Filesystem.writeFile({ path: fileName, data: json, directory: Directory.Documents, encoding: "utf8" as any });
-        await Share.share({ title: fileName, text: "Sauvegarde Pointage", url: saved.uri, dialogTitle: "Enregistrer ou partager la sauvegarde" });
+        const saved = await saveTextToPhone(fileName, json);
+        try {
+          await sharePhoneFile({ uri: saved.uri, title: fileName, text: "Sauvegarde Pointage", dialogTitle: "Partager la sauvegarde", mimeType: "application/json" });
+        } catch { /* fichier déjà enregistré */ }
       } else {
         const blob = new Blob([json], { type: "application/json" });
         const url = URL.createObjectURL(blob);
