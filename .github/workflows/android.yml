@@ -46,6 +46,108 @@ jobs:
             npx cap add android
           fi
 
+      - name: Add native Downloads saver for PDFs and plans
+        run: |
+          mkdir -p android/app/src/main/java/com/sabrinos/app
+          cat > android/app/src/main/java/com/sabrinos/app/DownloadSaverPlugin.java <<'JAVA'
+          package com.sabrinos.app;
+
+          import android.content.ContentResolver;
+          import android.content.ContentValues;
+          import android.content.Intent;
+          import android.net.Uri;
+          import android.os.Build;
+          import android.os.Environment;
+          import android.provider.MediaStore;
+          import android.util.Base64;
+          import androidx.core.content.FileProvider;
+          import com.getcapacitor.JSObject;
+          import com.getcapacitor.Plugin;
+          import com.getcapacitor.PluginCall;
+          import com.getcapacitor.PluginMethod;
+          import com.getcapacitor.annotation.CapacitorPlugin;
+          import java.io.File;
+          import java.io.FileOutputStream;
+          import java.io.OutputStream;
+
+          @CapacitorPlugin(name = "DownloadSaver")
+          public class DownloadSaverPlugin extends Plugin {
+              private static final String APP_FOLDER = "STAF-Transport";
+
+              @PluginMethod
+              public void saveBase64(PluginCall call) {
+                  String fileName = call.getString("fileName", "staf-fichier.pdf");
+                  String data = call.getString("data", "");
+                  String mimeType = call.getString("mimeType", "application/octet-stream");
+                  try {
+                      byte[] bytes = Base64.decode(data, Base64.DEFAULT);
+                      JSObject ret = new JSObject();
+                      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                          ContentResolver resolver = getContext().getContentResolver();
+                          ContentValues values = new ContentValues();
+                          values.put(MediaStore.MediaColumns.DISPLAY_NAME, fileName);
+                          values.put(MediaStore.MediaColumns.MIME_TYPE, mimeType);
+                          values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/" + APP_FOLDER);
+                          values.put(MediaStore.MediaColumns.IS_PENDING, 1);
+                          Uri uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+                          if (uri == null) throw new Exception("Téléchargement indisponible");
+                          try (OutputStream out = resolver.openOutputStream(uri)) {
+                              if (out == null) throw new Exception("Fichier impossible à ouvrir");
+                              out.write(bytes);
+                          }
+                          values.clear();
+                          values.put(MediaStore.MediaColumns.IS_PENDING, 0);
+                          resolver.update(uri, values, null, null);
+                          ret.put("uri", uri.toString());
+                      } else {
+                          File dir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), APP_FOLDER);
+                          if (!dir.exists() && !dir.mkdirs()) throw new Exception("Dossier Téléchargements inaccessible");
+                          File file = new File(dir, fileName);
+                          try (FileOutputStream out = new FileOutputStream(file)) { out.write(bytes); }
+                          Uri uri = FileProvider.getUriForFile(getActivity(), getContext().getPackageName() + ".fileprovider", file);
+                          ret.put("uri", uri.toString());
+                      }
+                      ret.put("path", "Téléchargements/" + APP_FOLDER + "/" + fileName);
+                      call.resolve(ret);
+                  } catch (Exception e) {
+                      call.reject(e.getMessage() == null ? "Erreur téléchargement" : e.getMessage());
+                  }
+              }
+
+              @PluginMethod
+              public void shareUri(PluginCall call) {
+                  String uriString = call.getString("uri");
+                  String title = call.getString("title", "STAF Transport");
+                  String text = call.getString("text", "");
+                  String mimeType = call.getString("mimeType", "application/octet-stream");
+                  if (uriString == null || uriString.length() == 0) { call.reject("Fichier introuvable"); return; }
+                  try {
+                      Intent intent = new Intent(Intent.ACTION_SEND);
+                      intent.setType(mimeType);
+                      intent.putExtra(Intent.EXTRA_STREAM, Uri.parse(uriString));
+                      intent.putExtra(Intent.EXTRA_SUBJECT, title);
+                      if (text != null && text.length() > 0) intent.putExtra(Intent.EXTRA_TEXT, text);
+                      intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                      Intent chooser = Intent.createChooser(intent, "Partager");
+                      chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                      getContext().startActivity(chooser);
+                      call.resolve();
+                  } catch (Exception e) {
+                      call.reject(e.getMessage() == null ? "Partage impossible" : e.getMessage());
+                  }
+              }
+          }
+          JAVA
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("android/app/src/main/java/com/sabrinos/app/MainActivity.java")
+          s = p.read_text()
+          if "DownloadSaverPlugin.class" not in s:
+              s = s.replace("import com.getcapacitor.BridgeActivity;", "import com.getcapacitor.BridgeActivity;\nimport android.os.Bundle;")
+              s = s.replace("public class MainActivity extends BridgeActivity {}", "public class MainActivity extends BridgeActivity {\n    @Override\n    public void onCreate(Bundle savedInstanceState) {\n        registerPlugin(DownloadSaverPlugin.class);\n        super.onCreate(savedInstanceState);\n    }\n}")
+              p.write_text(s)
+          PY
+
       - name: Generate Android launcher icons & splash from resources/icon.png
         run: |
           if [ -f "resources/icon.png" ]; then
@@ -96,6 +198,8 @@ jobs:
                   block += "    " + tag + "\n"
           if block:
               s = re.sub(r'(<manifest[^>]*>\s*\n)', r'\1' + block, s, count=1)
+          s = re.sub(r'<application\b(?![^>]*requestLegacyExternalStorage)', '<application android:requestLegacyExternalStorage="true"', s, count=1)
+          if block or 'requestLegacyExternalStorage' in s:
               p.write_text(s)
               print("Injected permissions:\n" + block)
           else:
