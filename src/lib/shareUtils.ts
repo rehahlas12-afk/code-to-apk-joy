@@ -63,7 +63,7 @@ export async function sharePlanActive(): Promise<{ ok: boolean; message: string 
     try {
       const fname = `plan-staf-${Date.now()}.jpg`;
       const saved = await saveBase64ToPhone(fname, base64FromDataUrl(plan.imageData));
-      await sharePhoneFile({ uri: saved.uri, title: "Plan STAF", text, dialogTitle: "Partager le plan" });
+      await sharePhoneFile({ uri: saved.uri, title: "Plan STAF", text, dialogTitle: "Partager le plan", mimeType: "image/jpeg" });
       return { ok: true, message: `Plan enregistré dans ${saved.label}` };
     } catch (e: any) {
       return { ok: false, message: e?.message || "Partage annulé" };
@@ -94,7 +94,7 @@ export async function sharePlanAsPDF(): Promise<{ ok: boolean; message: string }
   if (Capacitor.isNativePlatform()) {
     try {
       const saved = await saveBase64ToPhone(fname, base64);
-      await sharePhoneFile({ uri: saved.uri, title: "Plan STAF (PDF)", text, dialogTitle: "Partager le PDF" });
+      await sharePhoneFile({ uri: saved.uri, title: "Plan STAF (PDF)", text, dialogTitle: "Partager le PDF", mimeType: "application/pdf" });
       return { ok: true, message: `PDF enregistré dans ${saved.label}` };
     } catch (e: any) {
       return { ok: false, message: e?.message || "Partage annulé" };
