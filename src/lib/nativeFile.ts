@@ -1,6 +1,7 @@
 import { Capacitor } from "@capacitor/core";
 import { Directory, Filesystem } from "@capacitor/filesystem";
 import { Share } from "@capacitor/share";
+import { DownloadSaver } from "@/lib/downloadSaver";
 
 const APP_FOLDER = "STAF-Transport";
 
@@ -14,6 +15,16 @@ export function safeFileName(name: string): string {
 
 export async function saveBase64ToPhone(fileName: string, base64: string): Promise<{ uri: string; label: string }> {
   const cleanName = safeFileName(fileName);
+
+  if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android") {
+    try {
+      const mimeType = cleanName.toLowerCase().endsWith(".pdf") ? "application/pdf" : "image/jpeg";
+      const saved = await DownloadSaver.saveBase64({ fileName: cleanName, data: base64, mimeType });
+      return { uri: saved.uri, label: saved.path || `Téléchargements/${APP_FOLDER}/${cleanName}` };
+    } catch {
+      // Fallback Capacitor si le module natif n'est pas encore présent dans l'ancien APK.
+    }
+  }
 
   try {
     await Filesystem.requestPermissions();
@@ -47,8 +58,22 @@ export async function sharePhoneFile(options: {
   title: string;
   text?: string;
   dialogTitle?: string;
+  mimeType?: string;
 }): Promise<void> {
   if (!Capacitor.isNativePlatform()) return;
+  if (Capacitor.getPlatform() === "android" && options.uri.startsWith("content://")) {
+    try {
+      await DownloadSaver.shareUri({
+        uri: options.uri,
+        title: options.title,
+        text: options.text,
+        mimeType: options.mimeType || "application/octet-stream",
+      });
+      return;
+    } catch {
+      // Fallback du plugin Share ci-dessous.
+    }
+  }
   try {
     await Share.share({
       title: options.title,
