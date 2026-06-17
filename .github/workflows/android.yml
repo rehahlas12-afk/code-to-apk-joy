@@ -35,9 +35,12 @@ jobs:
         run: npm install --legacy-peer-deps
 
       - name: Build web assets (Vite)
+        env:
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
         run: |
           npm run build
           rm -f dist/tessdata/fra.traineddata
+
 
 
       - name: Add Android platform (if missing)
