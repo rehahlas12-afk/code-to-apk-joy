@@ -555,7 +555,7 @@ const TimeTrackingPage = () => {
       try {
         const data = String(doc.output("datauristring")).split(",")[1];
         const saved = await saveBase64ToPhone(fileName, data);
-        await sharePhoneFile({ uri: saved.uri, title: fileName, text: "Pointage PDF", dialogTitle: "Partager le PDF" });
+        await sharePhoneFile({ uri: saved.uri, title: fileName, text: "Pointage PDF", dialogTitle: "Partager le PDF", mimeType: "application/pdf" });
         setShowPdfDialog(false);
         toast({ title: "✅ PDF enregistré", description: saved.label });
         return;
