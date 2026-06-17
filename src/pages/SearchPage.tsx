@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Mic, Search as SearchIcon, X } from "lucide-react";
 import { searchStore, searchStoreFuzzy, suggestStores, searchByTravee, getSearchableStores, type StoreSuggestion, type TraveeResult } from "@/lib/store";
+import { speakFr } from "@/lib/speech";
 
 interface MatchInfo {
   travee: string;
@@ -42,13 +43,7 @@ const SearchPage = () => {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const speak = useCallback((text: string) => {
-    try {
-      speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(text);
-      u.lang = "fr-FR";
-      u.rate = 0.95;
-      speechSynthesis.speak(u);
-    } catch {}
+    void speakFr(text);
   }, []);
 
   const computeResult = useCallback((number: string, name?: string): SearchResult => {
