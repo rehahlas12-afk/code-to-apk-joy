@@ -4,7 +4,6 @@ import { ArrowLeft, Eye, Plus, Trash2, Pencil, FileText, X, Check, CalendarDays,
 import jsPDF from "jspdf";
 import { Capacitor } from "@capacitor/core";
 import { Directory, Filesystem } from "@capacitor/filesystem";
-import { Share } from "@capacitor/share";
 import TruckLogo from "@/components/TruckLogo";
 import { toast } from "@/hooks/use-toast";
 import { getHolidayName } from "@/lib/holidays";
