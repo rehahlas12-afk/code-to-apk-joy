@@ -120,7 +120,7 @@ const CameraPage = () => {
     try {
       if (Capacitor.isNativePlatform()) {
         const saved = await saveBase64ToPhone(fname, base64FromDataUrl(capturedImage));
-        await sharePhoneFile({ uri: saved.uri, title: "Plan STAF", text, dialogTitle: "Partager le plan" });
+        await sharePhoneFile({ uri: saved.uri, title: "Plan STAF", text, dialogTitle: "Partager le plan", mimeType: "image/jpeg" });
         toast({ title: "✅ Plan prêt", description: saved.label });
         return;
       }
