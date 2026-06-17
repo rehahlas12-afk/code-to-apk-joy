@@ -243,21 +243,38 @@ const TimeTrackingPage = () => {
   useEffect(() => {
     (async () => {
       if (!Capacitor.isNativePlatform()) { setAutoRestoreChecked(true); return; }
-      const hasInfo = !!localStorage.getItem(INFO_KEY);
-      if (hasInfo) { setAutoRestoreChecked(true); return; }
+      // Détecte si les données du pointage sont manquantes (réinstall, vidage des données, etc.)
+      const infoRaw = localStorage.getItem(INFO_KEY);
+      let needsRestore = !infoRaw;
+      if (!needsRestore && infoRaw) {
+        try {
+          const info = JSON.parse(infoRaw) as { agent?: string };
+          if (info?.agent) {
+            const daysRaw = localStorage.getItem(daysKeyFor(info.agent));
+            const parsed = daysRaw ? JSON.parse(daysRaw) : [];
+            if (!Array.isArray(parsed) || parsed.length === 0) needsRestore = true;
+          }
+        } catch { needsRestore = true; }
+      }
+      if (!needsRestore) { setAutoRestoreChecked(true); return; }
       try {
         const res = await Filesystem.readFile({ path: AUTO_BACKUP_FILE, directory: Directory.Documents, encoding: "utf8" as any });
         const text = typeof res.data === "string" ? res.data : "";
         const parsed = JSON.parse(text);
         const data: Record<string, string> = parsed?.data && typeof parsed.data === "object" ? parsed.data : parsed;
         const entries = Object.entries(data).filter(([k]) => k === INFO_KEY || k.startsWith("sabrinos_pointage_"));
-        if (entries.length > 0) {
+        // Ne restaure que si la sauvegarde contient au moins un pointage non vide pour éviter d'écraser une vraie nouvelle session.
+        const hasRealData = entries.some(([k, v]) => {
+          if (!k.startsWith("sabrinos_pointage_days_")) return false;
+          try { const arr = JSON.parse(String(v)); return Array.isArray(arr) && arr.length > 0; } catch { return false; }
+        });
+        if (entries.length > 0 && hasRealData) {
           for (const [k, v] of entries) localStorage.setItem(k, String(v));
-          toast({ title: "✅ Données restaurées automatiquement", description: `${entries.length} entrées récupérées` });
-          setTimeout(() => window.location.reload(), 400);
+          toast({ title: "✅ Pointage restauré automatiquement", description: `${entries.length} entrées récupérées` });
+          setTimeout(() => window.location.reload(), 500);
           return;
         }
-      } catch { /* pas de fichier */ }
+      } catch { /* pas de fichier de sauvegarde */ }
       setAutoRestoreChecked(true);
     })();
   }, []);
