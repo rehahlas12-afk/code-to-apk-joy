@@ -3,18 +3,18 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Mic, MicOff, Calculator, Trash2, Save, X, ChevronDown } from "lucide-react";
 import TruckLogo from "@/components/TruckLogo";
 import { toast } from "@/hooks/use-toast";
-import palletRolls from "@/assets/pallets/pallet-rolls.jpg.asset.json";
-import pallet12080 from "@/assets/pallets/pallet-120-80.jpg.asset.json";
-import pallet120100 from "@/assets/pallets/pallet-120-100.jpg.asset.json";
-import pallet10060 from "@/assets/pallets/pallet-100-60.jpg.asset.json";
-import pallet8060 from "@/assets/pallets/pallet-80-60.jpg.asset.json";
+import palletRolls from "@/assets/pallets/pallet-rolls.jpg";
+import pallet12080 from "@/assets/pallets/pallet-120-80.jpg";
+import pallet120100 from "@/assets/pallets/pallet-120-100.jpg";
+import pallet10060 from "@/assets/pallets/pallet-100-60.jpg";
+import pallet8060 from "@/assets/pallets/pallet-80-60.jpg";
 
 const IMAGES: Record<string, string> = {
-  roll: palletRolls.url,
-  normale: pallet12080.url,
-  eau: pallet120100.url,
-  demi: pallet8060.url,
-  demi_eau: pallet10060.url,
+  roll: palletRolls,
+  normale: pallet12080,
+  eau: pallet120100,
+  demi: pallet8060,
+  demi_eau: pallet10060,
 };
 
 type EntryType = "roll" | "demi" | "normale" | "eau" | "demi_eau";

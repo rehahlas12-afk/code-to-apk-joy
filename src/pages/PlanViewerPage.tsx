@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Trash2, Check, ZoomIn, ZoomOut, Maximize2, Minimize2, RefreshCw, Loader2 } from "lucide-react";
-import { activatePlan, deletePlan, getActivePlan, getPlans, updatePlanStores } from "@/lib/store";
+import { activatePlan, countFilledTravees, deletePlan, getActivePlan, getPlans, updatePlanStores } from "@/lib/store";
 import { ocrAnalyzePlan } from "@/lib/ocr";
 import TruckLogo from "@/components/TruckLogo";
 import { toast } from "@/hooks/use-toast";
@@ -18,6 +18,7 @@ const PlanViewerPage = () => {
   const [scale, setScale] = useState(1);
   const [tx, setTx] = useState(0);
   const [ty, setTy] = useState(0);
+  const tourneeCount = selectedPlan ? countFilledTravees(selectedPlan.stores) : 0;
 
   // Refs so the touch handlers never go stale + we don't re-render on every move
   const stateRef = useRef({ scale: 1, tx: 0, ty: 0 });
@@ -252,7 +253,7 @@ const PlanViewerPage = () => {
                   {selectedPlan.stores.length} magasins
                 </p>
                 <p className="text-2xl font-black text-orange-400 leading-tight">
-                  {selectedPlan.stores.length} tournées
+                  {tourneeCount} tournées
                 </p>
                 <p className="text-xs text-gray-400">
                   {selectedPlan.date} • {Math.round(scale * 100)}%

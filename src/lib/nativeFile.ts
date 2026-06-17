@@ -13,12 +13,30 @@ export function safeFileName(name: string): string {
   return name.replace(/[\\/:*?"<>|]+/g, "_").replace(/\s+/g, "_");
 }
 
+function mimeTypeFor(fileName: string): string {
+  const n = fileName.toLowerCase();
+  if (n.endsWith(".pdf")) return "application/pdf";
+  if (n.endsWith(".json")) return "application/json";
+  if (n.endsWith(".png")) return "image/png";
+  if (n.endsWith(".jpg") || n.endsWith(".jpeg")) return "image/jpeg";
+  return "application/octet-stream";
+}
+
+function textToBase64(text: string): string {
+  const bytes = new TextEncoder().encode(text);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode(...bytes.slice(i, i + 0x8000));
+  }
+  return btoa(binary);
+}
+
 export async function saveBase64ToPhone(fileName: string, base64: string): Promise<{ uri: string; label: string }> {
   const cleanName = safeFileName(fileName);
 
   if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android") {
     try {
-      const mimeType = cleanName.toLowerCase().endsWith(".pdf") ? "application/pdf" : "image/jpeg";
+      const mimeType = mimeTypeFor(cleanName);
       const saved = await DownloadSaver.saveBase64({ fileName: cleanName, data: base64, mimeType });
       return { uri: saved.uri, label: saved.path || `Téléchargements/${APP_FOLDER}/${cleanName}` };
     } catch {
@@ -51,6 +69,10 @@ export async function saveBase64ToPhone(fileName: string, base64: string): Promi
     });
     return { uri: saved.uri, label: `Documents/${APP_FOLDER}/${cleanName}` };
   }
+}
+
+export async function saveTextToPhone(fileName: string, text: string): Promise<{ uri: string; label: string }> {
+  return saveBase64ToPhone(fileName, textToBase64(text));
 }
 
 export async function sharePhoneFile(options: {

@@ -266,6 +266,16 @@ export function getActivePlan(): PlanRecord | null {
   return activePlanId ? getPlanById(activePlanId) : null;
 }
 
+export function countFilledTravees(stores: StoreData[]): number {
+  const filled = new Set<string>();
+  for (const store of normalizeStores(stores)) {
+    const travee = store.travee.trim();
+    if (!travee) continue;
+    filled.add(`${normalizeZone(store.zone)}|${travee.toUpperCase()}`);
+  }
+  return filled.size;
+}
+
 export function activatePlan(id: string): PlanRecord | null {
   const plan = getPlanById(id);
   if (!plan) return null;
