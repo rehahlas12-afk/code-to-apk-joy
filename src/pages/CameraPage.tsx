@@ -1,13 +1,18 @@
 import { useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Camera, Upload, Sun, Moon, ImageIcon } from "lucide-react";
+import { ArrowLeft, Camera, Upload, Sun, Moon, ImageIcon, Share2 } from "lucide-react";
+import { Capacitor } from "@capacitor/core";
+import { Share } from "@capacitor/share";
 import { getPlanStorageErrorMessage, isQuotaExceededError, savePlan } from "@/lib/store";
 import { ocrAnalyzePlan } from "@/lib/ocr";
 import { optimizePlanImage, readAndOptimizeImageFile } from "@/lib/planImage";
 import { toast } from "@/hooks/use-toast";
 import TruckLogo from "@/components/TruckLogo";
+import { base64FromDataUrl, saveBase64ToPhone, sharePhoneFile } from "@/lib/nativeFile";
 
 type Mode = "original" | "clair" | "sombre";
+
+const clampByte = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
 
 const CameraPage = () => {
   const navigate = useNavigate();
@@ -51,21 +56,41 @@ const CameraPage = () => {
         c.width = img.width; c.height = img.height;
         const ctx = c.getContext("2d")!;
         ctx.drawImage(img, 0, 0);
+        const bgSmall = document.createElement("canvas");
+        const bgScale = Math.max(12, Math.round(Math.max(c.width, c.height) / 120));
+        bgSmall.width = Math.max(1, Math.round(c.width / bgScale));
+        bgSmall.height = Math.max(1, Math.round(c.height / bgScale));
+        const bgSmallCtx = bgSmall.getContext("2d")!;
+        bgSmallCtx.drawImage(img, 0, 0, bgSmall.width, bgSmall.height);
+        const bgLarge = document.createElement("canvas");
+        bgLarge.width = c.width; bgLarge.height = c.height;
+        const bgLargeCtx = bgLarge.getContext("2d")!;
+        bgLargeCtx.imageSmoothingEnabled = true;
+        bgLargeCtx.imageSmoothingQuality = "high";
+        bgLargeCtx.filter = "blur(18px)";
+        bgLargeCtx.drawImage(bgSmall, 0, 0, c.width, c.height);
+
         const d = ctx.getImageData(0, 0, c.width, c.height);
+        const bg = bgLargeCtx.getImageData(0, 0, c.width, c.height).data;
         const px = d.data;
         if (m === "sombre") {
-          // Invert + boost contrast → fond noir, texte blanc
+          // Mode scan sombre : correction d'ombre + inversion fond noir / texte blanc.
           for (let i = 0; i < px.length; i += 4) {
-            const r = 255 - px[i], g = 255 - px[i + 1], b = 255 - px[i + 2];
-            const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-            const v = lum < 90 ? 0 : lum > 170 ? 255 : Math.round((lum - 90) * 255 / 80);
+            const lum = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
+            const bgLum = Math.max(45, 0.299 * bg[i] + 0.587 * bg[i + 1] + 0.114 * bg[i + 2]);
+            const corrected = clampByte((lum / bgLum) * 238 + 12);
+            const contrast = clampByte((corrected - 128) * 1.75 + 128);
+            const v = 255 - (contrast < 142 ? 0 : contrast > 210 ? 255 : Math.round((contrast - 142) * 255 / 68));
             px[i] = v; px[i + 1] = v; px[i + 2] = v;
           }
         } else {
-          // Clair : N&B haute lisibilité
+          // Mode CamScan clair : retire les ombres puis augmente la lisibilité du texte.
           for (let i = 0; i < px.length; i += 4) {
             const lum = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
-            const v = lum < 110 ? 0 : lum > 180 ? 255 : Math.round((lum - 110) * 255 / 70);
+            const bgLum = Math.max(45, 0.299 * bg[i] + 0.587 * bg[i + 1] + 0.114 * bg[i + 2]);
+            const corrected = clampByte((lum / bgLum) * 238 + 12);
+            const contrast = clampByte((corrected - 128) * 1.65 + 128);
+            const v = contrast < 138 ? 0 : contrast > 212 ? 255 : Math.round((contrast - 138) * 255 / 74);
             px[i] = v; px[i + 1] = v; px[i + 2] = v;
           }
         }
@@ -87,6 +112,28 @@ const CameraPage = () => {
       toast({ title: "Impossible d'appliquer le mode", variant: "destructive" });
     }
   }, [originalImage, applyMode]);
+
+  const shareCapturedImage = useCallback(async () => {
+    if (!capturedImage) return;
+    const fname = `plan-staf-scan-${Date.now()}.jpg`;
+    const text = "Plan STAF Transport";
+    try {
+      if (Capacitor.isNativePlatform()) {
+        const saved = await saveBase64ToPhone(fname, base64FromDataUrl(capturedImage));
+        await sharePhoneFile({ uri: saved.uri, title: "Plan STAF", text, dialogTitle: "Partager le plan" });
+        toast({ title: "✅ Plan prêt", description: saved.label });
+        return;
+      }
+      const res = await fetch(capturedImage);
+      const blob = await res.blob();
+      const file = new File([blob], fname, { type: "image/jpeg" });
+      const nav: any = navigator;
+      if (nav.canShare?.({ files: [file] })) await nav.share({ title: "Plan STAF", text, files: [file] });
+      else await Share.share({ title: "Plan STAF", text, url: capturedImage, dialogTitle: "Partager le plan" });
+    } catch (e: any) {
+      toast({ title: "Partage impossible", description: String(e?.message || e), variant: "destructive" });
+    }
+  }, [capturedImage]);
 
   const capture = useCallback(async () => {
     if (!videoRef.current) return;
@@ -232,6 +279,9 @@ const CameraPage = () => {
             <div className="flex gap-3 shrink-0">
               <button onClick={() => { setCapturedImage(null); setOriginalImage(null); setMode("original"); }} className="flex-1 bg-gray-700 rounded-xl p-4 font-bold text-lg">
                 Reprendre
+              </button>
+              <button onClick={shareCapturedImage} className="bg-emerald-700 text-white rounded-xl px-4 flex items-center justify-center" aria-label="Partager le plan">
+                <Share2 size={24} />
               </button>
               <button onClick={analyzePlan} disabled={analyzing} className="flex-1 bg-green-600 text-white rounded-xl p-4 font-bold text-lg disabled:opacity-50">
                 {analyzing ? `OCR ${ocrProgress}%...` : "✅ Analyser (OCR)"}
