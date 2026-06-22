@@ -28,41 +28,23 @@ serve(async (req) => {
     // Remove data URL prefix if present
     const base64Data = imageBase64.replace(/^data:image\/[a-z]+;base64,/, "");
 
-    const systemPrompt = `Tu es un expert en extraction de données structurées à partir de photos de plans de dispatch/chargement de camions pour le transport STAF.
+    const systemPrompt = `Tu es un expert en extraction de tableaux à partir de photos de plans de dispatch STAF Transport.
 
-Le document est un tableau quadrillé (grille) avec des colonnes et des lignes. Chaque ligne contient :
-- Un numéro de travée (2-3 chiffres, ou codes spéciaux comme 99BIS, DEB, DEB4, ou une LETTRE seule comme "X", "Y", ou lettre+chiffre comme "X1")
-- Un ou plusieurs numéros de magasin (4-5 chiffres)
+Le plan est un tableau quadrillé. Chaque case d'en-tête de ligne/colonne contient un numéro de travée (ex: 72, 86, 306) ou un code (99BIS, DEB) ou une lettre (X, Y). Les autres cases contiennent un ou plusieurs numéros de magasin à 4 ou 5 chiffres.
 
-Les zones sont :
-- "Zone 1" : travées normales (généralement < 72) ET TOUTES les travées identifiées par une LETTRE SEULE (X, Y, Z, A, etc.). Par exemple la travée "X" se trouve entre 306 et 401 dans la zone normale — c'est une travée comme 401, 402… JAMAIS en débord.
-- "Débord" : UNIQUEMENT les travées numériques 72-86 quand rien n'est marqué, ou lignes explicitement marquées DEBORD/DEB. Les travées-lettres (X, Y…) ne sont JAMAIS en débord.
-- "Craft" : travées 86-95 uniquement quand la ligne/case est marquée CRAFT/KRAFT/CRAFTER
+Ta seule mission : extraire TOUS les numéros de magasin du plan avec leur travée. Sois exhaustif. Ne saute aucune case. Si un numéro est flou, donne ta meilleure estimation.
 
-INSTRUCTIONS CRITIQUES :
-1. Parcours CHAQUE ligne du tableau, de haut en bas, de gauche à droite
-2. Ne saute AUCUNE cellule — chaque numéro compte
-3. Les numéros de magasin ont 4 ou 5 chiffres (ex: 8486, 10892, 6317)
-4. Les numéros de travée ont 2-3 chiffres (ex: 72, 306, 94) OU une lettre seule (ex: X, Y) OU lettre+chiffre (ex: X1, A2). Une case marquée juste "X" est une travée à part entière, traite-la comme les autres travées.
-5. Retourne TOUS les magasins trouvés, même si tu n'es pas sûr à 100%
-6. Si un numéro est partiellement lisible, donne ta meilleure estimation
-7. ATTENTION : le numéro 86 peut exister deux fois. Si une case indique seulement "86" sans CRAFT, c'est "Débord". Si une autre case indique "86 CRAFT" ou "86 KRAFT", c'est une travée différente en "Craft". Ne mélange jamais ces deux travées.
-8. Chaque travée 86 (Débord ou Craft) peut avoir son propre magasin unique. Ne copie pas le magasin de l'une vers l'autre.
-9. TRÈS IMPORTANT — Travées-lettres : il existe des travées identifiées par UNE SEULE LETTRE (le plus souvent "X", parfois "Y", "Z", "A"...). Cette lettre est écrite dans la case d'en-tête de la ligne/colonne exactement comme un numéro de travée. Tu DOIS la traiter comme une travée à part entière, lister TOUS les magasins (4-5 chiffres) qui se trouvent dans la même ligne/colonne, et renvoyer travee:"X" (ou "Y", etc.). Ne saute JAMAIS une case marquée d'une lettre seule, même si elle paraît isolée. Si la lettre X apparaît collée à des chiffres dans une case (ex: "306X"), c'est aussi une travée distincte nommée "X" — pas une partie du numéro 306.
+Zones :
+- "Débord" si la travée est dans une zone marquée DEBORD/DEB, ou pour la travée 86 seule
+- "Craft" si la travée est dans une zone marquée CRAFT/KRAFT, ou pour 86 marqué CRAFT
+- "Zone 1" sinon (par défaut), y compris pour les travées-lettres (X, Y...)
 
-Retourne le résultat UNIQUEMENT au format JSON, sans texte autour.`;
+Retourne UNIQUEMENT un tableau JSON, sans texte autour.`;
 
-    const userPrompt = `Analyse ce plan de dispatch et extrais TOUS les numéros de magasin avec leur travée et zone.
+    const userPrompt = `Extrais TOUS les magasins de ce plan. Format JSON :
+[{"number":"8486","travee":"72","zone":"Débord"},{"number":"6317","travee":"306","zone":"Zone 1"}]
 
-Retourne un tableau JSON avec ce format exact :
-[
-  {"number": "8486", "travee": "72", "zone": "Débord"},
-  {"number": "1111", "travee": "86", "zone": "Débord"},
-  {"number": "2222", "travee": "86", "zone": "Craft"},
-  {"number": "6317", "travee": "306", "zone": "Zone 1"}
-]
-
-Parcours systématiquement chaque ligne et chaque cellule du tableau. Ne rate aucun magasin.`;
+Parcours chaque case du tableau. N'oublie aucun magasin.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
