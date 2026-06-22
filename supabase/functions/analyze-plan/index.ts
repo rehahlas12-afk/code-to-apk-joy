@@ -28,32 +28,41 @@ serve(async (req) => {
     // Remove data URL prefix if present
     const base64Data = imageBase64.replace(/^data:image\/[a-z]+;base64,/, "");
 
-    const systemPrompt = `Tu es un expert en extraction de tableaux à partir de photos de plans de dispatch STAF Transport.
+    const systemPrompt = `Tu es l'OCR de production pour STAF Transport. La priorité absolue est de ne rater AUCUN magasin visible sur une photo de plan papier.
 
-Le plan est un tableau quadrillé. Chaque case d'en-tête de ligne/colonne contient un numéro de travée (ex: 72, 86, 306) ou un code (99BIS, DEB) ou une lettre (X, Y). Les autres cases contiennent un ou plusieurs numéros de magasin à 4 ou 5 chiffres.
+Le plan est un tableau quadrillé. Les en-têtes de lignes/colonnes sont des travées : nombres 1 à 3 chiffres (72, 86, 306...), codes (99BIS, DEB, DEB4...), ou lettres seules (X, Y, Z, A...). Les cases contiennent un ou plusieurs magasins à 4 ou 5 chiffres.
 
-Ta seule mission : extraire TOUS les numéros de magasin du plan avec leur travée. Sois exhaustif. Ne saute aucune case. Si un numéro est flou, donne ta meilleure estimation.
+Méthode obligatoire :
+1. Repère toutes les travées visibles, même petites, floues ou sur les bords.
+2. Balaye toute la grille cellule par cellule, de gauche à droite et de haut en bas.
+3. Extrait chaque groupe de 4 ou 5 chiffres comme magasin. Si plusieurs magasins sont dans la même case, retourne-les tous.
+4. Si un magasin est flou mais lisible en partie, retourne ta meilleure estimation au lieu de l'ignorer.
+5. Associe le magasin à la travée la plus proche de sa ligne/colonne. Si la travée est incertaine, mets "?" mais garde le magasin.
+6. Ne supprime jamais un magasin parce qu'il semble doublon dans une autre travée : garde-le si la travée ou la zone change.
 
 Zones :
-- "Débord" si la travée est dans une zone marquée DEBORD/DEB, ou pour la travée 86 seule
-- "Craft" si la travée est dans une zone marquée CRAFT/KRAFT, ou pour 86 marqué CRAFT
-- "Zone 1" sinon (par défaut), y compris pour les travées-lettres (X, Y...)
+- "Débord" si la zone est marquée DEBORD/DEB, ou si la travée numérique est 72 à 86 sans mention Craft/Kraft.
+- "Craft" uniquement si la case/zone est marquée CRAFT/KRAFT/CRAFTER.
+- "Zone 1" sinon, toujours pour les travées lettres comme X/Y/Z/A.
 
-Retourne UNIQUEMENT un tableau JSON, sans texte autour.`;
+Retourne UNIQUEMENT un tableau JSON, sans markdown ni texte autour.`;
 
-    const userPrompt = `Extrais TOUS les magasins de ce plan. Format JSON :
+    const userPrompt = `Analyse le plan complet en mode EXHAUSTIF. Ne fais pas un résumé rapide : lis chaque case.
+
+Format exact :
 [{"number":"8486","travee":"72","zone":"Débord"},{"number":"6317","travee":"306","zone":"Zone 1"}]
 
-Parcours chaque case du tableau. N'oublie aucun magasin.`;
+Règle importante : mieux vaut retourner un magasin douteux avec la meilleure lecture possible que le rater.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Lovable-API-Key": LOVABLE_API_KEY,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "google/gemini-2.5-pro",
+        temperature: 0,
         messages: [
           { role: "system", content: systemPrompt },
           {
