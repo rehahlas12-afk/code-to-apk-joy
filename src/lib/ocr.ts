@@ -81,10 +81,65 @@ type OcrWord = {
   bbox?: { x0: number; y0: number; x1: number; y1: number };
 };
 
-const MIN_EXPECTED_PLAN_STORES = 8;
+const MIN_EXPECTED_PLAN_STORES = 35;
 
 function shouldUseAdaptiveFallback(stores: StoreData[]): boolean {
   return stores.length < MIN_EXPECTED_PLAN_STORES;
+}
+
+function loadImageForOcr(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("Impossible de préparer l'image OCR"));
+    image.src = src;
+  });
+}
+
+async function createHighContrastOcrVariant(imageData: string): Promise<string | null> {
+  if (typeof document === "undefined") return null;
+
+  const image = await loadImageForOcr(imageData);
+  const canvas = document.createElement("canvas");
+  canvas.width = image.naturalWidth || image.width;
+  canvas.height = image.naturalHeight || image.height;
+
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context || !canvas.width || !canvas.height) return null;
+
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
+  let totalLuma = 0;
+
+  for (let index = 0; index < pixels.data.length; index += 4) {
+    totalLuma += pixels.data[index] * 0.299 + pixels.data[index + 1] * 0.587 + pixels.data[index + 2] * 0.114;
+  }
+
+  const averageLuma = totalLuma / (pixels.data.length / 4);
+  const shouldInvert = averageLuma < 128;
+
+  for (let index = 0; index < pixels.data.length; index += 4) {
+    const luma = pixels.data[index] * 0.299 + pixels.data[index + 1] * 0.587 + pixels.data[index + 2] * 0.114;
+    const corrected = shouldInvert ? 255 - luma : luma;
+    const value = corrected > 150 ? 255 : 0;
+    pixels.data[index] = value;
+    pixels.data[index + 1] = value;
+    pixels.data[index + 2] = value;
+    pixels.data[index + 3] = 255;
+  }
+
+  context.putImageData(pixels, 0, 0);
+  return canvas.toDataURL("image/png");
+}
+
+async function createLocalOcrVariants(imageData: string): Promise<string[]> {
+  try {
+    const highContrast = await createHighContrastOcrVariant(imageData);
+    return highContrast ? [imageData, highContrast] : [imageData];
+  } catch (error) {
+    console.warn("OCR preprocessing failed, using original image", error);
+    return [imageData];
+  }
 }
 
 function dedupeStores(stores: StoreData[]): StoreData[] {
@@ -228,7 +283,9 @@ export function reconstructTextFromGeometry(words: OcrWord[]): string {
 }
 
 function chooseBestParsedStores(textStores: StoreData[], geometricStores: StoreData[]): StoreData[] {
-  return geometricStores.length > textStores.length ? geometricStores : textStores;
+  const mergedStores = dedupeStores([...textStores, ...geometricStores]);
+  const bestSingleRead = geometricStores.length > textStores.length ? geometricStores : textStores;
+  return mergedStores.length >= bestSingleRead.length ? mergedStores : bestSingleRead;
 }
 
 export function parseOcrText(text: string): StoreData[] {
@@ -267,23 +324,35 @@ async function fallbackLocalOcr(
   onProgress?: (progress: number) => void
 ): Promise<StoreData[]> {
   try {
-    const result = await Tesseract.recognize(imageData, "fra", {
-      logger: (message) => {
-        if (message.status === "recognizing text") {
-          onProgress?.(30 + Math.round(message.progress * 60));
-        }
-      },
-    });
-    console.log("Fallback OCR text:", result.data.text);
-    const textStores = parseOcrText(result.data.text);
-    const geometricText = reconstructTextFromGeometry((result.data.words ?? []) as OcrWord[]);
-    const geometricStores = geometricText ? parseOcrText(geometricText) : [];
+    const variants = await createLocalOcrVariants(imageData);
+    let bestStores: StoreData[] = [];
 
-    if (geometricStores.length > textStores.length) {
-      console.log("Adaptive geometric OCR text:", geometricText);
+    for (let index = 0; index < variants.length; index += 1) {
+      const progressStart = 30 + Math.round((index / variants.length) * 60);
+      const progressRange = Math.round(60 / variants.length);
+      const result = await Tesseract.recognize(variants[index], "fra", {
+        logger: (message) => {
+          if (message.status === "recognizing text") {
+            onProgress?.(progressStart + Math.round(message.progress * progressRange));
+          }
+        },
+      });
+
+      console.log(`Fallback OCR text variant ${index + 1}:`, result.data.text);
+      const textStores = parseOcrText(result.data.text);
+      const geometricText = reconstructTextFromGeometry((result.data.words ?? []) as OcrWord[]);
+      const geometricStores = geometricText ? parseOcrText(geometricText) : [];
+      const variantStores = chooseBestParsedStores(textStores, geometricStores);
+
+      if (geometricStores.length > textStores.length) {
+        console.log(`Adaptive geometric OCR text variant ${index + 1}:`, geometricText);
+      }
+      if (variantStores.length > bestStores.length) {
+        bestStores = variantStores;
+      }
     }
 
-    return chooseBestParsedStores(textStores, geometricStores);
+    return bestStores;
   } catch (err) {
     console.error("Fallback OCR also failed:", err);
     return [];
