@@ -6,6 +6,9 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const MIN_RELIABLE_PLAN_STORES = 35;
+const OCR_MODELS = ["google/gemini-2.5-pro", "google/gemini-3.1-pro-preview"];
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -54,14 +57,14 @@ Format exact :
 
 Règle importante : mieux vaut retourner un magasin douteux avec la meilleure lecture possible que le rater.`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const callVisionModel = (model: string) => fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
         "Lovable-API-Key": LOVABLE_API_KEY,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-pro",
+        model,
         temperature: 0,
         messages: [
           { role: "system", content: systemPrompt },
@@ -81,26 +84,54 @@ Règle importante : mieux vaut retourner un magasin douteux avec la meilleure le
       }),
     });
 
-    if (!response.ok) {
-      if (response.status === 429) {
+    let content = "";
+    let lastStatus = 0;
+    let lastErrorText = "";
+
+    for (const model of OCR_MODELS) {
+      const response = await callVisionModel(model);
+      lastStatus = response.status;
+
+      if (!response.ok) {
+        if (response.status === 429) {
+          return new Response(
+            JSON.stringify({ error: "Trop de requêtes, réessayez dans quelques secondes." }),
+            { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        if (response.status === 402) {
+          return new Response(
+            JSON.stringify({ error: "Crédits IA épuisés. Ajoutez des crédits dans Settings > Workspace > Usage." }),
+            { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        lastErrorText = await response.text();
+        console.error("AI gateway error:", model, response.status, lastErrorText);
+        continue;
+      }
+
+      const data = await response.json();
+      content = data.choices?.[0]?.message?.content || "";
+      const quickCount = (content.match(/"number"\s*:/g) ?? []).length;
+      console.log(`Model ${model} returned about ${quickCount} stores`);
+      if (quickCount >= MIN_RELIABLE_PLAN_STORES || model === OCR_MODELS[OCR_MODELS.length - 1]) break;
+    }
+
+    if (!content) {
+      if (lastStatus === 429) {
         return new Response(
           JSON.stringify({ error: "Trop de requêtes, réessayez dans quelques secondes." }),
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      if (response.status === 402) {
+      if (lastStatus === 402) {
         return new Response(
           JSON.stringify({ error: "Crédits IA épuisés. Ajoutez des crédits dans Settings > Workspace > Usage." }),
           { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      const errText = await response.text();
-      console.error("AI gateway error:", response.status, errText);
-      throw new Error(`AI gateway error: ${response.status}`);
+      throw new Error(`AI gateway error: ${lastStatus} ${lastErrorText}`);
     }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || "";
 
     // Extract JSON array from the response
     const jsonMatch = content.match(/\[[\s\S]*\]/);

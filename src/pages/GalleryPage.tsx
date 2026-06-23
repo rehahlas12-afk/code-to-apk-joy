@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Upload, Trash2, Loader2 } from "lucide-react";
 import { activatePlan, getPlanStorageErrorMessage, getPlans, isQuotaExceededError, savePlan, deletePlan, updatePlanStores, type PlanRecord } from "@/lib/store";
-import { ocrAnalyzePlan } from "@/lib/ocr";
+import { MIN_RELIABLE_PLAN_STORES, ocrAnalyzePlan } from "@/lib/ocr";
 import { readAndOptimizeImageFile } from "@/lib/planImage";
 import TruckLogo from "@/components/TruckLogo";
 import { toast } from "@/hooks/use-toast";
@@ -32,7 +32,11 @@ const GalleryPage = () => {
       console.error("OCR error:", err);
       toast({
         title: isQuotaExceededError(err) ? "Stockage saturé" : "Erreur OCR",
-        description: isQuotaExceededError(err) ? getPlanStorageErrorMessage(err) : "Vérifiez la qualité de l'image",
+        description: isQuotaExceededError(err)
+          ? getPlanStorageErrorMessage(err)
+          : err instanceof Error
+            ? err.message
+            : `Moins de ${MIN_RELIABLE_PLAN_STORES} magasins détectés : plan non validé.`,
         variant: "destructive",
       });
     } finally {
@@ -57,7 +61,7 @@ const GalleryPage = () => {
 
       savePlan(newPlan);
       setPlansState(getPlans());
-      toast({ title: "Plan importé", description: "Analyse OCR en cours..." });
+      toast({ title: "Plan importé", description: "Analyse OCR complète en cours..." });
       await analyzeAndSavePlan(newPlan);
     } catch (error) {
       console.error("Plan upload error:", error);

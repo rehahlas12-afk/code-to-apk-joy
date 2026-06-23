@@ -20,18 +20,18 @@ export async function ocrAnalyzePlan(
       const fallbackStores = await fallbackLocalOcr(imageData, onProgress);
       if (fallbackStores.length > stores.length) {
         onProgress?.(100);
-        return fallbackStores;
+        return assertReliablePlanRead(fallbackStores);
       }
     }
     onProgress?.(100);
-    return stores;
+    return assertReliablePlanRead(stores);
   } catch (error) {
     console.error("AI analysis failed, falling back to local OCR:", error);
     onProgress?.(30);
     // Fallback to local parsing
     const stores = await fallbackLocalOcr(imageData, onProgress);
     onProgress?.(100);
-    return stores;
+    return assertReliablePlanRead(stores);
   }
 }
 
@@ -81,10 +81,18 @@ type OcrWord = {
   bbox?: { x0: number; y0: number; x1: number; y1: number };
 };
 
-const MIN_EXPECTED_PLAN_STORES = 35;
+export const MIN_RELIABLE_PLAN_STORES = 35;
+
+function assertReliablePlanRead(stores: StoreData[]): StoreData[] {
+  if (stores.length >= MIN_RELIABLE_PLAN_STORES) return stores;
+
+  throw new Error(
+    `Analyse incomplète : seulement ${stores.length} magasins détectés. Le plan n'a pas été remplacé.`
+  );
+}
 
 function shouldUseAdaptiveFallback(stores: StoreData[]): boolean {
-  return stores.length < MIN_EXPECTED_PLAN_STORES;
+  return stores.length < MIN_RELIABLE_PLAN_STORES;
 }
 
 function loadImageForOcr(src: string): Promise<HTMLImageElement> {
