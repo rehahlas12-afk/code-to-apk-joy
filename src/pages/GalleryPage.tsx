@@ -32,7 +32,11 @@ const GalleryPage = () => {
       console.error("OCR error:", err);
       toast({
         title: isQuotaExceededError(err) ? "Stockage saturé" : "Erreur OCR",
-        description: isQuotaExceededError(err) ? getPlanStorageErrorMessage(err) : "Vérifiez la qualité de l'image",
+        description: isQuotaExceededError(err)
+          ? getPlanStorageErrorMessage(err)
+          : err instanceof Error
+            ? err.message
+            : `Moins de ${MIN_RELIABLE_PLAN_STORES} magasins détectés : plan non validé.`,
         variant: "destructive",
       });
     } finally {
