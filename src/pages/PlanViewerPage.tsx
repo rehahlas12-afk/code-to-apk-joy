@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Trash2, Check, ZoomIn, ZoomOut, Maximize2, Minimize2, RefreshCw, Loader2 } from "lucide-react";
 import { activatePlan, countFilledTravees, deletePlan, getActivePlan, getPlans, updatePlanStores } from "@/lib/store";
-import { ocrAnalyzePlan } from "@/lib/ocr";
+import { MIN_RELIABLE_PLAN_STORES, ocrAnalyzePlan } from "@/lib/ocr";
 import TruckLogo from "@/components/TruckLogo";
 import { toast } from "@/hooks/use-toast";
 
@@ -168,6 +168,9 @@ const PlanViewerPage = () => {
     toast({ title: "Analyse en cours…", description: "Relecture du plan par l'IA." });
     try {
       const stores = await ocrAnalyzePlan(plan.imageData);
+      if (stores.length < MIN_RELIABLE_PLAN_STORES) {
+        throw new Error(`Analyse incomplète : ${stores.length} magasins seulement. Ancien résultat gardé.`);
+      }
       const updated = updatePlanStores(plan.id, stores);
       if (updated) {
         const refreshed = getPlans();
