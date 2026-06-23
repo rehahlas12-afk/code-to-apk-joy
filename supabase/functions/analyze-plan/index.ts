@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 const MIN_RELIABLE_PLAN_STORES = 35;
-const OCR_MODELS = ["google/gemini-2.5-pro", "openai/gpt-5"];
+const OCR_MODELS = ["google/gemini-2.5-pro", "google/gemini-3.1-pro-preview"];
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
