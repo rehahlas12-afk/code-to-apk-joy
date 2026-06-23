@@ -20,18 +20,18 @@ export async function ocrAnalyzePlan(
       const fallbackStores = await fallbackLocalOcr(imageData, onProgress);
       if (fallbackStores.length > stores.length) {
         onProgress?.(100);
-        return fallbackStores;
+        return assertReliablePlanRead(fallbackStores);
       }
     }
     onProgress?.(100);
-    return stores;
+    return assertReliablePlanRead(stores);
   } catch (error) {
     console.error("AI analysis failed, falling back to local OCR:", error);
     onProgress?.(30);
     // Fallback to local parsing
     const stores = await fallbackLocalOcr(imageData, onProgress);
     onProgress?.(100);
-    return stores;
+    return assertReliablePlanRead(stores);
   }
 }
 
