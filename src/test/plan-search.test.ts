@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { parseOcrText } from "../lib/ocr";
+import { parseOcrText, reconstructTextFromGeometry } from "../lib/ocr";
 import { activatePlan, getStores, savePlan, searchStore } from "../lib/store";
 
 describe("plan search", () => {
@@ -93,6 +93,27 @@ describe("plan search", () => {
         { number: "1111", travee: "86", zone: "Débord" },
         { number: "2222", travee: "86", zone: "Craft" },
         { number: "3333", travee: "87", zone: "Craft" },
+      ]),
+    );
+  });
+
+  it("reconstructs OCR lines from word geometry when text blocks are broken", () => {
+    const geometricText = reconstructTextFromGeometry([
+      { text: "ZONE", bbox: { x0: 10, y0: 10, x1: 45, y1: 24 } },
+      { text: "1", bbox: { x0: 52, y0: 10, x1: 60, y1: 24 } },
+      { text: "306", bbox: { x0: 10, y0: 42, x1: 34, y1: 57 } },
+      { text: "10892", bbox: { x0: 100, y0: 41, x1: 146, y1: 57 } },
+      { text: "8214", bbox: { x0: 180, y0: 43, x1: 220, y1: 58 } },
+      { text: "DEB4", bbox: { x0: 10, y0: 78, x1: 48, y1: 94 } },
+      { text: "9O83", bbox: { x0: 100, y0: 78, x1: 138, y1: 94 } },
+    ]);
+    const stores = parseOcrText(geometricText);
+
+    expect(stores).toEqual(
+      expect.arrayContaining([
+        { number: "10892", travee: "306", zone: "Zone 1" },
+        { number: "8214", travee: "306", zone: "Zone 1" },
+        { number: "9083", travee: "DEB4", zone: "Débord" },
       ]),
     );
   });

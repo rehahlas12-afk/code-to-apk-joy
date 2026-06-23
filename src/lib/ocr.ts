@@ -14,6 +14,15 @@ export async function ocrAnalyzePlan(
 
   try {
     const stores = await analyzeWithAI(imageData, onProgress);
+    if (shouldUseAdaptiveFallback(stores)) {
+      console.warn(`AI OCR returned only ${stores.length} stores, activating adaptive geometric fallback`);
+      onProgress?.(30);
+      const fallbackStores = await fallbackLocalOcr(imageData, onProgress);
+      if (fallbackStores.length > stores.length) {
+        onProgress?.(100);
+        return fallbackStores;
+      }
+    }
     onProgress?.(100);
     return stores;
   } catch (error) {
@@ -65,6 +74,18 @@ const ZONE_PATTERNS: { pattern: RegExp; zone: string }[] = [
   { pattern: /CRAFT|CRAFTER|KRAFT/i, zone: "Craft" },
   { pattern: /ZONE\s*1/i, zone: "Zone 1" },
 ];
+
+type OcrWord = {
+  text?: string;
+  confidence?: number;
+  bbox?: { x0: number; y0: number; x1: number; y1: number };
+};
+
+const MIN_EXPECTED_PLAN_STORES = 8;
+
+function shouldUseAdaptiveFallback(stores: StoreData[]): boolean {
+  return stores.length < MIN_EXPECTED_PLAN_STORES;
+}
 
 function dedupeStores(stores: StoreData[]): StoreData[] {
   const seen = new Set<string>();
@@ -155,6 +176,61 @@ function extractStoreNumbers(normalizedLine: string): string[] {
   return [...storeNumbers];
 }
 
+export function reconstructTextFromGeometry(words: OcrWord[]): string {
+  const usableWords = words
+    .filter((word) => word.text?.trim() && word.bbox)
+    .map((word) => ({
+      text: word.text!.trim(),
+      confidence: word.confidence ?? 100,
+      x0: word.bbox!.x0,
+      x1: word.bbox!.x1,
+      y0: word.bbox!.y0,
+      y1: word.bbox!.y1,
+      height: Math.max(1, word.bbox!.y1 - word.bbox!.y0),
+    }))
+    .filter((word) => word.confidence >= 15 || /\d/.test(word.text));
+
+  if (!usableWords.length) return "";
+
+  const medianHeight = usableWords
+    .map((word) => word.height)
+    .sort((a, b) => a - b)[Math.floor(usableWords.length / 2)] || 12;
+  const yTolerance = Math.max(6, medianHeight * 0.65);
+
+  const lines: Array<{ y: number; words: typeof usableWords }> = [];
+  for (const word of usableWords.sort((a, b) => (a.y0 + a.y1) / 2 - (b.y0 + b.y1) / 2)) {
+    const centerY = (word.y0 + word.y1) / 2;
+    let line = lines.find((candidate) => Math.abs(candidate.y - centerY) <= yTolerance);
+    if (!line) {
+      line = { y: centerY, words: [] as typeof usableWords };
+      lines.push(line);
+    }
+    line.words.push(word);
+    line.y = (line.y * (line.words.length - 1) + centerY) / line.words.length;
+  }
+
+  return lines
+    .sort((a, b) => a.y - b.y)
+    .map((line) => {
+      const sortedWords = line.words.sort((a, b) => a.x0 - b.x0);
+      const widths = sortedWords.map((word) => Math.max(1, word.x1 - word.x0));
+      const medianWidth = widths.sort((a, b) => a - b)[Math.floor(widths.length / 2)] || 20;
+      const gapThreshold = Math.max(10, medianWidth * 0.45);
+
+      return sortedWords.reduce((text, word, index) => {
+        if (index === 0) return word.text;
+        const previous = sortedWords[index - 1];
+        const gap = word.x0 - previous.x1;
+        return `${text}${gap > gapThreshold ? "  " : " "}${word.text}`;
+      }, "");
+    })
+    .join("\n");
+}
+
+function chooseBestParsedStores(textStores: StoreData[], geometricStores: StoreData[]): StoreData[] {
+  return geometricStores.length > textStores.length ? geometricStores : textStores;
+}
+
 export function parseOcrText(text: string): StoreData[] {
   const stores: StoreData[] = [];
   const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
@@ -199,7 +275,15 @@ async function fallbackLocalOcr(
       },
     });
     console.log("Fallback OCR text:", result.data.text);
-    return parseOcrText(result.data.text);
+    const textStores = parseOcrText(result.data.text);
+    const geometricText = reconstructTextFromGeometry((result.data.words ?? []) as OcrWord[]);
+    const geometricStores = geometricText ? parseOcrText(geometricText) : [];
+
+    if (geometricStores.length > textStores.length) {
+      console.log("Adaptive geometric OCR text:", geometricText);
+    }
+
+    return chooseBestParsedStores(textStores, geometricStores);
   } catch (err) {
     console.error("Fallback OCR also failed:", err);
     return [];
