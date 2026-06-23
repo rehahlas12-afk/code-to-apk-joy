@@ -81,10 +81,18 @@ type OcrWord = {
   bbox?: { x0: number; y0: number; x1: number; y1: number };
 };
 
-const MIN_EXPECTED_PLAN_STORES = 35;
+export const MIN_RELIABLE_PLAN_STORES = 35;
+
+function assertReliablePlanRead(stores: StoreData[]): StoreData[] {
+  if (stores.length >= MIN_RELIABLE_PLAN_STORES) return stores;
+
+  throw new Error(
+    `Analyse incomplète : seulement ${stores.length} magasins détectés. Le plan n'a pas été remplacé.`
+  );
+}
 
 function shouldUseAdaptiveFallback(stores: StoreData[]): boolean {
-  return stores.length < MIN_EXPECTED_PLAN_STORES;
+  return stores.length < MIN_RELIABLE_PLAN_STORES;
 }
 
 function loadImageForOcr(src: string): Promise<HTMLImageElement> {
