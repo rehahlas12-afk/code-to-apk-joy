@@ -160,7 +160,6 @@ function canReadStoreAt(tokens: string[], index: number): boolean {
 
 function hasReadableStoreAfter(tokens: string[], index: number): boolean {
   for (let cursor = index + 1; cursor < tokens.length; cursor += 1) {
-    if (cursor !== index + 1 && isTraveeToken(tokens[cursor])) break;
     if (canReadStoreAt(tokens, cursor)) return true;
   }
   return false;
