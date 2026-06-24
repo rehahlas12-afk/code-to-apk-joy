@@ -87,15 +87,15 @@ describe("plan search", () => {
         { number: "2971", travee: "201", zone: "Zone 1" },
         { number: "6317", travee: "201", zone: "Zone 1" },
         { number: "8485", travee: "201", zone: "Zone 1" },
-        { number: "7878", travee: "401", zone: "Débord" },
-        { number: "9668", travee: "401", zone: "Débord" },
-        { number: "11843", travee: "401", zone: "Débord" },
+        { number: "7878", travee: "401", zone: "Zone 1" },
+        { number: "9668", travee: "401", zone: "Zone 1" },
+        { number: "11843", travee: "401", zone: "Zone 1" },
         { number: "10892", travee: "306", zone: "Zone 1" },
         { number: "8214", travee: "306", zone: "Zone 1" },
       ]),
     );
     expect(stores.map((store) => store.number)).not.toEqual(
-      expect.arrayContaining(["68485", "49668", "511843"]),
+      expect.arrayContaining(["6111", "1615", "68485", "49668", "511843"]),
     );
   });
 
