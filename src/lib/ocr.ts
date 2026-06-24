@@ -207,10 +207,12 @@ function detectLineZone(normalizedLine: string, tokens: string[]): { zone: strin
     if (!pattern.test(normalizedLine)) continue;
 
     const isDebTraveeAtEnd = zone === "Débord" && tokens.some((token, index) => /^DEB\d?$/.test(token) && index > 0);
+    if (isDebTraveeAtEnd) return { zone: null, explicit: false, persistent: false };
+
     return {
       zone,
       explicit: true,
-      persistent: !isDebTraveeAtEnd,
+      persistent: true,
     };
   }
 
