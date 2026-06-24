@@ -301,17 +301,19 @@ function tokenDigits(token: string): string {
 
 function canReadStoreAt(tokens: string[], index: number): boolean {
   if (index < 0 || index >= tokens.length) return false;
-  if (isServiceToken(tokens[index]) || isTraveeToken(tokens[index])) return false;
+  if (isServiceToken(tokens[index])) return false;
 
   const digits = tokenDigits(tokens[index]);
   if (/^\d{4,5}$/.test(digits)) return true;
   if (!digits || digits.length >= 4) return false;
+  if (index === 0 && isTraveeToken(tokens[index])) return false;
 
   let combined = digits;
   let cursor = index + 1;
   while (combined.length < 5 && cursor < tokens.length) {
-    if (isServiceToken(tokens[cursor]) || isTraveeToken(tokens[cursor])) break;
+    if (isServiceToken(tokens[cursor])) break;
     const nextDigits = tokenDigits(tokens[cursor]);
+    if (isTraveeToken(tokens[cursor]) && !/^\d{1,3}$/.test(nextDigits)) break;
     if (!nextDigits || combined.length + nextDigits.length > 5) break;
     combined += nextDigits;
     if (/^\d{4,5}$/.test(combined)) return true;
@@ -351,8 +353,7 @@ function isLineTraveeAnchor(tokens: string[], index: number, explicitZoneOnLine:
   if (/^[A-Z]/.test(token)) return true;
   if (/^99BIS\d?$/.test(token)) return true;
 
-  const value = Number(digits);
-  return !Number.isNaN(value) && value >= 72;
+  return false;
 }
 
 function extractLineStoreEntries(
