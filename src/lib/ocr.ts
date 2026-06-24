@@ -295,6 +295,86 @@ function extractStoreNumbers(normalizedLine: string): string[] {
   return [...storeNumbers];
 }
 
+function tokenDigits(token: string): string {
+  return normalizePotentialNumber(token).replace(/[^0-9]/g, "");
+}
+
+function canReadStoreAt(tokens: string[], index: number): boolean {
+  if (index < 0 || index >= tokens.length) return false;
+  if (isServiceToken(tokens[index]) || isTraveeToken(tokens[index])) return false;
+
+  const digits = tokenDigits(tokens[index]);
+  if (/^\d{4,5}$/.test(digits)) return true;
+  if (!digits || digits.length >= 4) return false;
+
+  let combined = digits;
+  let cursor = index + 1;
+  while (combined.length < 5 && cursor < tokens.length) {
+    if (isServiceToken(tokens[cursor]) || isTraveeToken(tokens[cursor])) break;
+    const nextDigits = tokenDigits(tokens[cursor]);
+    if (!nextDigits || combined.length + nextDigits.length > 5) break;
+    combined += nextDigits;
+    if (/^\d{4,5}$/.test(combined)) return true;
+    cursor += 1;
+  }
+
+  return false;
+}
+
+function hasReadableStoreAfter(tokens: string[], index: number): boolean {
+  for (let cursor = index + 1; cursor < tokens.length; cursor += 1) {
+    if (cursor !== index + 1 && isTraveeToken(tokens[cursor])) break;
+    if (canReadStoreAt(tokens, cursor)) return true;
+  }
+  return false;
+}
+
+function isQuantityToken(tokens: string[], index: number): boolean {
+  const digits = tokenDigits(tokens[index]);
+  return /^\d{1,2}$/.test(digits) && (/^(M|F|S)$/.test(tokens[index - 1] ?? "") || /^(M|F|S)$/.test(tokens[index - 2] ?? ""));
+}
+
+function isLineTraveeAnchor(tokens: string[], index: number, explicitZoneOnLine: boolean): boolean {
+  const token = tokens[index];
+  if (!isTraveeToken(token)) return false;
+  if (isQuantityToken(tokens, index)) return false;
+
+  const hasStoreAfter = hasReadableStoreAfter(tokens, index);
+  if (index === 0) return hasStoreAfter;
+  if (!hasStoreAfter) return false;
+  if (/^DEB\d?$/.test(token)) return false;
+  if (explicitZoneOnLine && index <= 2) return true;
+
+  const digits = tokenDigits(token);
+  const previousDigits = tokenDigits(tokens[index - 1] ?? "");
+  if (/^\d{4,5}$/.test(previousDigits)) return true;
+  if (/^[A-Z]/.test(token)) return true;
+  if (/^99BIS\d?$/.test(token)) return true;
+
+  const value = Number(digits);
+  return !Number.isNaN(value) && value >= 72;
+}
+
+function extractLineStoreEntries(
+  tokens: string[],
+  currentTravee: string,
+  explicitZoneOnLine: boolean,
+): Array<{ number: string; travee: string }> {
+  const anchors = tokens
+    .map((token, index) => ({ token, index }))
+    .filter(({ index }) => isLineTraveeAnchor(tokens, index, explicitZoneOnLine));
+
+  if (!anchors.length) {
+    return extractStoreNumbers(tokens.join(" ")).map((number) => ({ number, travee: currentTravee || "?" }));
+  }
+
+  return anchors.flatMap((anchor, anchorIndex) => {
+    const nextAnchorIndex = anchors[anchorIndex + 1]?.index ?? tokens.length;
+    const segment = [anchor.token, ...tokens.slice(anchor.index + 1, nextAnchorIndex)].join(" ");
+    return extractStoreNumbers(segment).map((number) => ({ number, travee: anchor.token }));
+  });
+}
+
 export function reconstructTextFromGeometry(words: OcrWord[]): string {
   const usableWords = words
     .filter((word) => word.text?.trim() && word.bbox)
@@ -382,12 +462,18 @@ export function parseOcrText(text: string): StoreData[] {
       currentZone = lineZone.zone;
     }
 
-    currentTravee = extractTravee(normalizedLine, currentTravee);
-    const inferredZone = inferZoneFromTravee(currentTravee, lineZone.zone ?? currentZone, explicitZoneOnLine);
-    const lineNumbers = extractStoreNumbers(normalizedLine);
+    const lineEntries = extractLineStoreEntries(tokens, currentTravee, explicitZoneOnLine);
+    const lastLineTravee = lineEntries.at(-1)?.travee;
 
-    for (const num of lineNumbers) {
-      stores.push({ number: num, travee: currentTravee || "?", zone: inferredZone });
+    if (lastLineTravee && lastLineTravee !== "?") {
+      currentTravee = lastLineTravee;
+    } else if (!lineEntries.length && !/ZONE\s*1/i.test(normalizedLine)) {
+      currentTravee = extractTravee(normalizedLine, currentTravee);
+    }
+
+    for (const { number, travee } of lineEntries) {
+      const inferredZone = inferZoneFromTravee(travee, lineZone.zone ?? currentZone, explicitZoneOnLine);
+      stores.push({ number, travee, zone: inferredZone });
     }
   }
 
