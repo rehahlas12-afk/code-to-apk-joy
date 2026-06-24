@@ -82,12 +82,21 @@ type OcrWord = {
 };
 
 export const MIN_RELIABLE_PLAN_STORES = 35;
+const MIN_RELIABLE_PLAN_TRAVEES = 12;
 
 function assertReliablePlanRead(stores: StoreData[]): StoreData[] {
-  if (stores.length >= MIN_RELIABLE_PLAN_STORES) return stores;
+  const reliableTravees = new Set(
+    stores
+      .map((store) => String(store.travee || "").trim().toUpperCase())
+      .filter((travee) => travee && travee !== "?"),
+  );
+
+  if (stores.length >= MIN_RELIABLE_PLAN_STORES && reliableTravees.size >= MIN_RELIABLE_PLAN_TRAVEES) {
+    return stores;
+  }
 
   throw new Error(
-    `Analyse incomplète : seulement ${stores.length} magasins détectés. Le plan n'a pas été remplacé.`
+    `Analyse incomplète : ${stores.length} magasins et ${reliableTravees.size} travées détectés. Le plan n'a pas été remplacé.`
   );
 }
 
@@ -189,6 +198,27 @@ function tokenizeLine(normalizedLine: string): string[] {
   return normalizedLine.match(/[A-Z0-9|]+/g) ?? [];
 }
 
+function isServiceToken(token: string): boolean {
+  return /^(M|F|S|H|X)$/.test(token) || /^5H0{2}$/.test(token) || /^H0{2}$/.test(token) || /^DEB\d?$/.test(token);
+}
+
+function detectLineZone(normalizedLine: string, tokens: string[]): { zone: string | null; explicit: boolean; persistent: boolean } {
+  for (const { pattern, zone } of ZONE_PATTERNS) {
+    if (!pattern.test(normalizedLine)) continue;
+
+    const isDebTraveeAtEnd = zone === "Débord" && tokens.some((token, index) => /^DEB\d?$/.test(token) && index > 0);
+    if (isDebTraveeAtEnd) return { zone: null, explicit: false, persistent: false };
+
+    return {
+      zone,
+      explicit: true,
+      persistent: true,
+    };
+  }
+
+  return { zone: null, explicit: false, persistent: false };
+}
+
 function isTraveeToken(token: string): boolean {
   return (
     /^99BIS\d?$/.test(token) ||
@@ -212,6 +242,7 @@ function extractStoreNumbers(normalizedLine: string): string[] {
 
   for (let i = 0; i < tokens.length; i += 1) {
     if (i === 0 && isTraveeToken(tokens[i])) continue;
+    if (isServiceToken(tokens[i])) continue;
 
     const normalizedToken = normalizePotentialNumber(tokens[i]).replace(/[^0-9]/g, "");
     if (!normalizedToken) continue;
@@ -225,8 +256,15 @@ function extractStoreNumbers(normalizedLine: string): string[] {
     let combined = normalizedToken;
     let cursor = i + 1;
     while (combined.length < 5 && cursor < tokens.length) {
+      if (isServiceToken(tokens[cursor])) break;
+
       const nextToken = normalizePotentialNumber(tokens[cursor]).replace(/[^0-9]/g, "");
       if (!nextToken || combined.length + nextToken.length > 5) break;
+
+      // Sur les plans STAF, les petits nombres après M/F/S sont des quantités.
+      // Exemple réel : "6317 F 6 8485" doit donner 6317 et 8485, jamais 68485.
+      if (/^\d{4,5}$/.test(nextToken)) break;
+
       combined += nextToken;
       if (/^\d{4,5}$/.test(combined)) {
         storeNumbers.add(combined);
@@ -305,18 +343,16 @@ export function parseOcrText(text: string): StoreData[] {
 
   for (const line of lines) {
     const normalizedLine = normalizeOcrLine(line);
-    let explicitZoneOnLine = false;
+    const tokens = tokenizeLine(normalizedLine);
+    const lineZone = detectLineZone(normalizedLine, tokens);
+    const explicitZoneOnLine = lineZone.explicit;
 
-    for (const { pattern, zone } of ZONE_PATTERNS) {
-      if (pattern.test(normalizedLine)) {
-        currentZone = zone;
-        explicitZoneOnLine = true;
-        break;
-      }
+    if (lineZone.zone && lineZone.persistent) {
+      currentZone = lineZone.zone;
     }
 
     currentTravee = extractTravee(normalizedLine, currentTravee);
-    const inferredZone = inferZoneFromTravee(currentTravee, currentZone, explicitZoneOnLine);
+    const inferredZone = inferZoneFromTravee(currentTravee, lineZone.zone ?? currentZone, explicitZoneOnLine);
     const lineNumbers = extractStoreNumbers(normalizedLine);
 
     for (const num of lineNumbers) {
