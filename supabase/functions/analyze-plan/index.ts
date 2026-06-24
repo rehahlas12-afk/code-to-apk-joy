@@ -7,7 +7,211 @@ const corsHeaders = {
 };
 
 const MIN_RELIABLE_PLAN_STORES = 35;
-const OCR_MODELS = ["google/gemini-2.5-pro", "google/gemini-3.1-pro-preview"];
+const MIN_RELIABLE_PLAN_TRAVEES = 12;
+const OCR_MODELS = ["openai/gpt-5.5", "google/gemini-2.5-pro", "google/gemini-3.1-pro-preview"];
+
+type StoreData = {
+  number: string;
+  travee: string;
+  zone: string;
+};
+
+const OCR_DIGIT_FIXES: Record<string, string> = {
+  O: "0", Q: "0", D: "0", I: "1", L: "1", "|": "1",
+  Z: "2", S: "5", B: "8", G: "6",
+};
+
+const ZONE_PATTERNS: { pattern: RegExp; zone: string }[] = [
+  { pattern: /DEBORD|DEB/i, zone: "Débord" },
+  { pattern: /CRAFT|CRAFTER|KRAFT/i, zone: "Craft" },
+  { pattern: /ZONE\s*1/i, zone: "Zone 1" },
+];
+
+function normalizeOcrLine(line: string): string {
+  return line
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/['']/g, "")
+    .replace(/(\d)[,;:./\\-]+(?=\d)/g, "$1");
+}
+
+function normalizePotentialNumber(token: string): string {
+  return token.split("").map((char) => OCR_DIGIT_FIXES[char] ?? char).join("");
+}
+
+function tokenizeLine(normalizedLine: string): string[] {
+  return normalizedLine.match(/[A-Z0-9|]+/g) ?? [];
+}
+
+function isServiceToken(token: string): boolean {
+  return /^(M|F|S|H|X)$/.test(token) || /^5H0{2}$/.test(token) || /^H0{2}$/.test(token) || /^DEB\d?$/.test(token);
+}
+
+function isTraveeToken(token: string): boolean {
+  return (
+    /^99BIS\d?$/.test(token) ||
+    /^DEB\d?$/.test(token) ||
+    /^[1-9]\d{1,2}$/.test(token) ||
+    /^[A-WYZ]$/.test(token) ||
+    /^[A-Z]\d{1,2}$/.test(token) ||
+    /^\d{1,3}[A-Z]$/.test(token)
+  );
+}
+
+function detectLineZone(normalizedLine: string, tokens: string[]): { zone: string | null; explicit: boolean; persistent: boolean } {
+  for (const { pattern, zone } of ZONE_PATTERNS) {
+    if (!pattern.test(normalizedLine)) continue;
+
+    const isDebTraveeAtEnd = zone === "Débord" && tokens.some((token, index) => /^DEB\d?$/.test(token) && index > 0);
+    if (isDebTraveeAtEnd) return { zone: null, explicit: false, persistent: false };
+
+    return { zone, explicit: true, persistent: true };
+  }
+
+  return { zone: null, explicit: false, persistent: false };
+}
+
+function inferZoneFromTravee(travee: string, fallbackZone: string, explicitZoneOnLine = false): string {
+  if (travee.startsWith("DEB")) return "Débord";
+  if (explicitZoneOnLine && /CRAFT|KRAFT/i.test(fallbackZone)) return "Craft";
+  const traveeNumber = Number(travee);
+  if (Number.isNaN(traveeNumber)) return fallbackZone;
+  if (traveeNumber === 86) return "Débord";
+  if (/CRAFT|KRAFT/i.test(fallbackZone)) return "Craft";
+  if (traveeNumber >= 72 && traveeNumber <= 86) return "Débord";
+  if (traveeNumber >= 86 && traveeNumber <= 95) return "Craft";
+  return fallbackZone;
+}
+
+function extractTravee(normalizedLine: string, currentTravee: string): string {
+  const tokens = tokenizeLine(normalizedLine);
+  return tokens.find(isTraveeToken) ?? currentTravee;
+}
+
+function extractStoreNumbers(normalizedLine: string): string[] {
+  const storeNumbers = new Set<string>();
+  const tokens = tokenizeLine(normalizedLine);
+
+  for (let i = 0; i < tokens.length; i += 1) {
+    if (i === 0 && isTraveeToken(tokens[i])) continue;
+    if (isServiceToken(tokens[i])) continue;
+
+    const normalizedToken = normalizePotentialNumber(tokens[i]).replace(/[^0-9]/g, "");
+    if (!normalizedToken) continue;
+
+    if (/^\d{4,5}$/.test(normalizedToken)) {
+      storeNumbers.add(normalizedToken);
+      continue;
+    }
+    if (normalizedToken.length >= 4) continue;
+
+    let combined = normalizedToken;
+    let cursor = i + 1;
+    while (combined.length < 5 && cursor < tokens.length) {
+      if (isServiceToken(tokens[cursor])) break;
+
+      const nextToken = normalizePotentialNumber(tokens[cursor]).replace(/[^0-9]/g, "");
+      if (!nextToken || combined.length + nextToken.length > 5) break;
+      if (/^\d{4,5}$/.test(nextToken)) break;
+
+      combined += nextToken;
+      if (/^\d{4,5}$/.test(combined)) {
+        storeNumbers.add(combined);
+        i = cursor;
+        break;
+      }
+      cursor += 1;
+    }
+  }
+  return [...storeNumbers];
+}
+
+function dedupeStores(stores: StoreData[]): StoreData[] {
+  const seen = new Set<string>();
+  return stores.filter((store) => {
+    const key = `${store.number}-${store.travee}-${store.zone}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function parsePlanText(text: string): StoreData[] {
+  const stores: StoreData[] = [];
+  const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
+  let currentZone = "Zone 1";
+  let currentTravee = "";
+
+  for (const line of lines) {
+    const normalizedLine = normalizeOcrLine(line);
+    const tokens = tokenizeLine(normalizedLine);
+    const lineZone = detectLineZone(normalizedLine, tokens);
+
+    if (lineZone.zone && lineZone.persistent) {
+      currentZone = lineZone.zone;
+    }
+
+    currentTravee = extractTravee(normalizedLine, currentTravee);
+    const inferredZone = inferZoneFromTravee(currentTravee, lineZone.zone ?? currentZone, lineZone.explicit);
+
+    for (const number of extractStoreNumbers(normalizedLine)) {
+      stores.push({ number, travee: currentTravee || "?", zone: inferredZone });
+    }
+  }
+
+  return dedupeStores(stores);
+}
+
+function getReadQuality(stores: StoreData[]) {
+  const travees = new Set(stores.map((store) => String(store.travee || "").trim().toUpperCase()).filter((travee) => travee && travee !== "?"));
+  const unknownTravees = stores.filter((store) => !store.travee || store.travee === "?").length;
+  const score = stores.length + travees.size * 5 - unknownTravees * 3;
+  return { travees: travees.size, score };
+}
+
+function isReliableRead(stores: StoreData[]) {
+  const quality = getReadQuality(stores);
+  return stores.length >= MIN_RELIABLE_PLAN_STORES && quality.travees >= MIN_RELIABLE_PLAN_TRAVEES;
+}
+
+function extractJsonFromContent(content: string): unknown | null {
+  const objectMatch = content.match(/\{[\s\S]*\}/);
+  if (objectMatch) {
+    try {
+      return JSON.parse(objectMatch[0]);
+    } catch (_) {
+      // Continue with raw text fallback below.
+    }
+  }
+
+  const arrayMatch = content.match(/\[[\s\S]*\]/);
+  if (arrayMatch) {
+    try {
+      return JSON.parse(arrayMatch[0]);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+function extractOcrLines(content: string): string[] {
+  const parsed = extractJsonFromContent(content);
+  if (Array.isArray(parsed)) return parsed.map((line) => String(line || "").trim()).filter(Boolean);
+
+  if (parsed && typeof parsed === "object" && Array.isArray((parsed as { lines?: unknown[] }).lines)) {
+    return (parsed as { lines: unknown[] }).lines.map((line) => String(line || "").trim()).filter(Boolean);
+  }
+
+  return content
+    .replace(/```(?:json)?/gi, "")
+    .replace(/```/g, "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -31,32 +235,22 @@ serve(async (req) => {
     // Remove data URL prefix if present
     const base64Data = imageBase64.replace(/^data:image\/[a-z]+;base64,/, "");
 
-    const systemPrompt = `Tu es l'OCR de production pour STAF Transport. La priorité absolue est l'exactitude : ne jamais inventer un magasin ou une travée.
+    const systemPrompt = `Tu es uniquement un moteur OCR brut pour STAF Transport. Tu ne dois PAS créer une liste de magasins.
 
-Le plan est un tableau quadrillé. Les en-têtes de lignes/colonnes sont des travées : nombres 1 à 3 chiffres (72, 86, 306...), codes (99BIS, DEB, DEB4...), ou lettres seules (X, Y, Z, A...). Les cases contiennent un ou plusieurs magasins à 4 ou 5 chiffres.
+Objectif : recopier le texte visible du plan, ligne par ligne, sans interprétation.
 
-Méthode obligatoire :
-1. Repère toutes les travées visibles, même petites, floues ou sur les bords.
-2. Balaye toute la grille cellule par cellule, de gauche à droite et de haut en bas.
-3. Extrait uniquement les groupes de 4 ou 5 chiffres réellement visibles comme magasin. Si plusieurs magasins sont dans la même case, retourne-les tous.
-4. N'invente jamais un numéro à partir d'une quantité, d'un sexe ou d'une heure. Exemple : "6317 F 6 8485" = 6317 et 8485 seulement, jamais 68485. "5H00" n'est jamais un magasin.
-5. Associe le magasin à la travée la plus proche de sa ligne/colonne. Si la travée est incertaine, mets "?" mais garde le magasin.
-6. Ne supprime jamais un magasin parce qu'il semble doublon dans une autre travée : garde-le si la travée ou la zone change.
-7. Si un chiffre est trop flou pour être lu avec confiance, ignore ce magasin au lieu de créer une estimation.
+Règles obligatoires :
+1. Lis toute l'image, surtout la grille et les bords.
+2. Retourne les lignes dans l'ordre visuel, de haut en bas puis gauche à droite.
+3. Conserve les travées visibles (72, 86, 306, 99BIS, DEB, DEB4, X, Y...).
+4. Conserve les textes de cellule tels que vus : magasins, M/F/S, quantités, 5H00, DEB.
+5. N'ajoute jamais un magasin supposé. Ne complète jamais un chiffre flou. Si c'est illisible, écris "?".
+6. Ne fusionne jamais une quantité avec le magasin suivant : "6317 F 6 8485" doit rester ce texte brut.
+7. Ne retourne aucun objet magasin structuré : seulement le texte OCR brut.
 
-Zones :
-- "Débord" si la zone est marquée DEBORD/DEB, ou si la travée numérique est 72 à 86 sans mention Craft/Kraft.
-- "Craft" uniquement si la case/zone est marquée CRAFT/KRAFT/CRAFTER.
-- "Zone 1" sinon, toujours pour les travées lettres comme X/Y/Z/A.
+Format strict : {"lines":["ligne OCR 1","ligne OCR 2"]}. Aucun markdown.`;
 
-Retourne UNIQUEMENT un tableau JSON, sans markdown ni texte autour.`;
-
-    const userPrompt = `Analyse le plan complet en mode EXHAUSTIF et STRICT. Ne fais pas un résumé rapide : lis chaque case.
-
-Format exact :
-[{"number":"8486","travee":"72","zone":"Débord"},{"number":"6317","travee":"306","zone":"Zone 1"}]
-
-Règle importante : retourne seulement les magasins réellement visibles sur le plan. N'ajoute jamais de numéros supposés.`;
+    const userPrompt = `Relis le plan en OCR brut complet. Ne fais pas d'analyse rapide, ne calcule rien, ne devine rien. Retourne seulement {"lines":[...]} avec les lignes réellement visibles.`;
 
     const callVisionModel = (model: string) => fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -85,7 +279,7 @@ Règle importante : retourne seulement les magasins réellement visibles sur le 
       }),
     });
 
-    let content = "";
+    let bestRead: { model: string; content: string; rawText: string; stores: StoreData[]; score: number; travees: number } | null = null;
     let lastStatus = 0;
     let lastErrorText = "";
 
@@ -112,13 +306,21 @@ Règle importante : retourne seulement les magasins réellement visibles sur le 
       }
 
       const data = await response.json();
-      content = data.choices?.[0]?.message?.content || "";
-      const quickCount = (content.match(/"number"\s*:/g) ?? []).length;
-      console.log(`Model ${model} returned about ${quickCount} stores`);
-      if (quickCount >= MIN_RELIABLE_PLAN_STORES || model === OCR_MODELS[OCR_MODELS.length - 1]) break;
+      const content = data.choices?.[0]?.message?.content || "";
+      const lines = extractOcrLines(content);
+      const rawText = lines.join("\n");
+      const stores = parsePlanText(rawText);
+      const quality = getReadQuality(stores);
+      console.log(`Model ${model} OCR raw parsed ${stores.length} stores across ${quality.travees} travees`);
+
+      if (!bestRead || quality.score > bestRead.score) {
+        bestRead = { model, content, rawText, stores, score: quality.score, travees: quality.travees };
+      }
+
+      if (isReliableRead(stores)) break;
     }
 
-    if (!content) {
+    if (!bestRead?.content) {
       if (lastStatus === 429) {
         return new Response(
           JSON.stringify({ error: "Trop de requêtes, réessayez dans quelques secondes." }),
@@ -134,48 +336,16 @@ Règle importante : retourne seulement les magasins réellement visibles sur le 
       throw new Error(`AI gateway error: ${lastStatus} ${lastErrorText}`);
     }
 
-    // Extract JSON array from the response
-    const jsonMatch = content.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) {
-      console.error("No JSON array found in AI response:", content);
-      return new Response(
-        JSON.stringify({ stores: [], rawResponse: content }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const stores = JSON.parse(jsonMatch[0]);
-
-    // Validate and normalize
-    const normalizeZone = (zone: string) => {
-      const z = String(zone || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-      if (z.includes("craft") || z.includes("kraft")) return "Craft";
-      if (z.includes("debord") || z.includes("deb")) return "Débord";
-      return "Zone 1";
-    };
-
-    const validStores = stores
-      .filter((s: any) => s.number && /^\d{4,5}$/.test(String(s.number).trim()))
-      .map((s: any) => {
-        const travee = String(s.travee || "?").trim();
-        // Lettres seules (X, Y, Z…) sont TOUJOURS en Zone 1
-        const zone = /^[A-Za-z]$/.test(travee) ? "Zone 1" : normalizeZone(s.zone);
-        return { number: String(s.number).trim(), travee, zone };
-      });
-
-    // Dedupe
-    const seen = new Set<string>();
-    const deduped = validStores.filter((s: any) => {
-      const key = `${s.number}-${s.travee}-${s.zone}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-
-    console.log(`Extracted ${deduped.length} stores from plan`);
+    console.log(`Selected ${bestRead.model}: ${bestRead.stores.length} stores across ${bestRead.travees} travees`);
 
     return new Response(
-      JSON.stringify({ stores: deduped }),
+      JSON.stringify({
+        stores: bestRead.stores,
+        rawText: bestRead.rawText,
+        source: "ai-raw-ocr",
+        model: bestRead.model,
+        quality: { stores: bestRead.stores.length, travees: bestRead.travees },
+      }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
