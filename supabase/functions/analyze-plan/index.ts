@@ -31,17 +31,18 @@ serve(async (req) => {
     // Remove data URL prefix if present
     const base64Data = imageBase64.replace(/^data:image\/[a-z]+;base64,/, "");
 
-    const systemPrompt = `Tu es l'OCR de production pour STAF Transport. La priorité absolue est de ne rater AUCUN magasin visible sur une photo de plan papier.
+    const systemPrompt = `Tu es l'OCR de production pour STAF Transport. La priorité absolue est l'exactitude : ne jamais inventer un magasin ou une travée.
 
 Le plan est un tableau quadrillé. Les en-têtes de lignes/colonnes sont des travées : nombres 1 à 3 chiffres (72, 86, 306...), codes (99BIS, DEB, DEB4...), ou lettres seules (X, Y, Z, A...). Les cases contiennent un ou plusieurs magasins à 4 ou 5 chiffres.
 
 Méthode obligatoire :
 1. Repère toutes les travées visibles, même petites, floues ou sur les bords.
 2. Balaye toute la grille cellule par cellule, de gauche à droite et de haut en bas.
-3. Extrait chaque groupe de 4 ou 5 chiffres comme magasin. Si plusieurs magasins sont dans la même case, retourne-les tous.
-4. Si un magasin est flou mais lisible en partie, retourne ta meilleure estimation au lieu de l'ignorer.
+3. Extrait uniquement les groupes de 4 ou 5 chiffres réellement visibles comme magasin. Si plusieurs magasins sont dans la même case, retourne-les tous.
+4. N'invente jamais un numéro à partir d'une quantité, d'un sexe ou d'une heure. Exemple : "6317 F 6 8485" = 6317 et 8485 seulement, jamais 68485. "5H00" n'est jamais un magasin.
 5. Associe le magasin à la travée la plus proche de sa ligne/colonne. Si la travée est incertaine, mets "?" mais garde le magasin.
 6. Ne supprime jamais un magasin parce qu'il semble doublon dans une autre travée : garde-le si la travée ou la zone change.
+7. Si un chiffre est trop flou pour être lu avec confiance, ignore ce magasin au lieu de créer une estimation.
 
 Zones :
 - "Débord" si la zone est marquée DEBORD/DEB, ou si la travée numérique est 72 à 86 sans mention Craft/Kraft.
@@ -50,12 +51,12 @@ Zones :
 
 Retourne UNIQUEMENT un tableau JSON, sans markdown ni texte autour.`;
 
-    const userPrompt = `Analyse le plan complet en mode EXHAUSTIF. Ne fais pas un résumé rapide : lis chaque case.
+    const userPrompt = `Analyse le plan complet en mode EXHAUSTIF et STRICT. Ne fais pas un résumé rapide : lis chaque case.
 
 Format exact :
 [{"number":"8486","travee":"72","zone":"Débord"},{"number":"6317","travee":"306","zone":"Zone 1"}]
 
-Règle importante : mieux vaut retourner un magasin douteux avec la meilleure lecture possible que le rater.`;
+Règle importante : retourne seulement les magasins réellement visibles sur le plan. N'ajoute jamais de numéros supposés.`;
 
     const callVisionModel = (model: string) => fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",

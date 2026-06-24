@@ -452,12 +452,16 @@ export function suggestStores(query: string, limit = 30): StoreSuggestion[] {
       results.push({ number: num, name: nm?.name, matches, score: 3 });
     }
   }
-  for (const [num, matches] of numberMap) {
-    if (seen.has(num)) continue;
-    if (num.toLowerCase().includes(compact)) {
-      seen.add(num);
-      const nm = names.find(n => n.number === num);
-      results.push({ number: num, name: nm?.name, matches, score: 4 });
+  // Pour les chiffres, ne pas afficher des magasins qui contiennent juste 1 ou 2 chiffres tapés
+  // (ex: taper "8" ne doit pas proposer "1168"). C'est ce qui donnait l'impression de faux magasins.
+  if (compact.length >= 3) {
+    for (const [num, matches] of numberMap) {
+      if (seen.has(num)) continue;
+      if (num.toLowerCase().includes(compact)) {
+        seen.add(num);
+        const nm = names.find(n => n.number === num);
+        results.push({ number: num, name: nm?.name, matches, score: 4 });
+      }
     }
   }
 

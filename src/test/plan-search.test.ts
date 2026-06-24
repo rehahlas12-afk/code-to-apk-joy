@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { parseOcrText, reconstructTextFromGeometry } from "../lib/ocr";
-import { activatePlan, getStores, savePlan, searchStore } from "../lib/store";
+import { activatePlan, getStores, savePlan, searchStore, suggestStores } from "../lib/store";
 
 describe("plan search", () => {
   beforeEach(() => {
@@ -75,9 +75,49 @@ describe("plan search", () => {
     );
   });
 
+  it("does not invent stores by merging quantities with the next store", () => {
+    const stores = parseOcrText(`
+      201 5H00 2971 M 13 6317 F 6 8485 F 6 DEB5
+      401 5H00 7878 F 4 9668 F 5 11843 F 9 DEB
+      306 5H00 10 892 8214 S 23
+    `);
+
+    expect(stores).toEqual(
+      expect.arrayContaining([
+        { number: "2971", travee: "201", zone: "Zone 1" },
+        { number: "6317", travee: "201", zone: "Zone 1" },
+        { number: "8485", travee: "201", zone: "Zone 1" },
+        { number: "7878", travee: "401", zone: "Débord" },
+        { number: "9668", travee: "401", zone: "Débord" },
+        { number: "11843", travee: "401", zone: "Débord" },
+        { number: "10892", travee: "306", zone: "Zone 1" },
+        { number: "8214", travee: "306", zone: "Zone 1" },
+      ]),
+    );
+    expect(stores.map((store) => store.number)).not.toEqual(
+      expect.arrayContaining(["68485", "49668", "511843"]),
+    );
+  });
+
   it("does not load demo stores when the app has no work plan", () => {
     expect(getStores()).toEqual([]);
     expect(searchStore("8486")).toBeNull();
+  });
+
+  it("keeps short numeric suggestions strict", () => {
+    savePlan({
+      id: "plan-a",
+      imageData: "a",
+      stores: [
+        { number: "1168", travee: "99", zone: "Zone 1" },
+        { number: "8214", travee: "306", zone: "Zone 1" },
+        { number: "8485", travee: "201", zone: "Zone 1" },
+      ],
+      date: "01/01/2026",
+      time: "08:00:00",
+    });
+
+    expect(suggestStores("8").map((store) => store.number)).toEqual(["8214", "8485"]);
   });
 
   it("keeps 86 Débord separate from 86 Craft", () => {
