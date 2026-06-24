@@ -199,7 +199,22 @@ function tokenizeLine(normalizedLine: string): string[] {
 }
 
 function isServiceToken(token: string): boolean {
-  return /^(M|F|S|H|X)$/.test(token) || /^5H0{2}$/.test(token) || /^H0{2}$/.test(token);
+  return /^(M|F|S|H|X)$/.test(token) || /^5H0{2}$/.test(token) || /^H0{2}$/.test(token) || /^DEB\d?$/.test(token);
+}
+
+function detectLineZone(normalizedLine: string, tokens: string[]): { zone: string | null; explicit: boolean; persistent: boolean } {
+  for (const { pattern, zone } of ZONE_PATTERNS) {
+    if (!pattern.test(normalizedLine)) continue;
+
+    const isDebTraveeAtEnd = zone === "Débord" && tokens.some((token, index) => /^DEB\d?$/.test(token) && index > 0);
+    return {
+      zone,
+      explicit: true,
+      persistent: !isDebTraveeAtEnd,
+    };
+  }
+
+  return { zone: null, explicit: false, persistent: false };
 }
 
 function isTraveeToken(token: string): boolean {
@@ -326,18 +341,16 @@ export function parseOcrText(text: string): StoreData[] {
 
   for (const line of lines) {
     const normalizedLine = normalizeOcrLine(line);
-    let explicitZoneOnLine = false;
+    const tokens = tokenizeLine(normalizedLine);
+    const lineZone = detectLineZone(normalizedLine, tokens);
+    const explicitZoneOnLine = lineZone.explicit;
 
-    for (const { pattern, zone } of ZONE_PATTERNS) {
-      if (pattern.test(normalizedLine)) {
-        currentZone = zone;
-        explicitZoneOnLine = true;
-        break;
-      }
+    if (lineZone.zone && lineZone.persistent) {
+      currentZone = lineZone.zone;
     }
 
     currentTravee = extractTravee(normalizedLine, currentTravee);
-    const inferredZone = inferZoneFromTravee(currentTravee, currentZone, explicitZoneOnLine);
+    const inferredZone = inferZoneFromTravee(currentTravee, lineZone.zone ?? currentZone, explicitZoneOnLine);
     const lineNumbers = extractStoreNumbers(normalizedLine);
 
     for (const num of lineNumbers) {
