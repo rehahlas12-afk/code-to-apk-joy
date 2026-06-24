@@ -49,11 +49,14 @@ function isServiceToken(token: string): boolean {
 }
 
 function isTraveeToken(token: string): boolean {
+  if (/^(M|F|S|H)$/.test(token)) return false;
+
   return (
     /^99BIS\d?$/.test(token) ||
     /^DEB\d?$/.test(token) ||
     /^[1-9]\d{1,2}$/.test(token) ||
     /^[A-WYZ]$/.test(token) ||
+    /^X$/.test(token) ||
     /^[A-Z]\d{1,2}$/.test(token) ||
     /^\d{1,3}[A-Z]$/.test(token)
   );
