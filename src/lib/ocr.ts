@@ -56,8 +56,13 @@ async function analyzeWithAI(
   }
 
   const stores: StoreData[] = data?.stores ?? [];
-  console.log(`AI extracted ${stores.length} stores from plan`);
-  return stores;
+  const rawTextStores = typeof data?.rawText === "string" ? parseOcrText(data.rawText) : [];
+  const selectedStores = chooseBestPlanRead(stores, rawTextStores);
+  console.log(
+    `AI OCR extracted ${selectedStores.length} stores from plan`,
+    data?.source ? `source=${data.source}` : "",
+  );
+  return selectedStores;
 }
 
 // ---- Fallback: simple local text-based extraction ----
@@ -84,6 +89,16 @@ type OcrWord = {
 export const MIN_RELIABLE_PLAN_STORES = 35;
 const MIN_RELIABLE_PLAN_TRAVEES = 12;
 
+function getReadQuality(stores: StoreData[]): { travees: number; score: number } {
+  const travees = new Set(
+    stores
+      .map((store) => String(store.travee || "").trim().toUpperCase())
+      .filter((travee) => travee && travee !== "?"),
+  );
+  const unknownTravees = stores.filter((store) => !store.travee || store.travee === "?").length;
+  return { travees: travees.size, score: stores.length + travees.size * 5 - unknownTravees * 3 };
+}
+
 function assertReliablePlanRead(stores: StoreData[]): StoreData[] {
   const reliableTravees = new Set(
     stores
@@ -101,7 +116,8 @@ function assertReliablePlanRead(stores: StoreData[]): StoreData[] {
 }
 
 function shouldUseAdaptiveFallback(stores: StoreData[]): boolean {
-  return stores.length < MIN_RELIABLE_PLAN_STORES;
+  const quality = getReadQuality(stores);
+  return stores.length < MIN_RELIABLE_PLAN_STORES || quality.travees < MIN_RELIABLE_PLAN_TRAVEES;
 }
 
 function loadImageForOcr(src: string): Promise<HTMLImageElement> {
@@ -220,6 +236,8 @@ function detectLineZone(normalizedLine: string, tokens: string[]): { zone: strin
 }
 
 function isTraveeToken(token: string): boolean {
+  if (/^(M|F|S|H)$/.test(token)) return false;
+
   return (
     /^99BIS\d?$/.test(token) ||
     /^DEB\d?$/.test(token) ||
@@ -332,6 +350,19 @@ function chooseBestParsedStores(textStores: StoreData[], geometricStores: StoreD
   const mergedStores = dedupeStores([...textStores, ...geometricStores]);
   const bestSingleRead = geometricStores.length > textStores.length ? geometricStores : textStores;
   return mergedStores.length >= bestSingleRead.length ? mergedStores : bestSingleRead;
+}
+
+function chooseBestPlanRead(primaryStores: StoreData[], rawTextStores: StoreData[]): StoreData[] {
+  if (!primaryStores.length) return rawTextStores;
+  if (!rawTextStores.length) return primaryStores;
+
+  const primaryQuality = getReadQuality(primaryStores);
+  const rawQuality = getReadQuality(rawTextStores);
+  const mergedStores = dedupeStores([...primaryStores, ...rawTextStores]);
+  const mergedQuality = getReadQuality(mergedStores);
+
+  if (mergedQuality.score >= Math.max(primaryQuality.score, rawQuality.score)) return mergedStores;
+  return rawQuality.score > primaryQuality.score ? rawTextStores : primaryStores;
 }
 
 export function parseOcrText(text: string): StoreData[] {
