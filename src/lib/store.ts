@@ -141,14 +141,24 @@ export function getPlanStorageErrorMessage(error: unknown): string {
 
 function dedupeStores(stores: StoreData[]): StoreData[] {
   const seen = new Set<string>();
+  const result: StoreData[] = [];
+  const singleSlotTaken = new Set<string>(); // travées Craft/Débord déjà occupées
 
-  return stores.filter((store) => {
+  for (const store of stores) {
     const key = `${store.number}-${store.travee}-${store.zone}`;
-
-    if (seen.has(key)) return false;
+    if (seen.has(key)) continue;
     seen.add(key);
-    return true;
-  });
+
+    // Règle Pékin : 1 seul magasin par travée en Craft / Débord
+    const zone = normalizeZone(store.zone);
+    if (zone === "Craft" || zone === "Débord") {
+      const slot = `${zone}|${String(store.travee).trim().toUpperCase()}`;
+      if (singleSlotTaken.has(slot)) continue;
+      singleSlotTaken.add(slot);
+    }
+    result.push(store);
+  }
+  return result;
 }
 
 function normalizeZone(zone: string): string {
@@ -267,13 +277,22 @@ export function getActivePlan(): PlanRecord | null {
 }
 
 export function countFilledTravees(stores: StoreData[]): number {
-  const filled = new Set<string>();
+  // Règle Pékin :
+  // - Zone 1 : 1 tournée = 1 travée remplie (peu importe le nombre de magasins)
+  // - Craft / Débord : 1 magasin = 1 tournée
+  const zone1Travees = new Set<string>();
+  let singleStoreTournees = 0;
   for (const store of normalizeStores(stores)) {
     const travee = store.travee.trim();
     if (!travee) continue;
-    filled.add(`${normalizeZone(store.zone)}|${travee.toUpperCase()}`);
+    const zone = normalizeZone(store.zone);
+    if (zone === "Craft" || zone === "Débord") {
+      singleStoreTournees += 1;
+    } else {
+      zone1Travees.add(travee.toUpperCase());
+    }
   }
-  return filled.size;
+  return zone1Travees.size + singleStoreTournees;
 }
 
 export function activatePlan(id: string): PlanRecord | null {
