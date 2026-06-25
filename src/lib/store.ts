@@ -141,14 +141,24 @@ export function getPlanStorageErrorMessage(error: unknown): string {
 
 function dedupeStores(stores: StoreData[]): StoreData[] {
   const seen = new Set<string>();
+  const result: StoreData[] = [];
+  const singleSlotTaken = new Set<string>(); // travées Craft/Débord déjà occupées
 
-  return stores.filter((store) => {
+  for (const store of stores) {
     const key = `${store.number}-${store.travee}-${store.zone}`;
-
-    if (seen.has(key)) return false;
+    if (seen.has(key)) continue;
     seen.add(key);
-    return true;
-  });
+
+    // Règle Pékin : 1 seul magasin par travée en Craft / Débord
+    const zone = normalizeZone(store.zone);
+    if (zone === "Craft" || zone === "Débord") {
+      const slot = `${zone}|${String(store.travee).trim().toUpperCase()}`;
+      if (singleSlotTaken.has(slot)) continue;
+      singleSlotTaken.add(slot);
+    }
+    result.push(store);
+  }
+  return result;
 }
 
 function normalizeZone(zone: string): string {
