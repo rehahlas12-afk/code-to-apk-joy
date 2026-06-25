@@ -303,6 +303,11 @@ function extractOcrLines(content: string): string[] {
     .filter(Boolean);
 }
 
+const GROQ_VISION_MODELS = [
+  "meta-llama/llama-4-maverick-17b-128e-instruct",
+  "meta-llama/llama-4-scout-17b-16e-instruct",
+];
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -310,8 +315,9 @@ serve(async (req) => {
 
   try {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
+    if (!LOVABLE_API_KEY && !GROQ_API_KEY) {
+      throw new Error("Aucune clé IA configurée (GROQ_API_KEY ou LOVABLE_API_KEY)");
     }
 
     const { imageBase64 } = await req.json();
@@ -322,7 +328,6 @@ serve(async (req) => {
       );
     }
 
-    // Remove data URL prefix if present
     const base64Data = imageBase64.replace(/^data:image\/[a-z]+;base64,/, "");
 
     const systemPrompt = `Tu es uniquement un moteur OCR brut pour STAF Transport. Tu ne dois PAS créer une liste de magasins.
@@ -342,56 +347,67 @@ Format strict : {"lines":["ligne OCR 1","ligne OCR 2"]}. Aucun markdown.`;
 
     const userPrompt = `Relis le plan en OCR brut complet. Ne fais pas d'analyse rapide, ne calcule rien, ne devine rien. Retourne seulement {"lines":[...]} avec les lignes réellement visibles.`;
 
-    const callVisionModel = (model: string) => fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const buildMessages = () => ([
+      { role: "system", content: systemPrompt },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: userPrompt },
+          { type: "image_url", image_url: { url: `data:image/jpeg;base64,${base64Data}` } },
+        ],
+      },
+    ]);
+
+    const callGroqModel = (model: string) => fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Lovable-API-Key": LOVABLE_API_KEY,
+        "Authorization": `Bearer ${GROQ_API_KEY}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        model,
-        temperature: 0,
-        messages: [
-          { role: "system", content: systemPrompt },
-          {
-            role: "user",
-            content: [
-              { type: "text", text: userPrompt },
-              {
-                type: "image_url",
-                image_url: {
-                  url: `data:image/jpeg;base64,${base64Data}`,
-                },
-              },
-            ],
-          },
-        ],
-      }),
+      body: JSON.stringify({ model, temperature: 0, messages: buildMessages() }),
     });
 
-    let bestRead: { model: string; content: string; rawText: string; stores: StoreData[]; score: number; travees: number } | null = null;
+    const callLovableModel = (model: string) => fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Lovable-API-Key": LOVABLE_API_KEY ?? "",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ model, temperature: 0, messages: buildMessages() }),
+    });
+
+    type Attempt = { provider: "groq" | "lovable"; model: string; call: () => Promise<Response> };
+    const attempts: Attempt[] = [];
+    if (GROQ_API_KEY) {
+      for (const model of GROQ_VISION_MODELS) attempts.push({ provider: "groq", model, call: () => callGroqModel(model) });
+    }
+    if (LOVABLE_API_KEY) {
+      for (const model of OCR_MODELS) attempts.push({ provider: "lovable", model, call: () => callLovableModel(model) });
+    }
+
+    let bestRead: { provider: string; model: string; content: string; rawText: string; stores: StoreData[]; score: number; travees: number } | null = null;
     let lastStatus = 0;
     let lastErrorText = "";
 
-    for (const model of OCR_MODELS) {
-      const response = await callVisionModel(model);
+    for (const attempt of attempts) {
+      const response = await attempt.call();
       lastStatus = response.status;
 
       if (!response.ok) {
-        if (response.status === 429) {
+        lastErrorText = await response.text();
+        console.error("AI provider error:", attempt.provider, attempt.model, response.status, lastErrorText);
+        if (attempt.provider === "lovable" && response.status === 429) {
           return new Response(
             JSON.stringify({ error: "Trop de requêtes, réessayez dans quelques secondes." }),
             { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
-        if (response.status === 402) {
+        if (attempt.provider === "lovable" && response.status === 402) {
           return new Response(
             JSON.stringify({ error: "Crédits IA épuisés. Ajoutez des crédits dans Settings > Workspace > Usage." }),
             { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
-        lastErrorText = await response.text();
-        console.error("AI gateway error:", model, response.status, lastErrorText);
         continue;
       }
 
@@ -401,38 +417,26 @@ Format strict : {"lines":["ligne OCR 1","ligne OCR 2"]}. Aucun markdown.`;
       const rawText = lines.join("\n");
       const stores = parsePlanText(rawText);
       const quality = getReadQuality(stores);
-      console.log(`Model ${model} OCR raw parsed ${stores.length} stores across ${quality.travees} travees`);
+      console.log(`[${attempt.provider}] ${attempt.model}: ${stores.length} magasins, ${quality.travees} travées`);
 
       if (!bestRead || quality.score > bestRead.score) {
-        bestRead = { model, content, rawText, stores, score: quality.score, travees: quality.travees };
+        bestRead = { provider: attempt.provider, model: attempt.model, content, rawText, stores, score: quality.score, travees: quality.travees };
       }
 
       if (isReliableRead(stores)) break;
     }
 
     if (!bestRead?.content) {
-      if (lastStatus === 429) {
-        return new Response(
-          JSON.stringify({ error: "Trop de requêtes, réessayez dans quelques secondes." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      if (lastStatus === 402) {
-        return new Response(
-          JSON.stringify({ error: "Crédits IA épuisés. Ajoutez des crédits dans Settings > Workspace > Usage." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      throw new Error(`AI gateway error: ${lastStatus} ${lastErrorText}`);
+      throw new Error(`Aucun modèle n'a pu lire le plan (dernier statut ${lastStatus}): ${lastErrorText}`);
     }
 
-    console.log(`Selected ${bestRead.model}: ${bestRead.stores.length} stores across ${bestRead.travees} travees`);
+    console.log(`Selected [${bestRead.provider}] ${bestRead.model}: ${bestRead.stores.length} magasins, ${bestRead.travees} travées`);
 
     return new Response(
       JSON.stringify({
         stores: bestRead.stores,
         rawText: bestRead.rawText,
-        source: "ai-raw-ocr",
+        source: `${bestRead.provider}-raw-ocr`,
         model: bestRead.model,
         quality: { stores: bestRead.stores.length, travees: bestRead.travees },
       }),
