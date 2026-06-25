@@ -267,13 +267,22 @@ export function getActivePlan(): PlanRecord | null {
 }
 
 export function countFilledTravees(stores: StoreData[]): number {
-  const filled = new Set<string>();
+  // Règle Pékin :
+  // - Zone 1 : 1 tournée = 1 travée remplie (peu importe le nombre de magasins)
+  // - Craft / Débord : 1 magasin = 1 tournée
+  const zone1Travees = new Set<string>();
+  let singleStoreTournees = 0;
   for (const store of normalizeStores(stores)) {
     const travee = store.travee.trim();
     if (!travee) continue;
-    filled.add(`${normalizeZone(store.zone)}|${travee.toUpperCase()}`);
+    const zone = normalizeZone(store.zone);
+    if (zone === "Craft" || zone === "Débord") {
+      singleStoreTournees += 1;
+    } else {
+      zone1Travees.add(travee.toUpperCase());
+    }
   }
-  return filled.size;
+  return zone1Travees.size + singleStoreTournees;
 }
 
 export function activatePlan(id: string): PlanRecord | null {
