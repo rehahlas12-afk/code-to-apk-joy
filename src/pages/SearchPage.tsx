@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Mic, Search as SearchIcon, X } from "lucide-react";
 import { searchStore, searchStoreFuzzy, suggestStores, searchByTravee, getSearchableStores, type StoreSuggestion, type TraveeResult } from "@/lib/store";
 import { speakFr } from "@/lib/speech";
+import { startVoice, type VoiceHandle } from "@/lib/voiceInput";
 
 interface MatchInfo {
   travee: string;
@@ -39,7 +40,7 @@ const SearchPage = () => {
   const [notFound, setNotFound] = useState(false);
   const [listening, setListening] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<VoiceHandle | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const speak = useCallback((text: string) => {
@@ -156,37 +157,25 @@ const SearchPage = () => {
     announce(r);
   }, [announce, computeResult]);
 
-  const startListening = useCallback(() => {
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SR) {
-      speak("La reconnaissance vocale n'est pas disponible");
-      return;
-    }
+  const startListening = useCallback(async () => {
     speak("Quel magasin cherchez-vous ?");
-
-    setTimeout(() => {
-      const rec = new SR();
-      rec.lang = "fr-FR";
-      rec.continuous = false;
-      rec.interimResults = true;
-
-      rec.onresult = (event: any) => {
-        const text = event.results[0][0].transcript;
-        setQuery(text);
-        if (event.results[0].isFinal) {
+    setListening(true);
+    setTimeout(async () => {
+      const handle = await startVoice({
+        onPartial: (text) => setQuery(text),
+        onFinal: (text) => {
+          setQuery(text);
           const numbers = text.replace(/\s/g, "").match(/\d+/g);
           const q = numbers && numbers.join("").length >= 3 ? numbers.join("") : text.trim();
-          runSearch(q, true); // fuzzy/phonetic OK pour la voix
+          runSearch(q, true);
           setListening(false);
-        }
-      };
-      rec.onerror = () => setListening(false);
-      rec.onend = () => setListening(false);
-
-      recognitionRef.current = rec;
-      rec.start();
-      setListening(true);
-    }, 700);
+        },
+        onError: (err) => { speak(err); setListening(false); },
+        onEnd: () => setListening(false),
+      });
+      recognitionRef.current = handle;
+      if (!handle) setListening(false);
+    }, 600);
   }, [runSearch, speak]);
 
   const stopListening = useCallback(() => {
@@ -194,34 +183,24 @@ const SearchPage = () => {
     setListening(false);
   }, []);
 
-  const startTraveeListening = useCallback(() => {
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SR) {
-      speak("La reconnaissance vocale n'est pas disponible");
-      return;
-    }
+  const startTraveeListening = useCallback(async () => {
     speak("Quelle travée ?");
-    setTimeout(() => {
-      const rec = new SR();
-      rec.lang = "fr-FR";
-      rec.continuous = false;
-      rec.interimResults = true;
-      rec.onresult = (event: any) => {
-        const text = event.results[0][0].transcript;
-        setTraveeQuery(text.toUpperCase());
-        if (event.results[0].isFinal) {
-          // Garde chiffres + lettres uniquement
+    setListening(true);
+    setTimeout(async () => {
+      const handle = await startVoice({
+        onPartial: (text) => setTraveeQuery(text.toUpperCase()),
+        onFinal: (text) => {
           const cleaned = text.toUpperCase().replace(/[^A-Z0-9]/g, "");
+          setTraveeQuery(cleaned || text.trim().toUpperCase());
           runTraveeSearch(cleaned || text.trim());
           setListening(false);
-        }
-      };
-      rec.onerror = () => setListening(false);
-      rec.onend = () => setListening(false);
-      recognitionRef.current = rec;
-      rec.start();
-      setListening(true);
-    }, 700);
+        },
+        onError: (err) => { speak(err); setListening(false); },
+        onEnd: () => setListening(false),
+      });
+      recognitionRef.current = handle;
+      if (!handle) setListening(false);
+    }, 600);
   }, [runTraveeSearch, speak]);
 
 
