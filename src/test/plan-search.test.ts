@@ -120,9 +120,9 @@ describe("plan search", () => {
     expect(suggestStores("8").map((store) => store.number)).toEqual(["8214", "8485"]);
   });
 
-  it("keeps 86 Débord separate from 86 Craft", () => {
+  it("keeps right-side Débord separate from independent Craft", () => {
     const stores = parseOcrText(`
-      86 1111
+      201 9999 M 4 1111 M 8 86
       86 CRAFT 2222
       CRAFT
       87 3333
@@ -131,6 +131,7 @@ describe("plan search", () => {
     expect(stores).toEqual(
       expect.arrayContaining([
         { number: "1111", travee: "86", zone: "Débord" },
+        { number: "9999", travee: "201", zone: "Zone 1" },
         { number: "2222", travee: "86", zone: "Craft" },
         { number: "3333", travee: "87", zone: "Craft" },
       ]),
