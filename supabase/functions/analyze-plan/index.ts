@@ -16,6 +16,8 @@ type StoreData = {
   zone: string;
 };
 
+type LineStoreEntry = { number: string; travee: string; zone?: string };
+
 const OCR_DIGIT_FIXES: Record<string, string> = {
   O: "0", Q: "0", D: "0", I: "1", L: "1", "|": "1",
   Z: "2", S: "5", B: "8", G: "6",
@@ -69,7 +71,10 @@ function detectLineZone(normalizedLine: string, tokens: string[]): { zone: strin
     const isDebTraveeAtEnd = zone === "Débord" && tokens.some((token, index) => /^DEB\d?$/.test(token) && index > 0);
     if (isDebTraveeAtEnd) return { zone: null, explicit: false, persistent: false };
 
-    return { zone, explicit: true, persistent: true };
+    const containsStores = tokens.some((_, index) => canReadStoreAt(tokens, index));
+    const isStandaloneHeader = tokens.length <= 3 || !containsStores;
+
+    return { zone, explicit: true, persistent: zone === "Zone 1" ? true : isStandaloneHeader };
   }
 
   return { zone: null, explicit: false, persistent: false };
@@ -128,6 +133,46 @@ function extractStoreNumbers(normalizedLine: string): string[] {
 
 function tokenDigits(token: string): string {
   return normalizePotentialNumber(token).replace(/[^0-9]/g, "");
+}
+
+function isTrailingDebordTraveeToken(token: string): boolean {
+  if (/^DEB\d?$/.test(token)) return true;
+  const digits = tokenDigits(token);
+  if (!/^\d{2}$/.test(digits)) return false;
+  const value = Number(digits);
+  return value >= 72 && value <= 85;
+}
+
+function readStoreEndingBefore(tokens: string[], endExclusive: number): { number: string; startIndex: number } | null {
+  for (let startIndex = endExclusive - 1; startIndex >= Math.max(0, endExclusive - 3); startIndex -= 1) {
+    const slice = tokens.slice(startIndex, endExclusive);
+    if (slice.some((token) => isServiceToken(token) || isTraveeToken(token))) continue;
+    const number = slice.map(tokenDigits).join("");
+    if (/^\d{4,5}$/.test(number)) return { number, startIndex };
+  }
+
+  return null;
+}
+
+function extractTrailingDebordEntry(tokens: string[]): { entry: LineStoreEntry; remainingTokens: string[] } | null {
+  if (tokens.length < 4) return null;
+
+  const travee = tokens[tokens.length - 1];
+  const quantity = tokens[tokens.length - 2];
+  const service = tokens[tokens.length - 3];
+
+  if (!isTrailingDebordTraveeToken(travee)) return null;
+  if (/^DEB\d?$/.test(travee) && tokens.some((token, index) => index > 0 && /^(M|F|S)$/.test(token))) return null;
+  if (!/^(M|F|S)$/.test(service)) return null;
+  if (!/^\d{1,2}$/.test(tokenDigits(quantity))) return null;
+
+  const store = readStoreEndingBefore(tokens, tokens.length - 3);
+  if (!store) return null;
+
+  return {
+    entry: { number: store.number, travee, zone: "Débord" },
+    remainingTokens: tokens.slice(0, store.startIndex),
+  };
 }
 
 function canReadStoreAt(tokens: string[], index: number): boolean {
@@ -190,20 +235,30 @@ function extractLineStoreEntries(
   tokens: string[],
   currentTravee: string,
   explicitZoneOnLine: boolean,
-): Array<{ number: string; travee: string }> {
-  const anchors = tokens
+): LineStoreEntry[] {
+  const trailingDebord = extractTrailingDebordEntry(tokens);
+  const workingTokens = trailingDebord?.remainingTokens ?? tokens;
+
+  const anchors = workingTokens
     .map((token, index) => ({ token, index }))
-    .filter(({ index }) => isLineTraveeAnchor(tokens, index, explicitZoneOnLine));
+    .filter(({ index }) => isLineTraveeAnchor(workingTokens, index, explicitZoneOnLine));
+
+  const debordEntries = trailingDebord ? [trailingDebord.entry] : [];
 
   if (!anchors.length) {
-    return extractStoreNumbers(tokens.join(" ")).map((number) => ({ number, travee: currentTravee || "?" }));
+    return [
+      ...extractStoreNumbers(workingTokens.join(" ")).map((number) => ({ number, travee: currentTravee || "?" })),
+      ...debordEntries,
+    ];
   }
 
-  return anchors.flatMap((anchor, anchorIndex) => {
-    const nextAnchorIndex = anchors[anchorIndex + 1]?.index ?? tokens.length;
-    const segment = [anchor.token, ...tokens.slice(anchor.index + 1, nextAnchorIndex)].join(" ");
+  const anchoredEntries = anchors.flatMap((anchor, anchorIndex) => {
+    const nextAnchorIndex = anchors[anchorIndex + 1]?.index ?? workingTokens.length;
+    const segment = [anchor.token, ...workingTokens.slice(anchor.index + 1, nextAnchorIndex)].join(" ");
     return extractStoreNumbers(segment).map((number) => ({ number, travee: anchor.token }));
   });
+
+  return [...anchoredEntries, ...debordEntries];
 }
 
 function dedupeStores(stores: StoreData[]): StoreData[] {
@@ -232,7 +287,7 @@ function parsePlanText(text: string): StoreData[] {
     }
 
     const lineEntries = extractLineStoreEntries(tokens, currentTravee, lineZone.explicit);
-    const lastLineTravee = lineEntries.at(-1)?.travee;
+    const lastLineTravee = [...lineEntries].reverse().find((entry) => !entry.zone)?.travee;
 
     if (lastLineTravee && lastLineTravee !== "?") {
       currentTravee = lastLineTravee;
@@ -240,8 +295,8 @@ function parsePlanText(text: string): StoreData[] {
       currentTravee = extractTravee(normalizedLine, currentTravee);
     }
 
-    for (const { number, travee } of lineEntries) {
-      const inferredZone = inferZoneFromTravee(travee, lineZone.zone ?? currentZone, lineZone.explicit);
+    for (const { number, travee, zone } of lineEntries) {
+      const inferredZone = zone ?? inferZoneFromTravee(travee, lineZone.zone ?? currentZone, lineZone.explicit);
       stores.push({ number, travee, zone: inferredZone });
     }
   }
@@ -337,7 +392,12 @@ Règles obligatoires :
 4. Conserve les textes de cellule tels que vus : magasins, M/F/S, quantités, 5H00, DEB.
 5. N'ajoute jamais un magasin supposé. Ne complète jamais un chiffre flou. Si c'est illisible, écris "?".
 6. Ne fusionne jamais une quantité avec le magasin suivant : "6317 F 6 8485" doit rester ce texte brut.
-7. Ne retourne aucun objet magasin structuré : seulement le texte OCR brut.
+7. Sépare les zones au lieu de mélanger les colonnes :
+   - Écris une ligne "ZONE 1" avant le grand tableau gauche/centre.
+   - Écris une ligne "DEBORD" avant la colonne tout à droite. Les magasins de Débord sont les numéros placés juste à gauche des travées tout à droite (72-85, DEB, DEB1...).
+   - Écris une ligne "CRAFT" avant la zone Craft indépendante.
+   - Ne mets jamais un magasin de la colonne tout à droite dans Zone 1.
+8. Ne retourne aucun objet magasin structuré : seulement le texte OCR brut.
 
 Format strict : {"lines":["ligne OCR 1","ligne OCR 2"]}. Aucun markdown.`;
 

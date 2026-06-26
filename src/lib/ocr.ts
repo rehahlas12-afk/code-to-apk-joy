@@ -86,6 +86,8 @@ type OcrWord = {
   bbox?: { x0: number; y0: number; x1: number; y1: number };
 };
 
+type LineStoreEntry = { number: string; travee: string; zone?: string };
+
 export const MIN_RELIABLE_PLAN_STORES = 35;
 const MIN_RELIABLE_PLAN_TRAVEES = 12;
 
@@ -222,10 +224,15 @@ function detectLineZone(normalizedLine: string, tokens: string[]): { zone: strin
     const isDebTraveeAtEnd = zone === "Débord" && tokens.some((token, index) => /^DEB\d?$/.test(token) && index > 0);
     if (isDebTraveeAtEnd) return { zone: null, explicit: false, persistent: false };
 
+    const containsStores = tokens.some((_, index) => canReadStoreAt(tokens, index));
+    const isStandaloneHeader = tokens.length <= 3 || !containsStores;
+
     return {
       zone,
       explicit: true,
-      persistent: true,
+      // Craft/Débord ne doivent pas contaminer toute la suite du plan quand
+      // l'OCR les lit sur une ligne qui contient déjà des magasins.
+      persistent: zone === "Zone 1" ? true : isStandaloneHeader,
     };
   }
 
@@ -296,6 +303,49 @@ function tokenDigits(token: string): string {
   return normalizePotentialNumber(token).replace(/[^0-9]/g, "");
 }
 
+function isTrailingDebordTraveeToken(token: string): boolean {
+  if (/^DEB\d?$/.test(token)) return true;
+  const digits = tokenDigits(token);
+  if (!/^\d{2}$/.test(digits)) return false;
+  const value = Number(digits);
+  return value >= 72 && value <= 85;
+}
+
+function readStoreEndingBefore(tokens: string[], endExclusive: number): { number: string; startIndex: number } | null {
+  for (let startIndex = endExclusive - 1; startIndex >= Math.max(0, endExclusive - 3); startIndex -= 1) {
+    const slice = tokens.slice(startIndex, endExclusive);
+    if (slice.some((token) => isServiceToken(token) || isTraveeToken(token))) continue;
+    const number = slice.map(tokenDigits).join("");
+    if (/^\d{4,5}$/.test(number)) return { number, startIndex };
+  }
+
+  return null;
+}
+
+function extractTrailingDebordEntry(tokens: string[]): { entry: LineStoreEntry; remainingTokens: string[] } | null {
+  if (tokens.length < 4) return null;
+
+  const travee = tokens[tokens.length - 1];
+  const quantity = tokens[tokens.length - 2];
+  const service = tokens[tokens.length - 3];
+
+  if (!isTrailingDebordTraveeToken(travee)) return null;
+  // Si la ligne commence déjà par une travée Zone 1 et contient plusieurs
+  // magasins, un DEB/DEB5 final lu par OCR peut être un libellé parasite :
+  // on évite alors de voler le dernier magasin de Zone 1.
+  if (/^DEB\d?$/.test(travee) && tokens.some((token, index) => index > 0 && /^(M|F|S)$/.test(token))) return null;
+  if (!/^(M|F|S)$/.test(service)) return null;
+  if (!/^\d{1,2}$/.test(tokenDigits(quantity))) return null;
+
+  const store = readStoreEndingBefore(tokens, tokens.length - 3);
+  if (!store) return null;
+
+  return {
+    entry: { number: store.number, travee, zone: "Débord" },
+    remainingTokens: tokens.slice(0, store.startIndex),
+  };
+}
+
 function canReadStoreAt(tokens: string[], index: number): boolean {
   if (index < 0 || index >= tokens.length) return false;
   if (isServiceToken(tokens[index])) return false;
@@ -356,20 +406,30 @@ function extractLineStoreEntries(
   tokens: string[],
   currentTravee: string,
   explicitZoneOnLine: boolean,
-): Array<{ number: string; travee: string }> {
-  const anchors = tokens
+): LineStoreEntry[] {
+  const trailingDebord = extractTrailingDebordEntry(tokens);
+  const workingTokens = trailingDebord?.remainingTokens ?? tokens;
+
+  const anchors = workingTokens
     .map((token, index) => ({ token, index }))
-    .filter(({ index }) => isLineTraveeAnchor(tokens, index, explicitZoneOnLine));
+    .filter(({ index }) => isLineTraveeAnchor(workingTokens, index, explicitZoneOnLine));
+
+  const debordEntries = trailingDebord ? [trailingDebord.entry] : [];
 
   if (!anchors.length) {
-    return extractStoreNumbers(tokens.join(" ")).map((number) => ({ number, travee: currentTravee || "?" }));
+    return [
+      ...extractStoreNumbers(workingTokens.join(" ")).map((number) => ({ number, travee: currentTravee || "?" })),
+      ...debordEntries,
+    ];
   }
 
-  return anchors.flatMap((anchor, anchorIndex) => {
-    const nextAnchorIndex = anchors[anchorIndex + 1]?.index ?? tokens.length;
-    const segment = [anchor.token, ...tokens.slice(anchor.index + 1, nextAnchorIndex)].join(" ");
+  const anchoredEntries = anchors.flatMap((anchor, anchorIndex) => {
+    const nextAnchorIndex = anchors[anchorIndex + 1]?.index ?? workingTokens.length;
+    const segment = [anchor.token, ...workingTokens.slice(anchor.index + 1, nextAnchorIndex)].join(" ");
     return extractStoreNumbers(segment).map((number) => ({ number, travee: anchor.token }));
   });
+
+  return [...anchoredEntries, ...debordEntries];
 }
 
 export function reconstructTextFromGeometry(words: OcrWord[]): string {
@@ -460,7 +520,7 @@ export function parseOcrText(text: string): StoreData[] {
     }
 
     const lineEntries = extractLineStoreEntries(tokens, currentTravee, explicitZoneOnLine);
-    const lastLineTravee = lineEntries.at(-1)?.travee;
+    const lastLineTravee = [...lineEntries].reverse().find((entry) => !entry.zone)?.travee;
 
     if (lastLineTravee && lastLineTravee !== "?") {
       currentTravee = lastLineTravee;
@@ -468,8 +528,8 @@ export function parseOcrText(text: string): StoreData[] {
       currentTravee = extractTravee(normalizedLine, currentTravee);
     }
 
-    for (const { number, travee } of lineEntries) {
-      const inferredZone = inferZoneFromTravee(travee, lineZone.zone ?? currentZone, explicitZoneOnLine);
+    for (const { number, travee, zone } of lineEntries) {
+      const inferredZone = zone ?? inferZoneFromTravee(travee, lineZone.zone ?? currentZone, explicitZoneOnLine);
       stores.push({ number, travee, zone: inferredZone });
     }
   }
