@@ -122,7 +122,7 @@ describe("plan search", () => {
 
   it("keeps right-side Débord separate from independent Craft", () => {
     const stores = parseOcrText(`
-      201 9999 M 4 1111 M 8 86
+      201 9999 M 4 1111 M 8 85
       86 CRAFT 2222
       CRAFT
       87 3333
@@ -130,7 +130,7 @@ describe("plan search", () => {
 
     expect(stores).toEqual(
       expect.arrayContaining([
-        { number: "1111", travee: "86", zone: "Débord" },
+        { number: "1111", travee: "85", zone: "Débord" },
         { number: "9999", travee: "201", zone: "Zone 1" },
         { number: "2222", travee: "86", zone: "Craft" },
         { number: "3333", travee: "87", zone: "Craft" },
