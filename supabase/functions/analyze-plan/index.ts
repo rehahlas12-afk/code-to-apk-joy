@@ -144,7 +144,7 @@ function isTrailingDebordTraveeToken(token: string): boolean {
 }
 
 function readStoreEndingBefore(tokens: string[], endExclusive: number): { number: string; startIndex: number } | null {
-  for (let startIndex = Math.max(0, endExclusive - 3); startIndex < endExclusive; startIndex += 1) {
+  for (let startIndex = endExclusive - 1; startIndex >= Math.max(0, endExclusive - 3); startIndex -= 1) {
     const slice = tokens.slice(startIndex, endExclusive);
     if (slice.some((token) => isServiceToken(token) || isTraveeToken(token))) continue;
     const number = slice.map(tokenDigits).join("");
