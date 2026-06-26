@@ -75,16 +75,12 @@ function detectLineZone(normalizedLine: string, tokens: string[]): { zone: strin
   return { zone: null, explicit: false, persistent: false };
 }
 
-function inferZoneFromTravee(travee: string, fallbackZone: string, explicitZoneOnLine = false): string {
+function inferZoneFromTravee(travee: string, fallbackZone: string, _explicitZoneOnLine = false): string {
+  // La zone vient UNIQUEMENT de l'en-tête lu sur le plan (Zone 1 / Craft / Débord).
+  // Craft est une zone indépendante avec ses propres magasins, pas une plage
+  // de numéros. Débord est isolé à droite du plan avec son propre repérage.
   if (travee.startsWith("DEB")) return "Débord";
-  if (explicitZoneOnLine && /CRAFT|KRAFT/i.test(fallbackZone)) return "Craft";
-  const traveeNumber = Number(travee);
-  if (Number.isNaN(traveeNumber)) return fallbackZone;
-  if (traveeNumber === 86) return "Débord";
-  if (/CRAFT|KRAFT/i.test(fallbackZone)) return "Craft";
-  if (traveeNumber >= 72 && traveeNumber <= 86) return "Débord";
-  if (traveeNumber >= 86 && traveeNumber <= 95) return "Craft";
-  return fallbackZone;
+  return fallbackZone || "Zone 1";
 }
 
 function extractTravee(normalizedLine: string, currentTravee: string): string {
