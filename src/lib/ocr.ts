@@ -198,15 +198,13 @@ function normalizePotentialNumber(token: string): string {
   return token.split("").map((char) => OCR_DIGIT_FIXES[char] ?? char).join("");
 }
 
-function inferZoneFromTravee(travee: string, fallbackZone: string, explicitZoneOnLine = false): string {
+function inferZoneFromTravee(travee: string, fallbackZone: string, _explicitZoneOnLine = false): string {
+  // La zone vient UNIQUEMENT de l'en-tête réellement lu sur le plan
+  // (Zone 1 / Craft / Débord). On ne devine plus à partir du numéro de
+  // travée : Craft est une zone indépendante avec ses propres magasins,
+  // pas une plage de numéros, et Débord est isolé à droite du plan.
   if (travee.startsWith("DEB")) return "Débord";
-  if (explicitZoneOnLine && /CRAFT|KRAFT/i.test(fallbackZone)) return "Craft";
-  const traveeNumber = Number(travee);
-  if (Number.isNaN(traveeNumber)) return fallbackZone;
-  if (/CRAFT|KRAFT/i.test(fallbackZone)) return "Craft";
-  if (traveeNumber >= 72 && traveeNumber <= 85) return "Débord";
-  if (traveeNumber >= 86 && traveeNumber <= 98) return "Craft";
-  return fallbackZone;
+  return fallbackZone || "Zone 1";
 }
 
 function tokenizeLine(normalizedLine: string): string[] {
