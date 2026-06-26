@@ -330,6 +330,10 @@ function extractTrailingDebordEntry(tokens: string[]): { entry: LineStoreEntry; 
   const service = tokens[tokens.length - 3];
 
   if (!isTrailingDebordTraveeToken(travee)) return null;
+  // Si la ligne commence déjà par une travée Zone 1 et contient plusieurs
+  // magasins, un DEB/DEB5 final lu par OCR peut être un libellé parasite :
+  // on évite alors de voler le dernier magasin de Zone 1.
+  if (/^DEB\d?$/.test(travee) && tokens.some((token, index) => index > 0 && /^(M|F|S)$/.test(token))) return null;
   if (!/^(M|F|S)$/.test(service)) return null;
   if (!/^\d{1,2}$/.test(tokenDigits(quantity))) return null;
 
@@ -420,7 +424,7 @@ function extractLineStoreEntries(
   }
 
   const anchoredEntries = anchors.flatMap((anchor, anchorIndex) => {
-    const nextAnchorIndex = anchors[anchorIndex + 1]?.index ?? tokens.length;
+    const nextAnchorIndex = anchors[anchorIndex + 1]?.index ?? workingTokens.length;
     const segment = [anchor.token, ...workingTokens.slice(anchor.index + 1, nextAnchorIndex)].join(" ");
     return extractStoreNumbers(segment).map((number) => ({ number, travee: anchor.token }));
   });

@@ -162,6 +162,7 @@ function extractTrailingDebordEntry(tokens: string[]): { entry: LineStoreEntry; 
   const service = tokens[tokens.length - 3];
 
   if (!isTrailingDebordTraveeToken(travee)) return null;
+  if (/^DEB\d?$/.test(travee) && tokens.some((token, index) => index > 0 && /^(M|F|S)$/.test(token))) return null;
   if (!/^(M|F|S)$/.test(service)) return null;
   if (!/^\d{1,2}$/.test(tokenDigits(quantity))) return null;
 
