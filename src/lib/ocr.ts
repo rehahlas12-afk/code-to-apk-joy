@@ -200,12 +200,20 @@ function normalizePotentialNumber(token: string): string {
   return token.split("").map((char) => OCR_DIGIT_FIXES[char] ?? char).join("");
 }
 
+// Plages de travées sur les plans STAF (corrigé par le dispatch Pékin) :
+//   - Craft  : 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 98  (un seul magasin par travée)
+//   - Débord : 72-85 + DEB / DEB1-6
+//   - Zone 1 : 99, 99BIS, 100+, 201+, 301+, ... (3 chiffres)
+const CRAFT_TRAVEES = new Set(["86","87","88","89","90","91","92","93","94","95","96","98"]);
 function inferZoneFromTravee(travee: string, fallbackZone: string, _explicitZoneOnLine = false): string {
-  // La zone vient UNIQUEMENT de l'en-tête réellement lu sur le plan
-  // (Zone 1 / Craft / Débord). On ne devine plus à partir du numéro de
-  // travée : Craft est une zone indépendante avec ses propres magasins,
-  // pas une plage de numéros, et Débord est isolé à droite du plan.
-  if (travee.startsWith("DEB")) return "Débord";
+  const t = String(travee || "").trim().toUpperCase();
+  if (t.startsWith("DEB")) return "Débord";
+  const digits = t.replace(/[^0-9]/g, "");
+  if (CRAFT_TRAVEES.has(digits)) return "Craft";
+  if (/^\d{2}$/.test(digits)) {
+    const v = Number(digits);
+    if (v >= 72 && v <= 85) return "Débord";
+  }
   return fallbackZone || "Zone 1";
 }
 

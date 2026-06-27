@@ -342,11 +342,14 @@ const TimeTrackingPage = () => {
   const handleImportBackup = () => {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = "application/json,.json";
+    input.accept = "application/json,.json,text/plain,*/*";
+    input.style.position = "fixed";
+    input.style.left = "-9999px";
+    document.body.appendChild(input);
     input.onchange = async (e: any) => {
       const file = e.target.files?.[0];
-      if (!file) return;
       try {
+        if (!file) throw new Error("Aucun fichier sélectionné");
         const text = await file.text();
         const parsed = JSON.parse(text);
         const data: Record<string, string> = parsed?.data && typeof parsed.data === "object" ? parsed.data : parsed;
@@ -355,10 +358,22 @@ const TimeTrackingPage = () => {
         const ok = window.confirm(`Restaurer ${entries.length} entrées ? Les pointages actuels seront remplacés.`);
         if (!ok) return;
         for (const [k, v] of entries) localStorage.setItem(k, String(v));
-        toast({ title: `✅ Restauration réussie`, description: `${entries.length} entrées — rechargement…` });
-        setTimeout(() => window.location.reload(), 600);
+        // Rafraîchir l'état sans recharger la page (window.location.reload casse sur APK Capacitor)
+        const newInfo = readJson<WorkerInfo>(INFO_KEY, { nom: "", prenom: "", agent: "" });
+        setInfo(newInfo);
+        setLoginForm(newInfo);
+        const newMode = (localStorage.getItem(modeKeyFor(newInfo.agent)) as SaveMode | null) ?? null;
+        setMode(newMode);
+        const newTpl = readJson<DayTemplate[]>(tplKeyFor(newInfo.agent), DEFAULT_TEMPLATE);
+        setTemplate(newTpl);
+        setTplDraft(newTpl);
+        setDays(readJson<WorkDay[]>(daysKeyFor(newInfo.agent), []));
+        setView(newInfo.agent ? (newMode ? "main" : "modeSelect") : "login");
+        toast({ title: `✅ Restauration réussie`, description: `${entries.length} entrées importées` });
       } catch (err: any) {
         toast({ title: "❌ Erreur restauration", description: String(err?.message || err), variant: "destructive" });
+      } finally {
+        try { document.body.removeChild(input); } catch { /* ignore */ }
       }
     };
     input.click();
