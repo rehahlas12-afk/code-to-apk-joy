@@ -112,3 +112,9 @@ export async function sharePhoneFile(options: {
     });
   }
 }
+
+export async function pickTextFileFromPhone(mimeType = "application/json"): Promise<string | null> {
+  if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== "android") return null;
+  const picked = await DownloadSaver.pickTextFile({ mimeType });
+  return picked.text || null;
+}

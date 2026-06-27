@@ -7,7 +7,7 @@ import { Directory, Filesystem } from "@capacitor/filesystem";
 import TruckLogo from "@/components/TruckLogo";
 import { toast } from "@/hooks/use-toast";
 import { getHolidayName } from "@/lib/holidays";
-import { saveBase64ToPhone, saveTextToPhone, sharePhoneFile } from "@/lib/nativeFile";
+import { pickTextFileFromPhone, saveBase64ToPhone, saveTextToPhone, sharePhoneFile } from "@/lib/nativeFile";
 
 type AbsenceType = "repos" | "conge" | "maladie";
 type SaveMode = "auto" | "manual";
@@ -237,6 +237,30 @@ const TimeTrackingPage = () => {
     autoBackupTimer.current = window.setTimeout(writeAutoBackup, 800);
   };
 
+  const applyRestoredPointageData = (entries: [string, unknown][]) => {
+    for (const [k, v] of entries) localStorage.setItem(k, typeof v === "string" ? v : JSON.stringify(v));
+    const newInfo = readJson<WorkerInfo>(INFO_KEY, { nom: "", prenom: "", agent: "" });
+    const newMode = (localStorage.getItem(modeKeyFor(newInfo.agent)) as SaveMode | null) ?? null;
+    const newTpl = readJson<DayTemplate[]>(tplKeyFor(newInfo.agent), DEFAULT_TEMPLATE);
+    setInfo(newInfo);
+    setLoginForm(newInfo);
+    setMode(newMode);
+    setTemplate(newTpl);
+    setTplDraft(newTpl);
+    setDays(readJson<WorkDay[]>(daysKeyFor(newInfo.agent), []));
+    setForm(blankForm());
+    setEditId(null);
+    setDetailId(null);
+    setView(newInfo.agent ? (newMode ? "main" : "modeSelect") : "login");
+    scheduleAutoBackup();
+  };
+
+  const pointageEntriesFromBackupText = (text: string): [string, unknown][] => {
+    const parsed = JSON.parse(text);
+    const data: Record<string, unknown> = parsed?.data && typeof parsed.data === "object" ? parsed.data : parsed;
+    return Object.entries(data).filter(([k]) => k === INFO_KEY || k.startsWith("sabrinos_pointage_"));
+  };
+
   // Auto-restauration au démarrage si localStorage est vide mais fichier existe
   const [autoRestoreChecked, setAutoRestoreChecked] = useState(false);
   useEffect(() => {
@@ -268,9 +292,9 @@ const TimeTrackingPage = () => {
           try { const arr = JSON.parse(String(v)); return Array.isArray(arr) && arr.length > 0; } catch { return false; }
         });
         if (entries.length > 0 && hasRealData) {
-          for (const [k, v] of entries) localStorage.setItem(k, String(v));
+          applyRestoredPointageData(entries);
           toast({ title: "✅ Pointage restauré automatiquement", description: `${entries.length} entrées récupérées` });
-          setTimeout(() => window.location.reload(), 500);
+          setAutoRestoreChecked(true);
           return;
         }
       } catch { /* pas de fichier de sauvegarde */ }
@@ -340,6 +364,27 @@ const TimeTrackingPage = () => {
   };
 
   const handleImportBackup = () => {
+    const restoreFromText = async (text: string) => {
+      const entries = pointageEntriesFromBackupText(text);
+      if (entries.length === 0) throw new Error("Fichier vide ou invalide");
+      const ok = window.confirm(`Restaurer ${entries.length} entrées ? Les pointages actuels seront remplacés.`);
+      if (!ok) return;
+      applyRestoredPointageData(entries);
+      toast({ title: `✅ Restauration réussie`, description: `${entries.length} entrées importées` });
+    };
+
+    if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android") {
+      pickTextFileFromPhone("application/json")
+        .then(async (text) => {
+          if (!text) throw new Error("Aucun fichier sélectionné");
+          await restoreFromText(text);
+        })
+        .catch((err: any) => {
+          toast({ title: "❌ Erreur restauration", description: String(err?.message || err), variant: "destructive" });
+        });
+      return;
+    }
+
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "application/json,.json,text/plain,*/*";
@@ -350,26 +395,7 @@ const TimeTrackingPage = () => {
       const file = e.target.files?.[0];
       try {
         if (!file) throw new Error("Aucun fichier sélectionné");
-        const text = await file.text();
-        const parsed = JSON.parse(text);
-        const data: Record<string, string> = parsed?.data && typeof parsed.data === "object" ? parsed.data : parsed;
-        const entries = Object.entries(data).filter(([k]) => k === INFO_KEY || k.startsWith("sabrinos_pointage_"));
-        if (entries.length === 0) throw new Error("Fichier vide ou invalide");
-        const ok = window.confirm(`Restaurer ${entries.length} entrées ? Les pointages actuels seront remplacés.`);
-        if (!ok) return;
-        for (const [k, v] of entries) localStorage.setItem(k, String(v));
-        // Rafraîchir l'état sans recharger la page (window.location.reload casse sur APK Capacitor)
-        const newInfo = readJson<WorkerInfo>(INFO_KEY, { nom: "", prenom: "", agent: "" });
-        setInfo(newInfo);
-        setLoginForm(newInfo);
-        const newMode = (localStorage.getItem(modeKeyFor(newInfo.agent)) as SaveMode | null) ?? null;
-        setMode(newMode);
-        const newTpl = readJson<DayTemplate[]>(tplKeyFor(newInfo.agent), DEFAULT_TEMPLATE);
-        setTemplate(newTpl);
-        setTplDraft(newTpl);
-        setDays(readJson<WorkDay[]>(daysKeyFor(newInfo.agent), []));
-        setView(newInfo.agent ? (newMode ? "main" : "modeSelect") : "login");
-        toast({ title: `✅ Restauration réussie`, description: `${entries.length} entrées importées` });
+        await restoreFromText(await file.text());
       } catch (err: any) {
         toast({ title: "❌ Erreur restauration", description: String(err?.message || err), variant: "destructive" });
       } finally {
