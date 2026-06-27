@@ -138,6 +138,28 @@ describe("plan search", () => {
     );
   });
 
+  it("keeps Craft stores on top Craft travées and keeps X as its own travée", () => {
+    const stores = parseOcrText(`
+      CRAFT 86 97 96 92 29 71
+      ZONE 1
+      306 10892 X 82 14
+      404 11843 803 8858
+    `);
+
+    expect(stores).toEqual(
+      expect.arrayContaining([
+        { number: "9796", travee: "86", zone: "Craft" },
+        { number: "2971", travee: "92", zone: "Craft" },
+        { number: "10892", travee: "306", zone: "Zone 1" },
+        { number: "8214", travee: "X", zone: "Zone 1" },
+        { number: "11843", travee: "404", zone: "Zone 1" },
+        { number: "8858", travee: "803", zone: "Zone 1" },
+      ]),
+    );
+    expect(stores).not.toEqual(expect.arrayContaining([{ number: "8214", travee: "306", zone: "Zone 1" }]));
+    expect(stores).not.toEqual(expect.arrayContaining([{ number: "9796", travee: "803", zone: "Zone 1" }]));
+  });
+
   it("reconstructs OCR lines from word geometry when text blocks are broken", () => {
     const geometricText = reconstructTextFromGeometry([
       { text: "ZONE", bbox: { x0: 10, y0: 10, x1: 45, y1: 24 } },
