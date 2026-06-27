@@ -47,7 +47,7 @@ function tokenizeLine(normalizedLine: string): string[] {
 }
 
 function isServiceToken(token: string): boolean {
-  return /^(M|F|S|H|X)$/.test(token) || /^5H0{2}$/.test(token) || /^H0{2}$/.test(token) || /^DEB\d?$/.test(token);
+  return /^(M|F|S|H)$/.test(token) || /^5H0{2}$/.test(token) || /^H0{2}$/.test(token) || /^DEB\d?$/.test(token);
 }
 
 function isTraveeToken(token: string): boolean {
@@ -81,6 +81,11 @@ function detectLineZone(normalizedLine: string, tokens: string[]): { zone: strin
 }
 
 const CRAFT_TRAVEES = new Set(["86","87","88","89","90","91","92","93","94","95","96","98"]);
+
+function isCraftTraveeToken(token: string): boolean {
+  return CRAFT_TRAVEES.has(tokenDigits(token));
+}
+
 function inferZoneFromTravee(travee: string, fallbackZone: string, _explicitZoneOnLine = false): string {
   const t = String(travee || "").trim().toUpperCase();
   if (t.startsWith("DEB")) return "Débord";
@@ -90,6 +95,7 @@ function inferZoneFromTravee(travee: string, fallbackZone: string, _explicitZone
     const v = Number(digits);
     if (v >= 72 && v <= 85) return "Débord";
   }
+  if (/^[A-WYZ]$/.test(t) || /^X$/.test(t) || /^\d{3,}$/.test(digits) || /^99BIS\d?$/.test(t)) return "Zone 1";
   return fallbackZone || "Zone 1";
 }
 
