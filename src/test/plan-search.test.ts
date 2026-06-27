@@ -140,7 +140,8 @@ describe("plan search", () => {
 
   it("keeps Craft stores on top Craft travées and keeps X as its own travée", () => {
     const stores = parseOcrText(`
-      CRAFT 86 97 96 92 29 71
+      CRAFT
+      86 97 96 92 29 71
       ZONE 1
       306 10892 X 82 14
       404 11843 803 8858

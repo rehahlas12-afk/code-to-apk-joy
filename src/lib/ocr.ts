@@ -617,7 +617,7 @@ export function parseOcrText(text: string): StoreData[] {
       currentZone = lineZone.zone;
     }
 
-    const lineEntries = extractLineStoreEntries(tokens, currentTravee, explicitZoneOnLine, lineZone.zone);
+    const lineEntries = extractLineStoreEntries(tokens, currentTravee, explicitZoneOnLine, lineZone.zone ?? currentZone);
     const lastLineTravee = [...lineEntries].reverse().find((entry) => !entry.zone)?.travee;
 
     if (lastLineTravee && lastLineTravee !== "?") {

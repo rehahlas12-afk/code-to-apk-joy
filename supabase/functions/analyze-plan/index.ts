@@ -377,7 +377,7 @@ function parsePlanText(text: string): StoreData[] {
       currentZone = lineZone.zone;
     }
 
-    const lineEntries = extractLineStoreEntries(tokens, currentTravee, lineZone.explicit, lineZone.zone);
+    const lineEntries = extractLineStoreEntries(tokens, currentTravee, lineZone.explicit, lineZone.zone ?? currentZone);
     const lastLineTravee = [...lineEntries].reverse().find((entry) => !entry.zone)?.travee;
 
     if (lastLineTravee && lastLineTravee !== "?") {
