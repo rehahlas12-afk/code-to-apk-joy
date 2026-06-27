@@ -336,6 +336,69 @@ function readStoreEndingBefore(tokens: string[], endExclusive: number): { number
   return null;
 }
 
+function readStoreEndingBeforeInRange(tokens: string[], startInclusive: number, endExclusive: number): { number: string; startIndex: number } | null {
+  const min = Math.max(0, startInclusive);
+  for (let cursor = endExclusive - 1; cursor >= min; cursor -= 1) {
+    if (isServiceToken(tokens[cursor]) || isTraveeToken(tokens[cursor])) break;
+    const digits = tokenDigits(tokens[cursor]);
+    if (!digits) continue;
+
+    let combined = digits;
+    let startIndex = cursor;
+    for (let left = cursor - 1; left >= min && combined.length < 5; left -= 1) {
+      if (isServiceToken(tokens[left]) || isTraveeToken(tokens[left])) break;
+      const leftDigits = tokenDigits(tokens[left]);
+      if (!leftDigits) continue;
+      if (leftDigits.length + combined.length > 5) break;
+      combined = leftDigits + combined;
+      startIndex = left;
+      if (/^\d{4,5}$/.test(combined)) return { number: combined, startIndex };
+    }
+
+    if (/^\d{4,5}$/.test(combined)) return { number: combined, startIndex };
+  }
+
+  return null;
+}
+
+function readStoreStartingInRange(tokens: string[], startInclusive: number, endExclusive: number): { number: string; startIndex: number } | null {
+  const max = Math.min(tokens.length, endExclusive);
+  for (let cursor = Math.max(0, startInclusive); cursor < max; cursor += 1) {
+    if (isServiceToken(tokens[cursor]) || isTraveeToken(tokens[cursor])) continue;
+    const digits = tokenDigits(tokens[cursor]);
+    if (!digits) continue;
+
+    let combined = digits;
+    for (let right = cursor + 1; right < max && combined.length < 5; right += 1) {
+      if (isServiceToken(tokens[right]) || isTraveeToken(tokens[right])) break;
+      const rightDigits = tokenDigits(tokens[right]);
+      if (!rightDigits) continue;
+      if (combined.length + rightDigits.length > 5) break;
+      combined += rightDigits;
+      if (/^\d{4,5}$/.test(combined)) return { number: combined, startIndex: cursor };
+    }
+
+    if (/^\d{4,5}$/.test(combined)) return { number: combined, startIndex: cursor };
+  }
+
+  return null;
+}
+
+function extractExplicitCraftEntries(tokens: string[]): LineStoreEntry[] {
+  const craftAnchors = tokens
+    .map((token, index) => ({ token, index }))
+    .filter(({ token }) => isCraftTraveeToken(token));
+
+  return craftAnchors.flatMap((anchor, anchorIndex) => {
+    const previousAnchorIndex = craftAnchors[anchorIndex - 1]?.index ?? -1;
+    const nextAnchorIndex = craftAnchors[anchorIndex + 1]?.index ?? tokens.length;
+    const after = readStoreStartingInRange(tokens, anchor.index + 1, nextAnchorIndex);
+    const before = readStoreEndingBeforeInRange(tokens, previousAnchorIndex + 1, anchor.index);
+    const store = after ?? before;
+    return store ? [{ number: store.number, travee: anchor.token, zone: "Craft" }] : [];
+  });
+}
+
 function extractTrailingDebordEntry(tokens: string[]): { entry: LineStoreEntry; remainingTokens: string[] } | null {
   if (tokens.length < 4) return null;
 
