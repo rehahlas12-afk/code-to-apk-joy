@@ -385,18 +385,32 @@ function readStoreStartingInRange(tokens: string[], startInclusive: number, endE
 }
 
 function extractExplicitCraftEntries(tokens: string[]): LineStoreEntry[] {
-  const craftAnchors = tokens
-    .map((token, index) => ({ token, index }))
-    .filter(({ token }) => isCraftTraveeToken(token));
+  const entries: LineStoreEntry[] = [];
 
-  return craftAnchors.flatMap((anchor, anchorIndex) => {
-    const previousAnchorIndex = craftAnchors[anchorIndex - 1]?.index ?? -1;
-    const nextAnchorIndex = craftAnchors[anchorIndex + 1]?.index ?? tokens.length;
-    const after = readStoreStartingInRange(tokens, anchor.index + 1, nextAnchorIndex);
-    const before = readStoreEndingBeforeInRange(tokens, previousAnchorIndex + 1, anchor.index);
+  for (let index = 0; index < tokens.length; index += 1) {
+    if (!isCraftTraveeToken(tokens[index])) continue;
+
+    // Cas réel en haut du plan : "86 97 96" = magasin 9796 sur 86 Craft.
+    // Le deuxième morceau (96) ressemble aussi à une travée Craft, donc on lit
+    // d'abord les deux petits nombres juste après la travée avant de chercher
+    // l'ancre Craft suivante.
+    const first = tokenDigits(tokens[index + 1] ?? "");
+    const second = tokenDigits(tokens[index + 2] ?? "");
+    const directTwoParts = first && second && first.length < 4 && second.length < 4 ? first + second : "";
+    if (/^\d{4,5}$/.test(directTwoParts)) {
+      entries.push({ number: directTwoParts, travee: tokens[index], zone: "Craft" });
+      index += 2;
+      continue;
+    }
+
+    const nextAnchorIndex = tokens.findIndex((token, nextIndex) => nextIndex > index && isCraftTraveeToken(token));
+    const after = readStoreStartingInRange(tokens, index + 1, nextAnchorIndex === -1 ? tokens.length : nextAnchorIndex);
+    const before = readStoreEndingBeforeInRange(tokens, 0, index);
     const store = after ?? before;
-    return store ? [{ number: store.number, travee: anchor.token, zone: "Craft" }] : [];
-  });
+    if (store) entries.push({ number: store.number, travee: tokens[index], zone: "Craft" });
+  }
+
+  return entries;
 }
 
 function extractTrailingDebordEntry(tokens: string[]): { entry: LineStoreEntry; remainingTokens: string[] } | null {
