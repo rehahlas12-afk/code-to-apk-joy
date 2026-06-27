@@ -465,6 +465,7 @@ function isLineTraveeAnchor(tokens: string[], index: number, explicitZoneOnLine:
   if (isQuantityToken(tokens, index)) return false;
 
   const hasStoreAfter = hasReadableStoreAfter(tokens, index);
+  if (isCraftTraveeToken(token)) return hasStoreAfter;
   if (index === 0) return hasStoreAfter;
   if (!hasStoreAfter) return false;
   if (/^DEB\d?$/.test(token)) return false;
@@ -483,9 +484,15 @@ function extractLineStoreEntries(
   tokens: string[],
   currentTravee: string,
   explicitZoneOnLine: boolean,
+  explicitZoneName: string | null = null,
 ): LineStoreEntry[] {
   const trailingDebord = extractTrailingDebordEntry(tokens);
   const workingTokens = trailingDebord?.remainingTokens ?? tokens;
+  const explicitCraftEntries = explicitZoneName === "Craft" ? extractExplicitCraftEntries(workingTokens) : [];
+
+  if (explicitCraftEntries.length) {
+    return [...explicitCraftEntries, ...(trailingDebord ? [trailingDebord.entry] : [])];
+  }
 
   const anchors = workingTokens
     .map((token, index) => ({ token, index }))
