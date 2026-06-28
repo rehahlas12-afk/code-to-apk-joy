@@ -118,10 +118,11 @@ ZONE 1 (tableau principal vertical, lu de gauche à droite) :
 - Colonnes suivantes = MAGASINS : 4 ou 5 chiffres (ex: 7879, 10032). Peut avoir 1 ou 2 magasins par travée.
 
 ZONE CRAFT (travées 86 à 98, section séparée du plan) :
-- Disposition HORIZONTALE : numéros de travée en haut (86, 87, 88... 98), magasin EN DESSOUS de chaque numéro
-- Lu de haut vers le bas : travée en haut → magasin en bas
-- Un seul magasin par travée. Transcris : "86 MAGASIN", "87 MAGASIN", etc.
-- ATTENTION : un "86 Craft" est différent d'un "86 Débord" — bien distinguer les sections
+- Disposition en COLONNES : chaque colonne = une travée indépendante
+- En haut de la colonne : le numéro de travée (ex: 86, 87, 88...)
+- En bas de la même colonne : le numéro de magasin (4-5 chiffres)
+- ATTENTION : les colonnes sont ordonnées du numéro LE PLUS GRAND à gauche vers le numéro LE PLUS PETIT à droite (ex: 98...88 87 86 de gauche à droite). Chaque magasin appartient à la colonne dont il partage le numéro de travée EN HAUT — ne pas décaler d'une colonne.
+- Un seul magasin par colonne/travée. Transcris chaque colonne séparément : "86 MAGASIN", "87 MAGASIN", etc.
 
 ZONE DÉBORD (travées DEB1, DEB2... ou numéros 72 à 85, section séparée) :
 - Disposition VERTICALE mais lue de droite à gauche : travée à DROITE, magasin à GAUCHE

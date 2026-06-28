@@ -196,9 +196,12 @@ const PlanViewerPage = () => {
       {selectedPlan ? (
         <div className="flex-1 px-4 pb-3 flex flex-col gap-2 min-h-0">
           <div className="flex items-center justify-between">
-            <p className="text-sm text-gray-400">
-              {selectedPlan.date} • {selectedPlan.stores.length} magasins • {Math.round(scale * 100)}%
-            </p>
+            <div>
+              <p className="text-base font-bold text-white">{selectedPlan.date}</p>
+              <p className="text-sm text-green-400 font-semibold">
+                {new Set(selectedPlan.stores.map(s => s.travee)).size} travées • {Math.round(scale * 100)}%
+              </p>
+            </div>
             <button onClick={() => handleDelete(selectedPlan.id)} className="p-2 text-red-500">
               <Trash2 size={18} />
             </button>
@@ -241,19 +244,15 @@ const PlanViewerPage = () => {
               >
                 <ZoomOut size={22} />
               </button>
-              <button
-                onClick={reset}
-                className="bg-black/80 border border-gray-600 rounded-full p-3 text-white shadow-lg"
-                aria-label="Réinitialiser"
-              >
-                <Maximize2 size={22} />
-              </button>
             </div>
           </div>
 
-          <p className="text-xs text-center text-gray-500">
-            Pincez 2 doigts pour zoomer (jusqu'à 800%) • Glissez pour déplacer
-          </p>
+          <button
+            onClick={reset}
+            className="w-full bg-gray-800 border border-gray-600 rounded-xl py-3 flex items-center justify-center gap-2 text-white font-bold text-base active:scale-95 transition-transform"
+          >
+            <Maximize2 size={20} /> Réinitialiser la vue
+          </button>
         </div>
       ) : (
         <div className="flex-1 flex items-center justify-center p-4">
