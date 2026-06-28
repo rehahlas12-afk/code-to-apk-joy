@@ -108,12 +108,20 @@ router.post("/analyze-plan", async (req, res) => {
   }
 
   const geminiBaseUrl = process.env.AI_INTEGRATIONS_GEMINI_BASE_URL;
-  const geminiApiKey = process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
+  const replitKey = process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
+  // User can provide their own key via x-gemini-api-key header (takes priority)
+  const userKey = (req.headers["x-gemini-api-key"] as string | undefined)?.trim();
+  const geminiApiKey = userKey || replitKey;
 
   if (!geminiBaseUrl || !geminiApiKey) {
-    res.status(503).json({ error: "AI analysis not configured" });
+    res.status(503).json({ error: "AI analysis not configured — ajoutez une clé API Gemini dans les paramètres." });
     return;
   }
+
+  // When using a user key, call Google AI directly (not through Replit proxy)
+  const effectiveBaseUrl = userKey
+    ? "https://generativelanguage.googleapis.com/v1beta"
+    : geminiBaseUrl;
 
   try {
     const base64Data = imageBase64.replace(/^data:image\/[a-z]+;base64,/, "");
@@ -184,7 +192,7 @@ Transcris maintenant :`;
       },
     };
 
-    const url = `${geminiBaseUrl}/models/gemini-2.5-pro:generateContent?key=${geminiApiKey}`;
+    const url = `${effectiveBaseUrl}/models/gemini-2.5-pro:generateContent?key=${geminiApiKey}`;
 
     const response = await fetch(url, {
       method: "POST",

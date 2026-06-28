@@ -1,9 +1,12 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Camera, Search, Eye, Plus, Calculator, Image, LogOut, Download, Upload, CalendarClock } from "lucide-react";
+import { Camera, Search, Eye, Plus, Calculator, Image, LogOut, Download, Upload, CalendarClock, Key, X, Eye as EyeIcon, EyeOff } from "lucide-react";
 import TruckLogo from "@/components/TruckLogo";
 import { getStoreNames, setStoreNames, type StoreName } from "@/lib/store";
 import { quitApplication } from "@/lib/audioService";
 import { toast } from "@/hooks/use-toast";
+
+const GEMINI_KEY_LS = "userGeminiApiKey";
 
 const buttons = [
   { label: "Scanner Plan", icon: Camera, path: "/camera", color: "bg-blue-600" },
@@ -16,6 +19,23 @@ const buttons = [
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const [showKeyModal, setShowKeyModal] = useState(false);
+  const [keyInput, setKeyInput] = useState(() => localStorage.getItem(GEMINI_KEY_LS) ?? "");
+  const [showKey, setShowKey] = useState(false);
+
+  const savedKey = localStorage.getItem(GEMINI_KEY_LS);
+
+  const handleSaveKey = () => {
+    const trimmed = keyInput.trim();
+    if (trimmed) {
+      localStorage.setItem(GEMINI_KEY_LS, trimmed);
+      toast({ title: "✅ Clé API Gemini sauvegardée", description: "Cette clé sera utilisée pour l'analyse des plans." });
+    } else {
+      localStorage.removeItem(GEMINI_KEY_LS);
+      toast({ title: "🗑️ Clé API supprimée", description: "La clé Replit sera utilisée par défaut." });
+    }
+    setShowKeyModal(false);
+  };
 
   const handleQuit = async () => {
     const ok = window.confirm("Voulez-vous quitter l'application ?");
@@ -114,7 +134,71 @@ const Dashboard = () => {
             <span className="text-sm font-bold">Restaurer noms</span>
           </button>
         </div>
+
+        {/* Clé API Gemini */}
+        <div className="mt-3">
+          <button
+            onClick={() => { setKeyInput(localStorage.getItem(GEMINI_KEY_LS) ?? ""); setShowKeyModal(true); }}
+            className={`w-full rounded-xl p-4 flex items-center justify-between gap-2 shadow-lg active:scale-95 transition-transform ${savedKey ? "bg-yellow-700" : "bg-gray-700"}`}
+          >
+            <div className="flex items-center gap-2">
+              <Key size={22} />
+              <span className="text-sm font-bold text-white">Clé API Gemini personnelle</span>
+            </div>
+            <span className={`text-xs font-bold px-2 py-1 rounded-full ${savedKey ? "bg-yellow-500 text-black" : "bg-gray-500 text-white"}`}>
+              {savedKey ? "Active ✓" : "Non configurée"}
+            </span>
+          </button>
+        </div>
       </div>
+
+      {/* Modal saisie clé API */}
+      {showKeyModal && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-end justify-center p-4">
+          <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-md p-5 flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2"><Key size={20}/> Clé API Gemini</h2>
+              <button onClick={() => setShowKeyModal(false)} className="text-gray-400 p-1"><X size={20}/></button>
+            </div>
+
+            <div className="text-sm text-gray-300 space-y-1">
+              <p>Quand le quota Replit est épuisé, utilise ta clé Gemini personnelle.</p>
+              <p className="text-gray-400 text-xs">Obtenir une clé gratuite : <span className="text-blue-400">aistudio.google.com</span></p>
+            </div>
+
+            <div className="relative">
+              <input
+                type={showKey ? "text" : "password"}
+                value={keyInput}
+                onChange={(e) => setKeyInput(e.target.value)}
+                placeholder="AIzaSy..."
+                className="w-full bg-gray-800 border border-gray-600 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-yellow-500 pr-10"
+              />
+              <button
+                onClick={() => setShowKey(!showKey)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
+              >
+                {showKey ? <EyeOff size={18}/> : <EyeIcon size={18}/>}
+              </button>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setKeyInput(""); }}
+                className="flex-1 bg-red-900 text-red-300 rounded-xl py-3 text-sm font-bold"
+              >
+                Supprimer
+              </button>
+              <button
+                onClick={handleSaveKey}
+                className="flex-1 bg-yellow-600 text-black rounded-xl py-3 text-sm font-bold"
+              >
+                Sauvegarder
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -25,9 +25,13 @@ async function analyzeWithAI(
 ): Promise<StoreData[]> {
   onProgress?.(20);
 
+  const userKey = localStorage.getItem("userGeminiApiKey") ?? "";
   const response = await fetch("/api/analyze-plan", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(userKey ? { "x-gemini-api-key": userKey } : {}),
+    },
     body: JSON.stringify({ imageBase64: imageData }),
   });
 
