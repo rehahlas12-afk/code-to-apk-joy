@@ -433,24 +433,30 @@ const TimeTrackingPage = () => {
     autoSeededRef.current = key;
   }, [view, mode, info.agent, template]);
 
-  // Sauvegarde automatique (mode auto uniquement, sauf édition)
+  // Sauvegarde automatique (mode auto + édition instantanée dans tous les modes)
   const autoSaveTimerRef = useRef<number | null>(null);
   useEffect(() => {
-    if (view !== "main" || mode !== "auto") return;
+    if (view !== "main") return;
     if (!form.date) return;
+    // En création : auto-save uniquement si on est en mode auto.
+    // En édition (editId présent) : toujours auto-save pour rendre la modification instantanée.
+    if (!editId && mode !== "auto") return;
     if (autoSaveTimerRef.current) window.clearTimeout(autoSaveTimerRef.current);
     autoSaveTimerRef.current = window.setTimeout(() => {
-      if (editId) return;
+      if (editId) {
+        persistDays(days.map(d => d.id === editId ? { ...form, id: editId } : d));
+        return;
+      }
       if (!form.rest && !form.start && !form.end) return;
       const existing = days.find(d => d.date === form.date);
       const payload: WorkDay = { ...form, id: existing?.id || crypto.randomUUID() };
       delete payload.pauseMinutes;
       if (existing) persistDays(days.map(d => d.id === existing.id ? payload : d));
       else persistDays([payload, ...days]);
-    }, 600);
+    }, 500);
     return () => { if (autoSaveTimerRef.current) window.clearTimeout(autoSaveTimerRef.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form, view, mode]);
+  }, [form, view, mode, editId]);
 
   const applyDefaults = () => {
     const s = scheduleFor(form.date, template);
