@@ -111,16 +111,26 @@ Extrait TOUS les nombres à 4 ou 5 chiffres (numéros de magasin) et leur travé
 FORMAT DE SORTIE — une ligne par rangée du tableau :
 TRAVÉE MAGASIN1 MAGASIN2
 
-Colonne 1 = TRAVÉE : peut être un nombre (99, 100, 201...), DEB1/DEB2/DEB3, 99BIS/99BIS1/99BIS2/99BIS3, ou une lettre seule (X, Y, Z...)
-Colonnes suivantes = MAGASINS : nombres à 4 ou 5 chiffres UNIQUEMENT (ex: 7879, 10032, 8486)
+Le plan a TROIS zones distinctes — ne jamais mélanger leurs travées :
 
-IMPORTANT :
-- Les lignes DEB et 99BIS en HAUT du tableau ont aussi des magasins — lis-les attentivement
-- Section CRAFT (travées 86 à 98) : les numéros de travée sont disposés HORIZONTALEMENT en haut, et chaque magasin est juste EN DESSOUS de son numéro. Un seul magasin par travée Craft. Transcris chaque paire séparément : "86 MAGASIN", "87 MAGASIN", etc.
-- Section DÉBORD (travées DEB1, DEB2... ou 72 à 85) : tableau VERTICAL mais lu de droite à gauche — le numéro de travée est à DROITE et le numéro de magasin (4-5 chiffres) est juste à GAUCHE. Un seul magasin par travée Débord. Transcris : "DEB1 MAGASIN", "DEB2 MAGASIN", etc.
+ZONE 1 (tableau principal vertical, lu de gauche à droite) :
+- Colonne 1 = TRAVÉE : nombre 2-3 chiffres (99, 100, 201, 306...), 99BIS/99BIS1/99BIS2/99BIS3, ou la lettre X (travée indépendante placée entre 306 et 401)
+- Colonnes suivantes = MAGASINS : 4 ou 5 chiffres (ex: 7879, 10032). Peut avoir 1 ou 2 magasins par travée.
+
+ZONE CRAFT (travées 86 à 98, section séparée du plan) :
+- Disposition HORIZONTALE : numéros de travée en haut (86, 87, 88... 98), magasin EN DESSOUS de chaque numéro
+- Lu de haut vers le bas : travée en haut → magasin en bas
+- Un seul magasin par travée. Transcris : "86 MAGASIN", "87 MAGASIN", etc.
+- ATTENTION : un "86 Craft" est différent d'un "86 Débord" — bien distinguer les sections
+
+ZONE DÉBORD (travées DEB1, DEB2... ou numéros 72 à 85, section séparée) :
+- Disposition VERTICALE mais lue de droite à gauche : travée à DROITE, magasin à GAUCHE
+- Un seul magasin par travée. Transcris : "DEB1 MAGASIN", "72 MAGASIN", etc.
+
+RÈGLES GÉNÉRALES :
 - Ignore : heures (5H00), M, S, nombres 1-2 chiffres (palettes), flèches →
 - Si tu lis mal un chiffre, transcris quand même ton meilleur essai
-- Lis de haut en bas sans sauter aucune ligne
+- Lis chaque section complètement, sans sauter aucune ligne
 
 Exemple :
 DEB1 9812
