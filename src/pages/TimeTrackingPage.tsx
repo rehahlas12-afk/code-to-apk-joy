@@ -516,13 +516,17 @@ const TimeTrackingPage = () => {
 
   const filteredDays = useMemo(() => {
     const now = new Date();
-    if (period === "all") return days;
+    const todayK = now.toISOString().slice(0, 10);
+    // Ne jamais afficher des journées futures (le mois de paie en cours s'étend
+    // jusqu'au 24 du mois suivant, on coupe au jour actuel).
+    const base = days.filter(d => d.date <= todayK);
+    if (period === "all") return base;
     if (period === "10") {
       const min = new Date(now); min.setDate(now.getDate() - 9);
       const minKey = min.toISOString().slice(0, 10);
-      return days.filter(d => d.date >= minKey);
+      return base.filter(d => d.date >= minKey);
     }
-    return days.filter(d => d.date >= payrollRange.from && d.date <= payrollRange.to);
+    return base.filter(d => d.date >= payrollRange.from && d.date <= payrollRange.to);
   }, [days, period, payrollRange.from, payrollRange.to]);
 
   const totals = filteredDays.reduce((acc, d) => { const b = dayBreakdown(d); acc.total += b.total; acc.night += b.night; acc.day += b.day; return acc; }, { total: 0, night: 0, day: 0 });
