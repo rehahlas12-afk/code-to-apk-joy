@@ -175,6 +175,8 @@ const TimeTrackingPage = () => {
   const [detailId, setDetailId] = useState<string | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [historyEditMonth, setHistoryEditMonth] = useState<string | null>(null);
+  const [historySearch, setHistorySearch] = useState("");
   const [confirmModeChange, setConfirmModeChange] = useState(false);
 
   const payrollRange = (() => {
@@ -433,24 +435,30 @@ const TimeTrackingPage = () => {
     autoSeededRef.current = key;
   }, [view, mode, info.agent, template]);
 
-  // Sauvegarde automatique (mode auto uniquement, sauf édition)
+  // Sauvegarde automatique (mode auto + édition instantanée dans tous les modes)
   const autoSaveTimerRef = useRef<number | null>(null);
   useEffect(() => {
-    if (view !== "main" || mode !== "auto") return;
+    if (view !== "main") return;
     if (!form.date) return;
+    // En création : auto-save uniquement si on est en mode auto.
+    // En édition (editId présent) : toujours auto-save pour rendre la modification instantanée.
+    if (!editId && mode !== "auto") return;
     if (autoSaveTimerRef.current) window.clearTimeout(autoSaveTimerRef.current);
     autoSaveTimerRef.current = window.setTimeout(() => {
-      if (editId) return;
+      if (editId) {
+        persistDays(days.map(d => d.id === editId ? { ...form, id: editId } : d));
+        return;
+      }
       if (!form.rest && !form.start && !form.end) return;
       const existing = days.find(d => d.date === form.date);
       const payload: WorkDay = { ...form, id: existing?.id || crypto.randomUUID() };
       delete payload.pauseMinutes;
       if (existing) persistDays(days.map(d => d.id === existing.id ? payload : d));
       else persistDays([payload, ...days]);
-    }, 600);
+    }, 500);
     return () => { if (autoSaveTimerRef.current) window.clearTimeout(autoSaveTimerRef.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form, view, mode]);
+  }, [form, view, mode, editId]);
 
   const applyDefaults = () => {
     const s = scheduleFor(form.date, template);
@@ -508,13 +516,17 @@ const TimeTrackingPage = () => {
 
   const filteredDays = useMemo(() => {
     const now = new Date();
-    if (period === "all") return days;
+    const todayK = now.toISOString().slice(0, 10);
+    // Ne jamais afficher des journées futures (le mois de paie en cours s'étend
+    // jusqu'au 24 du mois suivant, on coupe au jour actuel).
+    const base = days.filter(d => d.date <= todayK);
+    if (period === "all") return base;
     if (period === "10") {
       const min = new Date(now); min.setDate(now.getDate() - 9);
       const minKey = min.toISOString().slice(0, 10);
-      return days.filter(d => d.date >= minKey);
+      return base.filter(d => d.date >= minKey);
     }
-    return days.filter(d => d.date >= payrollRange.from && d.date <= payrollRange.to);
+    return base.filter(d => d.date >= payrollRange.from && d.date <= payrollRange.to);
   }, [days, period, payrollRange.from, payrollRange.to]);
 
   const totals = filteredDays.reduce((acc, d) => { const b = dayBreakdown(d); acc.total += b.total; acc.night += b.night; acc.day += b.day; return acc; }, { total: 0, night: 0, day: 0 });
@@ -522,8 +534,82 @@ const TimeTrackingPage = () => {
   const detailBreakdown = detailDay ? dayBreakdown(detailDay) : null;
   const detailHoliday = detailDay ? getHolidayName(detailDay.date) : null;
   const formHoliday = getHolidayName(form.date);
-  const allHistorySorted = useMemo(() => [...days].sort((a, b) => a.date.localeCompare(b.date)), [days]);
+  const todayKey = today();
+  const allHistorySorted = useMemo(
+    () => [...days].filter(d => d.date <= todayKey).sort((a, b) => a.date.localeCompare(b.date)),
+    [days, todayKey]
+  );
   const historyTotals = allHistorySorted.reduce((acc, d) => { const b = dayBreakdown(d); acc.total += b.total; acc.night += b.night; acc.day += b.day; return acc; }, { total: 0, night: 0, day: 0 });
+
+  // Regroupement par mois (YYYY-MM) pour la modale "Visualiser tout".
+  // Chaque mois peut être recherché, téléchargé en PDF et édité individuellement.
+  const MONTH_LABELS = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
+  const formatMonthKey = (key: string) => {
+    const [y, m] = key.split("-");
+    return `${MONTH_LABELS[Number(m) - 1] ?? m} ${y}`;
+  };
+  const groupedByMonth = useMemo(() => {
+    const map = new Map<string, WorkDay[]>();
+    for (const d of allHistorySorted) {
+      const key = d.date.slice(0, 7);
+      const arr = map.get(key) ?? [];
+      arr.push(d);
+      map.set(key, arr);
+    }
+    const filtered = [...map.entries()].filter(([key]) => {
+      if (!historySearch.trim()) return true;
+      const q = historySearch.trim().toLowerCase();
+      return key.includes(q) || formatMonthKey(key).toLowerCase().includes(q);
+    });
+    return filtered.sort((a, b) => b[0].localeCompare(a[0])); // mois les + récents en premier
+  }, [allHistorySorted, historySearch]);
+
+  const downloadMonthPdf = async (monthKey: string, entries: WorkDay[]) => {
+    if (!entries.length) return;
+    const from = entries[0].date;
+    const to = entries[entries.length - 1].date;
+    setPdfRange({ from, to });
+    // Construit + télécharge directement
+    setTimeout(async () => {
+      const doc = buildPdf();
+      if (!doc) return;
+      const fileName = `pointage_${info.nom || "agent"}_${monthKey}.pdf`.replace(/\s+/g, "_");
+      if (Capacitor.isNativePlatform()) {
+        try {
+          const data = String(doc.output("datauristring")).split(",")[1];
+          const saved = await saveBase64ToPhone(fileName, data);
+          await sharePhoneFile({ uri: saved.uri, title: fileName, text: "Pointage PDF", dialogTitle: "Partager le PDF", mimeType: "application/pdf" });
+          toast({ title: "✅ PDF enregistré", description: saved.label });
+          return;
+        } catch (e) {
+          console.error(e);
+        }
+      }
+      doc.save(fileName);
+      toast({ title: "PDF téléchargé", description: fileName });
+    }, 50);
+  };
+
+  // Édition instantanée d'une journée depuis l'historique
+  const patchDay = (id: string, patch: Partial<WorkDay>) => {
+    const next = days.map(d => d.id === id ? { ...d, ...patch } : d);
+    persistDays(next);
+  };
+  const removeDay = (id: string) => persistDays(days.filter(d => d.id !== id));
+  const addDayInMonth = (monthKey: string) => {
+    // Date par défaut : aujourd'hui si le mois courant, sinon le 1er du mois choisi (mais ≤ today)
+    const [y, m] = monthKey.split("-").map(Number);
+    const last = new Date(y, m, 0).getDate();
+    let dateStr = `${monthKey}-${String(Math.min(last, new Date().getDate())).padStart(2, "0")}`;
+    if (dateStr > todayKey) dateStr = todayKey;
+    if (days.some(d => d.date === dateStr)) {
+      toast({ title: "Cette date existe déjà", description: "Modifie la journée existante." });
+      return;
+    }
+    const s = mode === "auto" ? scheduleFor(dateStr, template) : { start: "", end: "", pauseStart: "", pauseEnd: "", rest: false };
+    const entry: WorkDay = { id: crypto.randomUUID(), date: dateStr, start: s.start, end: s.end, pauseStart: s.pauseStart, pauseEnd: s.pauseEnd, cause: s.rest ? "Repos" : "", rest: s.rest };
+    persistDays([entry, ...days]);
+  };
 
   const buildPdf = () => {
     const inRange = days.filter(d => d.date >= pdfRange.from && d.date <= pdfRange.to).sort((a, b) => a.date.localeCompare(b.date));
@@ -957,39 +1043,112 @@ const TimeTrackingPage = () => {
         </div>
       )}
 
-      {/* Historique complet */}
+      {/* Historique complet — par mois, avec PDF + édition instantanée */}
       {showHistory && (
-        <div className="fixed inset-0 bg-black/90 z-50 flex flex-col" onClick={() => setShowHistory(false)}>
+        <div className="fixed inset-0 bg-black/90 z-50 flex flex-col" onClick={() => { setShowHistory(false); setHistoryEditMonth(null); }}>
           <div className="bg-gray-900 m-2 rounded-2xl border-2 border-blue-500 flex-1 flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between p-3 border-b border-gray-700">
-              <h2 className="text-lg font-black">Historique complet</h2>
-              <button onClick={() => setShowHistory(false)} className="p-2 bg-gray-800 rounded-lg"><X size={18}/></button>
+              <h2 className="text-lg font-black">Historique par mois</h2>
+              <button onClick={() => { setShowHistory(false); setHistoryEditMonth(null); }} className="p-2 bg-gray-800 rounded-lg"><X size={18}/></button>
             </div>
             <div className="text-center py-2 border-b border-gray-700">
               <p className="text-xs text-gray-400">{info.nom} {info.prenom} • Agent {info.agent || "—"}</p>
               <p className="text-2xl font-black text-green-400">{formatHours(historyTotals.total)}</p>
               <p className="text-xs text-purple-300">nuit {formatHours(historyTotals.night)} • jour {formatHours(historyTotals.day)}</p>
             </div>
-            <div className="flex-1 overflow-y-auto p-2">
-              <table className="w-full text-xs">
-                <thead><tr className="border-b border-gray-700 text-left"><th className="py-1 pr-1">Date</th><th>Déb.</th><th>Fin</th><th>Pause</th><th>H.</th><th>Nuit</th></tr></thead>
-                <tbody>
-                  {allHistorySorted.map(d => {
-                    const b = dayBreakdown(d);
-                    const h = getHolidayName(d.date);
-                    return (
-                      <tr key={d.id} className={`border-b border-gray-800 ${d.rest ? "bg-blue-950/40" : ""}`}>
-                        <td className="py-1 pr-1">{new Date(d.date).toLocaleDateString("fr-FR")}{h && <div className="text-[9px] text-yellow-400">🎉</div>}{d.rest && <div className="text-[9px] text-blue-300">🛌</div>}</td>
-                        <td>{d.rest ? "—" : d.start}</td><td>{d.rest ? "—" : d.end}</td>
-                        <td>{d.rest ? "—" : (d.pauseStart || `${d.pauseMinutes ?? 0}m`)}</td>
-                        <td className="font-bold">{d.rest ? "—" : formatHours(b.total)}</td>
-                        <td className="text-purple-300">{d.rest ? "—" : formatHours(b.night)}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-              {allHistorySorted.length === 0 && <p className="text-center text-gray-500 py-6">Aucun pointage.</p>}
+            <div className="p-2 border-b border-gray-700 flex gap-2">
+              <input
+                value={historySearch}
+                onChange={e => setHistorySearch(e.target.value)}
+                placeholder="🔎 Rechercher un mois (ex: juin, 2026-06)"
+                className="flex-1 rounded-lg bg-gray-800 border border-gray-600 px-3 py-2 text-white text-base"
+              />
+              {historySearch && (
+                <button onClick={() => setHistorySearch("")} className="bg-gray-700 px-3 rounded-lg"><X size={14}/></button>
+              )}
+            </div>
+            <div className="px-2 py-2 border-b border-gray-700 grid grid-cols-2 gap-2">
+              <button onClick={handleExportBackup} className="text-xs bg-purple-700 rounded-lg py-2 font-bold flex items-center justify-center gap-1"><Save size={14}/> Sauvegarder</button>
+              <button onClick={handleImportBackup} className="text-xs bg-purple-600 rounded-lg py-2 font-bold flex items-center justify-center gap-1"><Upload size={14}/> Restaurer</button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-2 space-y-3">
+              {groupedByMonth.length === 0 && (
+                <p className="text-center text-gray-500 py-6">{historySearch ? "Aucun mois trouvé." : "Aucun pointage."}</p>
+              )}
+              {groupedByMonth.map(([monthKey, entries]) => {
+                const monthTotals = entries.reduce((acc, d) => { const b = dayBreakdown(d); acc.total += b.total; acc.night += b.night; return acc; }, { total: 0, night: 0 });
+                const isEditing = historyEditMonth === monthKey;
+                return (
+                  <div key={monthKey} className="bg-gray-950 border border-gray-700 rounded-xl overflow-hidden">
+                    <div className="bg-gray-800 p-2 flex flex-wrap items-center gap-2">
+                      <div className="flex-1 min-w-[150px]">
+                        <p className="font-black text-base">{formatMonthKey(monthKey)}</p>
+                        <p className="text-[11px] text-gray-400">
+                          {entries.length} j • <span className="text-green-400 font-bold">{formatHours(monthTotals.total)}</span> • <span className="text-purple-300">nuit {formatHours(monthTotals.night)}</span>
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => downloadMonthPdf(monthKey, entries)}
+                        className="bg-purple-700 rounded-lg px-3 py-2 text-xs font-bold flex items-center gap-1"
+                      ><Download size={14}/> PDF</button>
+                      <button
+                        onClick={() => setHistoryEditMonth(isEditing ? null : monthKey)}
+                        className={`rounded-lg px-3 py-2 text-xs font-bold flex items-center gap-1 ${isEditing ? "bg-green-700" : "bg-yellow-600"}`}
+                      >{isEditing ? <><Check size={14}/> Terminé</> : <><Pencil size={14}/> Modifier</>}</button>
+                    </div>
+                    {!isEditing ? (
+                      <table className="w-full text-xs">
+                        <thead><tr className="border-b border-gray-700 text-left"><th className="py-1 px-2">Date</th><th>Déb.</th><th>Fin</th><th>Pause</th><th>H.</th><th>Nuit</th></tr></thead>
+                        <tbody>
+                          {entries.map(d => {
+                            const b = dayBreakdown(d);
+                            const h = getHolidayName(d.date);
+                            return (
+                              <tr key={d.id} className={`border-b border-gray-800 ${d.rest ? "bg-blue-950/40" : ""}`}>
+                                <td className="py-1 px-2">{new Date(d.date).toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "2-digit" })}{h && <div className="text-[9px] text-yellow-400">🎉</div>}{d.rest && <div className="text-[9px] text-blue-300">🛌</div>}</td>
+                                <td>{d.rest ? "—" : d.start}</td><td>{d.rest ? "—" : d.end}</td>
+                                <td>{d.rest ? "—" : (d.pauseStart || `${d.pauseMinutes ?? 0}m`)}</td>
+                                <td className="font-bold">{d.rest ? "—" : formatHours(b.total)}</td>
+                                <td className="text-purple-300">{d.rest ? "—" : formatHours(b.night)}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    ) : (
+                      <div className="divide-y divide-gray-800">
+                        {entries.map(d => {
+                          const b = dayBreakdown(d);
+                          return (
+                            <div key={d.id} className={`p-2 ${d.rest ? "bg-blue-950/40" : ""}`}>
+                              <div className="flex items-center justify-between mb-1">
+                                <p className="text-xs font-bold text-blue-300">{new Date(d.date).toLocaleDateString("fr-FR", { weekday: "long", day: "2-digit", month: "long" })}</p>
+                                <div className="flex items-center gap-1">
+                                  <button onClick={() => patchDay(d.id, d.rest ? { rest: false, absenceType: undefined, cause: "" } : { rest: true, absenceType: "repos", start: "", end: "", pauseStart: "", pauseEnd: "", cause: "Repos" })} className={`text-[10px] rounded px-2 py-1 font-bold ${d.rest ? "bg-blue-700" : "bg-gray-700"}`}>🛌</button>
+                                  <button onClick={() => { if (confirm("Supprimer ?")) removeDay(d.id); }} className="text-red-400 p-1"><Trash2 size={14}/></button>
+                                </div>
+                              </div>
+                              {!d.rest && (
+                                <div className="grid grid-cols-4 gap-1">
+                                  <input type="time" value={d.start} onChange={e => patchDay(d.id, { start: e.target.value })} className="rounded bg-gray-800 border border-gray-600 px-1 py-1 text-white text-xs" />
+                                  <input type="time" value={d.end} onChange={e => patchDay(d.id, { end: e.target.value })} className="rounded bg-gray-800 border border-gray-600 px-1 py-1 text-white text-xs" />
+                                  <input type="time" value={d.pauseStart} onChange={e => patchDay(d.id, { pauseStart: e.target.value })} className="rounded bg-gray-800 border border-gray-600 px-1 py-1 text-white text-xs" />
+                                  <input type="time" value={d.pauseEnd} onChange={e => patchDay(d.id, { pauseEnd: e.target.value })} className="rounded bg-gray-800 border border-gray-600 px-1 py-1 text-white text-xs" />
+                                </div>
+                              )}
+                              <input value={d.cause} onChange={e => patchDay(d.id, { cause: e.target.value })} placeholder="Cause / remarque" className="mt-1 w-full rounded bg-gray-800 border border-gray-600 px-2 py-1 text-white text-xs" />
+                              {!d.rest && d.start && d.end && (
+                                <p className="text-[11px] text-gray-400 mt-1">Total : <span className="text-green-400 font-bold">{formatHours(b.total)}</span> • nuit <span className="text-purple-300">{formatHours(b.night)}</span></p>
+                              )}
+                            </div>
+                          );
+                        })}
+                        <button onClick={() => addDayInMonth(monthKey)} className="w-full bg-green-700 hover:bg-green-600 py-2 text-xs font-bold flex items-center justify-center gap-1"><Plus size={14}/> Ajouter une journée manquante</button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>

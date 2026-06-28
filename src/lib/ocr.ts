@@ -214,7 +214,12 @@ function inferZoneFromTravee(travee: string, fallbackZone: string, _explicitZone
   const t = String(travee || "").trim().toUpperCase();
   if (t.startsWith("DEB")) return "Débord";
   const digits = t.replace(/[^0-9]/g, "");
-  if (CRAFT_TRAVEES.has(digits)) return "Craft";
+  // Travée 86 (et 87-98) existe à la fois en Craft (haut du plan) et en Débord
+  // (colonne tout à droite). On respecte le contexte explicite de la ligne.
+  if (CRAFT_TRAVEES.has(digits)) {
+    if (fallbackZone === "Débord") return "Débord";
+    return "Craft";
+  }
   if (/^\d{2}$/.test(digits)) {
     const v = Number(digits);
     if (v >= 72 && v <= 85) return "Débord";
@@ -482,7 +487,11 @@ function isLineTraveeAnchor(tokens: string[], index: number, explicitZoneOnLine:
   if (isCraftTraveeToken(token)) return hasStoreAfter;
   if (index === 0) return hasStoreAfter;
   if (!hasStoreAfter) return false;
-  if (/^DEB\d?$/.test(token)) return false;
+  // DEB1-DEB6 (et DEB seul à l'intérieur d'une ligne) sont de vraies travées Débord
+  // qui peuvent contenir un magasin chacune. Seul "DEB" totalement isolé en tête
+  // d'une ligne de header n'est pas une ancre, mais ici il y a un store after donc on le garde.
+  if (/^DEB[1-9]$/.test(token)) return true;
+  if (/^DEB$/.test(token) && index > 0) return true;
   if (explicitZoneOnLine && index <= 2) return true;
 
   const digits = tokenDigits(token);
