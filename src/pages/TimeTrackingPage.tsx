@@ -530,8 +530,82 @@ const TimeTrackingPage = () => {
   const detailBreakdown = detailDay ? dayBreakdown(detailDay) : null;
   const detailHoliday = detailDay ? getHolidayName(detailDay.date) : null;
   const formHoliday = getHolidayName(form.date);
-  const allHistorySorted = useMemo(() => [...days].sort((a, b) => a.date.localeCompare(b.date)), [days]);
+  const todayKey = today();
+  const allHistorySorted = useMemo(
+    () => [...days].filter(d => d.date <= todayKey).sort((a, b) => a.date.localeCompare(b.date)),
+    [days, todayKey]
+  );
   const historyTotals = allHistorySorted.reduce((acc, d) => { const b = dayBreakdown(d); acc.total += b.total; acc.night += b.night; acc.day += b.day; return acc; }, { total: 0, night: 0, day: 0 });
+
+  // Regroupement par mois (YYYY-MM) pour la modale "Visualiser tout".
+  // Chaque mois peut être recherché, téléchargé en PDF et édité individuellement.
+  const MONTH_LABELS = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
+  const formatMonthKey = (key: string) => {
+    const [y, m] = key.split("-");
+    return `${MONTH_LABELS[Number(m) - 1] ?? m} ${y}`;
+  };
+  const groupedByMonth = useMemo(() => {
+    const map = new Map<string, WorkDay[]>();
+    for (const d of allHistorySorted) {
+      const key = d.date.slice(0, 7);
+      const arr = map.get(key) ?? [];
+      arr.push(d);
+      map.set(key, arr);
+    }
+    const filtered = [...map.entries()].filter(([key]) => {
+      if (!historySearch.trim()) return true;
+      const q = historySearch.trim().toLowerCase();
+      return key.includes(q) || formatMonthKey(key).toLowerCase().includes(q);
+    });
+    return filtered.sort((a, b) => b[0].localeCompare(a[0])); // mois les + récents en premier
+  }, [allHistorySorted, historySearch]);
+
+  const downloadMonthPdf = async (monthKey: string, entries: WorkDay[]) => {
+    if (!entries.length) return;
+    const from = entries[0].date;
+    const to = entries[entries.length - 1].date;
+    setPdfRange({ from, to });
+    // Construit + télécharge directement
+    setTimeout(async () => {
+      const doc = buildPdf();
+      if (!doc) return;
+      const fileName = `pointage_${info.nom || "agent"}_${monthKey}.pdf`.replace(/\s+/g, "_");
+      if (Capacitor.isNativePlatform()) {
+        try {
+          const data = String(doc.output("datauristring")).split(",")[1];
+          const saved = await saveBase64ToPhone(fileName, data);
+          await sharePhoneFile({ uri: saved.uri, title: fileName, text: "Pointage PDF", dialogTitle: "Partager le PDF", mimeType: "application/pdf" });
+          toast({ title: "✅ PDF enregistré", description: saved.label });
+          return;
+        } catch (e) {
+          console.error(e);
+        }
+      }
+      doc.save(fileName);
+      toast({ title: "PDF téléchargé", description: fileName });
+    }, 50);
+  };
+
+  // Édition instantanée d'une journée depuis l'historique
+  const patchDay = (id: string, patch: Partial<WorkDay>) => {
+    const next = days.map(d => d.id === id ? { ...d, ...patch } : d);
+    persistDays(next);
+  };
+  const removeDay = (id: string) => persistDays(days.filter(d => d.id !== id));
+  const addDayInMonth = (monthKey: string) => {
+    // Date par défaut : aujourd'hui si le mois courant, sinon le 1er du mois choisi (mais ≤ today)
+    const [y, m] = monthKey.split("-").map(Number);
+    const last = new Date(y, m, 0).getDate();
+    let dateStr = `${monthKey}-${String(Math.min(last, new Date().getDate())).padStart(2, "0")}`;
+    if (dateStr > todayKey) dateStr = todayKey;
+    if (days.some(d => d.date === dateStr)) {
+      toast({ title: "Cette date existe déjà", description: "Modifie la journée existante." });
+      return;
+    }
+    const s = mode === "auto" ? scheduleFor(dateStr, template) : { start: "", end: "", pauseStart: "", pauseEnd: "", rest: false };
+    const entry: WorkDay = { id: crypto.randomUUID(), date: dateStr, start: s.start, end: s.end, pauseStart: s.pauseStart, pauseEnd: s.pauseEnd, cause: s.rest ? "Repos" : "", rest: s.rest };
+    persistDays([entry, ...days]);
+  };
 
   const buildPdf = () => {
     const inRange = days.filter(d => d.date >= pdfRange.from && d.date <= pdfRange.to).sort((a, b) => a.date.localeCompare(b.date));
