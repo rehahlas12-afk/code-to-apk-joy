@@ -90,7 +90,11 @@ function inferZoneFromTravee(travee: string, fallbackZone: string, _explicitZone
   const t = String(travee || "").trim().toUpperCase();
   if (t.startsWith("DEB")) return "Débord";
   const digits = t.replace(/[^0-9]/g, "");
-  if (CRAFT_TRAVEES.has(digits)) return "Craft";
+  // 86-98 existe en Craft ET en Débord → on respecte le contexte de la ligne.
+  if (CRAFT_TRAVEES.has(digits)) {
+    if (fallbackZone === "Débord") return "Débord";
+    return "Craft";
+  }
   if (/^\d{2}$/.test(digits)) {
     const v = Number(digits);
     if (v >= 72 && v <= 85) return "Débord";
