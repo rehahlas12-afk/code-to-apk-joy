@@ -8,7 +8,7 @@ interface StoreData {
   zone: string;
 }
 
-/** Zone rules */
+/** Zone rules — fallback only, Gemini output takes priority */
 function inferZone(travee: string): string {
   const t = travee.toUpperCase().trim();
   if (t.startsWith("DEB")) return "Débord";
@@ -33,31 +33,45 @@ function normalizeLine(line: string): string {
     .replace(/\bDEB\s*(\d+)\b/g, (_, d) => `DEB${d}`);
 }
 
-/** Parse plain-text transcription into store records */
+/** Parse plain-text transcription into store records.
+ *  Each line may start with an explicit zone prefix: ZONE1, CRAFT, or DEBORD.
+ *  If present, the prefix takes priority over inferZone().
+ *  Example lines:
+ *    ZONE1 306 10892
+ *    CRAFT 86 8214
+ *    DEBORD 86 9684
+ *    DEBORD DEB1 9812
+ */
 function parseTranscription(text: string): StoreData[] {
   const stores: StoreData[] = [];
   const seen = new Set<string>();
-  let lastTravee = "";
 
   for (const rawLine of text.split("\n")) {
     const line = normalizeLine(rawLine.trim());
     if (!line) continue;
 
-    // Extract all tokens
     const tokens = line.match(/[A-Z0-9]+/gi) ?? [];
     if (tokens.length === 0) continue;
 
-    // First token that looks like a travée (2-3 digits, DEB*, 99BIS*, or single letter like X)
-    let travee = "";
-    let storeStart = 0;
+    // Detect optional explicit zone prefix as first token
+    let explicitZone: string | null = null;
+    let scanStart = 0;
+    const first = tokens[0].toUpperCase();
+    if (first === "ZONE1" || first === "Z1") { explicitZone = "Zone 1"; scanStart = 1; }
+    else if (first === "CRAFT") { explicitZone = "Craft"; scanStart = 1; }
+    else if (first === "DEBORD" || first === "DÉBORD") { explicitZone = "Débord"; scanStart = 1; }
 
-    for (let i = 0; i < tokens.length; i++) {
+    // Find travée token (2-3 digits, DEB*, 99BIS*, or X)
+    let travee = "";
+    let storeStart = scanStart;
+
+    for (let i = scanStart; i < tokens.length; i++) {
       const t = tokens[i].toUpperCase();
       const n = parseInt(t, 10);
       const isNumericTravee = !isNaN(n) && t.length >= 2 && t.length <= 3 && n >= 10 && n <= 999;
       const isDebTravee = /^DEB\d*$/.test(t);
       const is99Bis = /^99BIS\d*$/.test(t);
-      const isSingleLetter = t === "X"; // travée nommée X
+      const isSingleLetter = t === "X";
       if (isNumericTravee || isDebTravee || is99Bis || isSingleLetter) {
         travee = t;
         storeStart = i + 1;
@@ -66,16 +80,17 @@ function parseTranscription(text: string): StoreData[] {
     }
 
     if (!travee) continue;
-    lastTravee = travee;
 
-    // Find all 4-5 digit numbers after the travée
+    const zone = explicitZone ?? inferZone(travee);
+
+    // Find all 4-5 digit store numbers after the travée
     for (let i = storeStart; i < tokens.length; i++) {
       const tok = tokens[i].replace(/[^0-9]/g, "");
       if (/^\d{4,5}$/.test(tok)) {
-        const key = `${travee}-${tok}`;
+        const key = `${zone}|${travee}|${tok}`;
         if (!seen.has(key)) {
           seen.add(key);
-          stores.push({ number: tok, travee, zone: inferZone(travee) });
+          stores.push({ number: tok, travee, zone });
         }
       }
     }
@@ -103,52 +118,53 @@ router.post("/analyze-plan", async (req, res) => {
   try {
     const base64Data = imageBase64.replace(/^data:image\/[a-z]+;base64,/, "");
 
-    // Step 1: Ask Gemini to transcribe the table as plain text — simpler = more complete
     const prompt = `Tu es un expert OCR. Ce document est un tableau de dispatch entrepôt.
 
 Extrait TOUS les nombres à 4 ou 5 chiffres (numéros de magasin) et leur travée associée.
 
-FORMAT DE SORTIE — une ligne par rangée du tableau :
-TRAVÉE MAGASIN1 MAGASIN2
+FORMAT DE SORTIE — une ligne par entrée, avec OBLIGATOIREMENT le préfixe de zone :
+ZONE1 TRAVÉE MAGASIN1 [MAGASIN2]
+CRAFT TRAVÉE MAGASIN
+DEBORD TRAVÉE MAGASIN
 
-Le plan a TROIS zones distinctes — ne jamais mélanger leurs travées :
+IMPORTANT : Le même numéro (ex: 86) peut apparaître à la fois dans la zone CRAFT ET dans la zone DÉBORD sur le même plan. Tu dois identifier dans quelle section physique du plan tu lis chaque entrée et mettre le bon préfixe.
 
-ZONE 1 (tableau principal vertical, lu de gauche à droite) :
-- Colonne 1 = TRAVÉE : nombre 2-3 chiffres (99, 100, 201, 306...), 99BIS/99BIS1/99BIS2/99BIS3, ou la lettre X (travée indépendante placée entre 306 et 401)
-- Colonnes suivantes = MAGASINS : 4 ou 5 chiffres (ex: 7879, 10032). Peut avoir 1 ou 2 magasins par travée.
+Le plan a TROIS zones physiquement séparées :
 
-ZONE CRAFT (travées 86 à 98, section séparée du plan) :
+ZONE 1 (tableau principal vertical, lu de gauche à droite) → préfixe ZONE1 :
+- Colonne 1 = TRAVÉE : nombre 2-3 chiffres (99, 100, 201, 306...), 99BIS/99BIS1/99BIS2/99BIS3, ou la lettre X
+- Colonnes suivantes = MAGASINS : 4 ou 5 chiffres. Peut avoir 1 ou 2 magasins par travée.
+
+ZONE CRAFT (section horizontale séparée, travées 86 à 98) → préfixe CRAFT :
 - Disposition en COLONNES : chaque colonne = une travée indépendante
 - En haut de la colonne : le numéro de travée (ex: 86, 87, 88...)
 - En bas de la même colonne : le numéro de magasin (4-5 chiffres)
-- ATTENTION : les colonnes sont ordonnées du numéro LE PLUS GRAND à gauche vers le numéro LE PLUS PETIT à droite (ex: 98...88 87 86 de gauche à droite). Chaque magasin appartient à la colonne dont il partage le numéro de travée EN HAUT — ne pas décaler d'une colonne.
-- Un seul magasin par colonne/travée. Transcris chaque colonne séparément : "86 MAGASIN", "87 MAGASIN", etc.
+- Les colonnes vont du numéro LE PLUS GRAND à gauche vers le PLUS PETIT à droite (ex: 98...88 87 86)
+- Chaque magasin appartient à la colonne dont il partage le numéro de travée EN HAUT — ne pas décaler d'une colonne.
 
-ZONE DÉBORD (travées DEB1, DEB2... ou numéros 72 à 85, section séparée) :
-- Disposition VERTICALE mais lue de droite à gauche : travée à DROITE, magasin à GAUCHE
-- Un seul magasin par travée. Transcris : "DEB1 MAGASIN", "72 MAGASIN", etc.
+ZONE DÉBORD (section verticale séparée, travées DEB1/DEB2... ou 72-85 et parfois 86+) → préfixe DEBORD :
+- Disposition VERTICALE lue de droite à gauche : travée à DROITE, magasin à GAUCHE
+- Un seul magasin par travée.
 
-RÈGLES GÉNÉRALES :
+RÈGLES :
 - Ignore : heures (5H00), M, S, nombres 1-2 chiffres (palettes), flèches →
-- Si tu lis mal un chiffre, transcris quand même ton meilleur essai
 - Lis chaque section complètement, sans sauter aucune ligne
 
-Exemple :
-DEB1 9812
-DEB2 11839
-99BIS 7450
-99BIS1 8060
-99 8999
-100 7450
-103 8176 6317
-86 8214
-87 7879
-88 10032
-89 9571
-306 10892
-X 9037
-402 9668 9684
-504 7878 7450
+Exemple de sortie :
+DEBORD DEB1 9812
+DEBORD DEB2 11839
+DEBORD 86 9684
+CRAFT 86 8214
+CRAFT 87 7879
+CRAFT 88 10032
+ZONE1 99BIS 7450
+ZONE1 99BIS1 8060
+ZONE1 99 8999
+ZONE1 100 7450
+ZONE1 103 8176 6317
+ZONE1 306 10892
+ZONE1 X 9037
+ZONE1 402 9668
 
 Transcris maintenant :`;
 

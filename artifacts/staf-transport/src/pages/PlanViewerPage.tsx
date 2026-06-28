@@ -198,9 +198,7 @@ const PlanViewerPage = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-base font-bold text-white">{selectedPlan.date}</p>
-              <p className="text-sm text-green-400 font-semibold">
-                {new Set(selectedPlan.stores.map(s => s.travee)).size} travées • {Math.round(scale * 100)}%
-              </p>
+              <p className="text-xs text-gray-400">{Math.round(scale * 100)}%</p>
             </div>
             <button onClick={() => handleDelete(selectedPlan.id)} className="p-2 text-red-500">
               <Trash2 size={18} />
@@ -246,6 +244,23 @@ const PlanViewerPage = () => {
               </button>
             </div>
           </div>
+
+          {selectedPlan.stores.length > 0 && (() => {
+            const traveeCount = new Set(selectedPlan.stores.map(s => `${s.zone}|${s.travee}`)).size;
+            const storeCount = selectedPlan.stores.length;
+            return (
+              <div className="flex gap-2">
+                <div className="flex-1 bg-gray-900 border border-green-700 rounded-xl py-2 text-center">
+                  <p className="text-xs text-gray-400">Travées</p>
+                  <p className="text-4xl font-black text-green-400 leading-tight">{traveeCount}</p>
+                </div>
+                <div className="flex-1 bg-gray-900 border border-blue-700 rounded-xl py-2 text-center">
+                  <p className="text-xs text-gray-400">Magasins</p>
+                  <p className="text-4xl font-black text-blue-400 leading-tight">{storeCount}</p>
+                </div>
+              </div>
+            );
+          })()}
 
           <button
             onClick={reset}
