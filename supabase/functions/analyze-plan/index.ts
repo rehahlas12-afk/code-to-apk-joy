@@ -308,7 +308,9 @@ function isLineTraveeAnchor(tokens: string[], index: number, explicitZoneOnLine:
   if (isCraftTraveeToken(token)) return hasStoreAfter;
   if (index === 0) return hasStoreAfter;
   if (!hasStoreAfter) return false;
-  if (/^DEB\d?$/.test(token)) return false;
+  // DEB1-DEB6 = vraies travées Débord. DEB seul à l'intérieur d'une ligne aussi.
+  if (/^DEB[1-9]$/.test(token)) return true;
+  if (/^DEB$/.test(token) && index > 0) return true;
   if (explicitZoneOnLine && index <= 2) return true;
 
   const digits = tokenDigits(token);
