@@ -199,6 +199,26 @@ const SearchPage = () => {
     return suggestStores(query, 40);
   }, [query]);
 
+  const [searchMode, setSearchMode] = useState<"magasin" | "travee">("magasin");
+  const [traveeQuery, setTraveeQuery] = useState("");
+
+  const runTraveeSearch = (t: string) => {
+    const trimmed = t.trim();
+    if (!trimmed) return;
+    const tr = searchByTravee(trimmed);
+    if (tr.length > 0) {
+      setResult(null);
+      setTraveeResults(tr);
+      setNotFound(false);
+      announceTravee(tr, trimmed);
+    } else {
+      setResult(null);
+      setTraveeResults(null);
+      setNotFound(true);
+      speak(`Travée ${trimmed} non trouvée`);
+    }
+  };
+
   return (
     <div className="h-screen bg-black flex flex-col text-white overflow-hidden">
       <div className="flex items-center gap-2 px-3 py-2 bg-black border-b border-gray-800">
@@ -218,62 +238,105 @@ const SearchPage = () => {
         </div>
       </div>
 
-      {/* Search bar — WHITE outline */}
-      <div className="px-2 pt-2 relative">
-        <div className="flex items-center gap-1 bg-gray-900 border-2 border-white rounded-xl p-1 focus-within:border-white">
-          <input
-            ref={inputRef}
-            type="text"
-            inputMode="search"
-            value={query}
-            onChange={(e) => { setQuery(e.target.value); setShowSuggestions(true); }}
-            onFocus={() => setShowSuggestions(true)}
-            onKeyDown={(e) => e.key === "Enter" && runSearch(query)}
-            placeholder="N° ou nom magasin..."
-            className="min-w-0 flex-1 bg-transparent px-2 py-2 text-base text-white outline-none"
-          />
-          {query && (
-            <button onClick={clear} className="p-1.5 text-gray-400 shrink-0" aria-label="Effacer">
-              <X size={18} />
-            </button>
-          )}
-          <button
-            onClick={() => runSearch(query)}
-            className="bg-primary text-primary-foreground rounded-lg p-2 shrink-0"
-            aria-label="Rechercher"
-          >
-            <SearchIcon size={20} />
-          </button>
-          <button
-            onClick={listening ? stopListening : startListening}
-            className={`rounded-lg p-2 shrink-0 ${listening ? "bg-red-600 animate-pulse" : "bg-green-600"}`}
-            aria-label="Recherche vocale"
-          >
-            <Mic size={20} />
-          </button>
-        </div>
-        {listening && (
-          <p className="text-center text-red-400 mt-1 text-xs font-semibold">🎤 Parlez maintenant...</p>
-        )}
-
-        {/* Autocomplete dropdown */}
-        {showSuggestions && suggestions.length > 0 && (
-          <div className="absolute left-2 right-2 top-full mt-1 z-30 bg-gray-900 border-2 border-white rounded-xl max-h-64 overflow-y-auto shadow-2xl">
-            {suggestions.map((s) => (
-              <button
-                key={s.number}
-                onClick={() => selectSuggestion(s)}
-                className="w-full text-left px-3 py-2 border-b border-gray-800 hover:bg-gray-800 active:bg-gray-700 flex items-center justify-between gap-2"
-              >
-                <span className="font-bold text-white text-base truncate">
-                  {s.name ? s.name : `Magasin ${s.number}`}
-                </span>
-                <span className="text-sm font-bold text-green-400 shrink-0">N° {s.number}</span>
-              </button>
-            ))}
-          </div>
-        )}
+      {/* Mode tabs */}
+      <div className="flex gap-2 px-2 pt-2">
+        <button
+          onClick={() => { setSearchMode("magasin"); setResult(null); setTraveeResults(null); setNotFound(false); }}
+          className={`flex-1 rounded-xl py-2.5 text-sm font-bold transition-colors ${searchMode === "magasin" ? "bg-orange-600 text-white" : "bg-gray-800 text-gray-400"}`}
+        >
+          🏪 Par Magasin
+        </button>
+        <button
+          onClick={() => { setSearchMode("travee"); setResult(null); setTraveeResults(null); setNotFound(false); setTraveeQuery(""); }}
+          className={`flex-1 rounded-xl py-2.5 text-sm font-bold transition-colors ${searchMode === "travee" ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-400"}`}
+        >
+          🚦 Par Travée
+        </button>
       </div>
+
+      {searchMode === "travee" ? (
+        <div className="px-2 pt-2 flex flex-col gap-2">
+          <div className="flex items-center gap-1 bg-gray-900 border-2 border-blue-500 rounded-xl p-1">
+            <input
+              type="text"
+              inputMode="numeric"
+              value={traveeQuery}
+              onChange={(e) => setTraveeQuery(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && runTraveeSearch(traveeQuery)}
+              placeholder="N° de travée (ex: 306, DEB1, X)"
+              className="min-w-0 flex-1 bg-transparent px-2 py-2 text-base text-white outline-none"
+            />
+            {traveeQuery && (
+              <button onClick={() => { setTraveeQuery(""); setTraveeResults(null); setNotFound(false); }} className="p-1.5 text-gray-400 shrink-0">
+                <X size={18} />
+              </button>
+            )}
+            <button
+              onClick={() => runTraveeSearch(traveeQuery)}
+              className="bg-blue-600 text-white rounded-lg p-2 shrink-0"
+            >
+              <SearchIcon size={20} />
+            </button>
+          </div>
+        </div>
+      ) : (
+        /* Search bar — magasin mode */
+        <div className="px-2 pt-2 relative">
+          <div className="flex items-center gap-1 bg-gray-900 border-2 border-white rounded-xl p-1 focus-within:border-white">
+            <input
+              ref={inputRef}
+              type="text"
+              inputMode="search"
+              value={query}
+              onChange={(e) => { setQuery(e.target.value); setShowSuggestions(true); }}
+              onFocus={() => setShowSuggestions(true)}
+              onKeyDown={(e) => e.key === "Enter" && runSearch(query)}
+              placeholder="N° ou nom magasin..."
+              className="min-w-0 flex-1 bg-transparent px-2 py-2 text-base text-white outline-none"
+            />
+            {query && (
+              <button onClick={clear} className="p-1.5 text-gray-400 shrink-0" aria-label="Effacer">
+                <X size={18} />
+              </button>
+            )}
+            <button
+              onClick={() => runSearch(query)}
+              className="bg-primary text-primary-foreground rounded-lg p-2 shrink-0"
+              aria-label="Rechercher"
+            >
+              <SearchIcon size={20} />
+            </button>
+            <button
+              onClick={listening ? stopListening : startListening}
+              className={`rounded-lg p-2 shrink-0 ${listening ? "bg-red-600 animate-pulse" : "bg-green-600"}`}
+              aria-label="Recherche vocale"
+            >
+              <Mic size={20} />
+            </button>
+          </div>
+          {listening && (
+            <p className="text-center text-red-400 mt-1 text-xs font-semibold">🎤 Parlez maintenant...</p>
+          )}
+
+          {/* Autocomplete dropdown */}
+          {showSuggestions && suggestions.length > 0 && (
+            <div className="absolute left-2 right-2 top-full mt-1 z-30 bg-gray-900 border-2 border-white rounded-xl max-h-64 overflow-y-auto shadow-2xl">
+              {suggestions.map((s) => (
+                <button
+                  key={s.number}
+                  onClick={() => selectSuggestion(s)}
+                  className="w-full text-left px-3 py-2 border-b border-gray-800 hover:bg-gray-800 active:bg-gray-700 flex items-center justify-between gap-2"
+                >
+                  <span className="font-bold text-white text-base truncate">
+                    {s.name ? s.name : `Magasin ${s.number}`}
+                  </span>
+                  <span className="text-sm font-bold text-green-400 shrink-0">N° {s.number}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Result display */}
       <div className="flex-1 overflow-y-auto px-2 py-2" onClick={() => setShowSuggestions(false)}>

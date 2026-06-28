@@ -1,14 +1,63 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Camera, Search, Eye, Plus, Calculator, Image, LogOut, Download, Upload, CalendarClock, Key, X, Eye as EyeIcon, EyeOff } from "lucide-react";
+import { Camera, Search, Eye, Plus, Calculator, Image, LogOut, Download, Upload, CalendarClock, Key, X, Eye as EyeIcon, EyeOff, ExternalLink } from "lucide-react";
 import TruckLogo from "@/components/TruckLogo";
 import { getStoreNames, setStoreNames, type StoreName } from "@/lib/store";
 import { quitApplication } from "@/lib/audioService";
 import { toast } from "@/hooks/use-toast";
 
-const GEMINI_KEY_LS = "userGeminiApiKey";
+const AI_PROVIDERS = [
+  {
+    id: "gemini",
+    name: "Gemini",
+    company: "Google",
+    emoji: "🤖",
+    color: "border-blue-500",
+    badge: "bg-blue-600",
+    placeholder: "AIzaSy...",
+    link: "https://aistudio.google.com/app/apikey",
+    linkLabel: "aistudio.google.com",
+    free: "Gratuit (tier quotidien)",
+  },
+  {
+    id: "groq",
+    name: "Groq",
+    company: "Groq Cloud",
+    emoji: "⚡",
+    color: "border-orange-500",
+    badge: "bg-orange-600",
+    placeholder: "gsk_...",
+    link: "https://console.groq.com/keys",
+    linkLabel: "console.groq.com",
+    free: "Gratuit (très rapide)",
+  },
+  {
+    id: "mistral",
+    name: "Mistral AI",
+    company: "Mistral",
+    emoji: "🌊",
+    color: "border-purple-500",
+    badge: "bg-purple-600",
+    placeholder: "Votre clé Mistral...",
+    link: "https://console.mistral.ai/api-keys",
+    linkLabel: "console.mistral.ai",
+    free: "Gratuit (tier limité)",
+  },
+  {
+    id: "openai",
+    name: "OpenAI / Microsoft",
+    company: "OpenAI",
+    emoji: "🧠",
+    color: "border-green-500",
+    badge: "bg-green-600",
+    placeholder: "sk-...",
+    link: "https://platform.openai.com/api-keys",
+    linkLabel: "platform.openai.com",
+    free: "Payant (GPT-4o)",
+  },
+];
 
-const buttons = [
+const NAV_BUTTONS = [
   { label: "Scanner Plan", icon: Camera, path: "/camera", color: "bg-blue-600" },
   { label: "Galerie", icon: Image, path: "/gallery", color: "bg-green-700" },
   { label: "Recherche", icon: Search, path: "/search", color: "bg-orange-600" },
@@ -17,23 +66,33 @@ const buttons = [
   { label: "Calculateur Palettes", icon: Calculator, path: "/pallet-calc", color: "bg-green-700" },
 ];
 
+function getActiveProvider(): string {
+  return localStorage.getItem("aiProvider") || "gemini";
+}
+
+function hasAnyKey(): boolean {
+  return AI_PROVIDERS.some(p => !!localStorage.getItem(`aiKey_${p.id}`));
+}
+
 const Dashboard = () => {
   const navigate = useNavigate();
   const [showKeyModal, setShowKeyModal] = useState(false);
-  const [keyInput, setKeyInput] = useState(() => localStorage.getItem(GEMINI_KEY_LS) ?? "");
-  const [showKey, setShowKey] = useState(false);
+  const [keys, setKeys] = useState<Record<string, string>>(() =>
+    Object.fromEntries(AI_PROVIDERS.map(p => [p.id, localStorage.getItem(`aiKey_${p.id}`) ?? ""]))
+  );
+  const [showKey, setShowKey] = useState<Record<string, boolean>>({});
+  const [activeProvider, setActiveProvider] = useState(getActiveProvider);
+  const [anyKey, setAnyKey] = useState(hasAnyKey);
 
-  const savedKey = localStorage.getItem(GEMINI_KEY_LS);
-
-  const handleSaveKey = () => {
-    const trimmed = keyInput.trim();
-    if (trimmed) {
-      localStorage.setItem(GEMINI_KEY_LS, trimmed);
-      toast({ title: "✅ Clé API Gemini sauvegardée", description: "Cette clé sera utilisée pour l'analyse des plans." });
-    } else {
-      localStorage.removeItem(GEMINI_KEY_LS);
-      toast({ title: "🗑️ Clé API supprimée", description: "La clé Replit sera utilisée par défaut." });
-    }
+  const handleSaveKeys = () => {
+    AI_PROVIDERS.forEach(p => {
+      const trimmed = keys[p.id].trim();
+      if (trimmed) localStorage.setItem(`aiKey_${p.id}`, trimmed);
+      else localStorage.removeItem(`aiKey_${p.id}`);
+    });
+    localStorage.setItem("aiProvider", activeProvider);
+    setAnyKey(hasAnyKey());
+    toast({ title: "✅ Clés IA sauvegardées", description: `Fournisseur actif : ${AI_PROVIDERS.find(p => p.id === activeProvider)?.name}` });
     setShowKeyModal(false);
   };
 
@@ -45,16 +104,12 @@ const Dashboard = () => {
 
   const handleExportNames = () => {
     const names = getStoreNames();
-    if (names.length === 0) {
-      toast({ title: "Aucun nom à exporter" });
-      return;
-    }
-    const data = JSON.stringify(names, null, 2);
-    const blob = new Blob([data], { type: "application/json" });
+    if (names.length === 0) { toast({ title: "Aucun nom à exporter" }); return; }
+    const blob = new Blob([JSON.stringify(names, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `staf-noms-magasins-${new Date().toISOString().slice(0,10)}.json`;
+    a.download = `staf-noms-magasins-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
     toast({ title: `✅ ${names.length} noms exportés` });
@@ -68,30 +123,30 @@ const Dashboard = () => {
       const file = e.target.files?.[0];
       if (!file) return;
       try {
-        const text = await file.text();
-        const data = JSON.parse(text);
-        if (!Array.isArray(data)) throw new Error("Format invalide");
-        const valid = data.filter((n: any) => n && n.number && n.name) as StoreName[];
-        // Merge with existing
+        const data = JSON.parse(await file.text());
+        if (!Array.isArray(data)) throw new Error();
+        const valid = data.filter((n: any) => n?.number && n?.name) as StoreName[];
         const existing = getStoreNames();
         const map = new Map(existing.map(n => [n.number, n.name]));
         valid.forEach(n => map.set(String(n.number), String(n.name)));
         const merged = Array.from(map.entries()).map(([number, name]) => ({ number, name }));
         setStoreNames(merged);
         toast({ title: `✅ ${valid.length} noms importés`, description: `Total: ${merged.length}` });
-      } catch (err) {
+      } catch {
         toast({ title: "❌ Erreur import", description: "Fichier invalide", variant: "destructive" });
       }
     };
     input.click();
   };
 
+  const activeProv = AI_PROVIDERS.find(p => p.id === activeProvider);
+
   return (
     <div className="min-h-screen bg-black flex flex-col">
       <TruckLogo />
       <div className="flex-1 p-4">
         <div className="grid grid-cols-2 gap-3">
-          {buttons.map((btn) => (
+          {NAV_BUTTONS.map((btn) => (
             <button
               key={btn.path}
               onClick={() => navigate(btn.path)}
@@ -117,85 +172,110 @@ const Dashboard = () => {
           </button>
         </div>
 
-        {/* Sauvegarde / restauration des noms magasins */}
         <div className="mt-4 grid grid-cols-2 gap-3">
-          <button
-            onClick={handleExportNames}
-            className="bg-purple-700 text-white rounded-xl p-4 flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform"
-          >
-            <Download size={22} />
-            <span className="text-sm font-bold">Sauvegarder noms</span>
+          <button onClick={handleExportNames} className="bg-purple-700 text-white rounded-xl p-4 flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform">
+            <Download size={22} /><span className="text-sm font-bold">Sauvegarder noms</span>
           </button>
-          <button
-            onClick={handleImportNames}
-            className="bg-purple-600 text-white rounded-xl p-4 flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform"
-          >
-            <Upload size={22} />
-            <span className="text-sm font-bold">Restaurer noms</span>
+          <button onClick={handleImportNames} className="bg-purple-600 text-white rounded-xl p-4 flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform">
+            <Upload size={22} /><span className="text-sm font-bold">Restaurer noms</span>
           </button>
         </div>
 
-        {/* Clé API Gemini */}
         <div className="mt-3">
           <button
-            onClick={() => { setKeyInput(localStorage.getItem(GEMINI_KEY_LS) ?? ""); setShowKeyModal(true); }}
-            className={`w-full rounded-xl p-4 flex items-center justify-between gap-2 shadow-lg active:scale-95 transition-transform ${savedKey ? "bg-yellow-700" : "bg-gray-700"}`}
+            onClick={() => setShowKeyModal(true)}
+            className={`w-full rounded-xl p-4 flex items-center justify-between gap-2 shadow-lg active:scale-95 transition-transform ${anyKey ? "bg-yellow-700" : "bg-gray-700"}`}
           >
             <div className="flex items-center gap-2">
               <Key size={22} />
-              <span className="text-sm font-bold text-white">Clé API Gemini personnelle</span>
+              <div className="text-left">
+                <p className="text-sm font-bold text-white">Clés IA personnelles</p>
+                {anyKey && <p className="text-xs text-yellow-200">{activeProv?.emoji} {activeProv?.name} actif</p>}
+              </div>
             </div>
-            <span className={`text-xs font-bold px-2 py-1 rounded-full ${savedKey ? "bg-yellow-500 text-black" : "bg-gray-500 text-white"}`}>
-              {savedKey ? "Active ✓" : "Non configurée"}
+            <span className={`text-xs font-bold px-2 py-1 rounded-full ${anyKey ? "bg-yellow-400 text-black" : "bg-gray-500 text-white"}`}>
+              {anyKey ? "Configurée ✓" : "Non configurée"}
             </span>
           </button>
         </div>
       </div>
 
-      {/* Modal saisie clé API */}
       {showKeyModal && (
-        <div className="fixed inset-0 bg-black/80 z-50 flex items-end justify-center p-4">
-          <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-md p-5 flex flex-col gap-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-white flex items-center gap-2"><Key size={20}/> Clé API Gemini</h2>
-              <button onClick={() => setShowKeyModal(false)} className="text-gray-400 p-1"><X size={20}/></button>
-            </div>
+        <div className="fixed inset-0 bg-black/90 z-50 flex flex-col overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
+            <h2 className="text-base font-bold text-white flex items-center gap-2"><Key size={18}/> Clés API – Intelligence Artificielle</h2>
+            <button onClick={() => setShowKeyModal(false)} className="text-gray-400 p-1"><X size={22}/></button>
+          </div>
 
-            <div className="text-sm text-gray-300 space-y-1">
-              <p>Quand le quota Replit est épuisé, utilise ta clé Gemini personnelle.</p>
-              <p className="text-gray-400 text-xs">Obtenir une clé gratuite : <span className="text-blue-400">aistudio.google.com</span></p>
-            </div>
+          <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
+            <p className="text-xs text-gray-400">Quand le quota d'un fournisseur est épuisé, active un autre. Sélectionne le fournisseur actif avec le bouton radio.</p>
 
-            <div className="relative">
-              <input
-                type={showKey ? "text" : "password"}
-                value={keyInput}
-                onChange={(e) => setKeyInput(e.target.value)}
-                placeholder="AIzaSy..."
-                className="w-full bg-gray-800 border border-gray-600 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-yellow-500 pr-10"
-              />
-              <button
-                onClick={() => setShowKey(!showKey)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
-              >
-                {showKey ? <EyeOff size={18}/> : <EyeIcon size={18}/>}
-              </button>
-            </div>
+            {AI_PROVIDERS.map(p => {
+              const isActive = activeProvider === p.id;
+              const hasKey = !!keys[p.id];
+              return (
+                <div key={p.id} className={`rounded-xl border-2 p-4 space-y-3 ${isActive ? p.color : "border-gray-700"} bg-gray-900`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl">{p.emoji}</span>
+                      <div>
+                        <p className="text-sm font-bold text-white">{p.name}</p>
+                        <p className="text-xs text-gray-400">{p.free}</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setActiveProvider(p.id)}
+                      className={`px-3 py-1 rounded-full text-xs font-bold transition-colors ${isActive ? `${p.badge} text-white` : "bg-gray-700 text-gray-400"}`}
+                    >
+                      {isActive ? "✓ Actif" : "Activer"}
+                    </button>
+                  </div>
 
-            <div className="flex gap-2">
-              <button
-                onClick={() => { setKeyInput(""); }}
-                className="flex-1 bg-red-900 text-red-300 rounded-xl py-3 text-sm font-bold"
-              >
-                Supprimer
-              </button>
-              <button
-                onClick={handleSaveKey}
-                className="flex-1 bg-yellow-600 text-black rounded-xl py-3 text-sm font-bold"
-              >
-                Sauvegarder
-              </button>
-            </div>
+                  <a
+                    href={p.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-blue-400 text-xs underline"
+                  >
+                    <ExternalLink size={12}/> Obtenir une clé : {p.linkLabel}
+                  </a>
+
+                  <div className="relative">
+                    <input
+                      type={showKey[p.id] ? "text" : "password"}
+                      value={keys[p.id]}
+                      onChange={e => setKeys(prev => ({ ...prev, [p.id]: e.target.value }))}
+                      placeholder={hasKey ? "••••••••••••••••" : p.placeholder}
+                      className={`w-full bg-gray-800 border rounded-xl px-3 py-2.5 text-white text-sm outline-none pr-10 ${hasKey ? "border-green-600" : "border-gray-600"}`}
+                    />
+                    <button
+                      onClick={() => setShowKey(prev => ({ ...prev, [p.id]: !prev[p.id] }))}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
+                    >
+                      {showKey[p.id] ? <EyeOff size={16}/> : <EyeIcon size={16}/>}
+                    </button>
+                  </div>
+
+                  {hasKey && (
+                    <button
+                      onClick={() => setKeys(prev => ({ ...prev, [p.id]: "" }))}
+                      className="text-xs text-red-400 underline"
+                    >
+                      Supprimer la clé
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="px-4 py-3 border-t border-gray-800">
+            <button
+              onClick={handleSaveKeys}
+              className="w-full bg-yellow-500 text-black rounded-xl py-3 font-bold text-base"
+            >
+              💾 Sauvegarder
+            </button>
           </div>
         </div>
       )}

@@ -25,12 +25,14 @@ async function analyzeWithAI(
 ): Promise<StoreData[]> {
   onProgress?.(20);
 
-  const userKey = localStorage.getItem("userGeminiApiKey") ?? "";
+  const provider = localStorage.getItem("aiProvider") || "gemini";
+  const userKey = localStorage.getItem(`aiKey_${provider}`) || localStorage.getItem("userGeminiApiKey") || "";
   const response = await fetch("/api/analyze-plan", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      ...(userKey ? { "x-gemini-api-key": userKey } : {}),
+      ...(provider ? { "x-ai-provider": provider } : {}),
+      ...(userKey ? { "x-ai-key": userKey } : {}),
     },
     body: JSON.stringify({ imageBase64: imageData }),
   });

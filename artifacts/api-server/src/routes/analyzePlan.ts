@@ -108,25 +108,29 @@ router.post("/analyze-plan", async (req, res) => {
   }
 
   const geminiBaseUrl = process.env.AI_INTEGRATIONS_GEMINI_BASE_URL;
-  const replitKey = process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
-  // User can provide their own key via x-gemini-api-key header (takes priority)
-  const userKey = (req.headers["x-gemini-api-key"] as string | undefined)?.trim();
-  const geminiApiKey = userKey || replitKey;
+  const replitGeminiKey = process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
 
-  if (!geminiBaseUrl || !geminiApiKey) {
-    res.status(503).json({ error: "AI analysis not configured — ajoutez une clé API Gemini dans les paramètres." });
+  // Client sends x-ai-provider and x-ai-key when using personal keys
+  const userProvider = (req.headers["x-ai-provider"] as string | undefined)?.trim() || "gemini";
+  const userKey = (req.headers["x-ai-key"] as string | undefined)?.trim()
+    || (req.headers["x-gemini-api-key"] as string | undefined)?.trim(); // legacy compat
+
+  // Provider configs for OpenAI-compatible APIs
+  const OPENAI_COMPAT: Record<string, { baseUrl: string; model: string }> = {
+    groq:    { baseUrl: "https://api.groq.com/openai/v1",      model: "meta-llama/llama-4-scout-17b-16e-instruct" },
+    mistral: { baseUrl: "https://api.mistral.ai/v1",           model: "pixtral-large-latest" },
+    openai:  { baseUrl: "https://api.openai.com/v1",           model: "gpt-4o" },
+  };
+
+  const isOpenAICompat = userKey && userProvider in OPENAI_COMPAT;
+  const geminiApiKey = (userProvider === "gemini" ? userKey : null) || replitGeminiKey;
+
+  if (!geminiApiKey && !isOpenAICompat) {
+    res.status(503).json({ error: "IA non configurée — ajoutez une clé API dans les paramètres." });
     return;
   }
 
-  // When using a user key, call Google AI directly (not through Replit proxy)
-  const effectiveBaseUrl = userKey
-    ? "https://generativelanguage.googleapis.com/v1beta"
-    : geminiBaseUrl;
-
-  try {
-    const base64Data = imageBase64.replace(/^data:image\/[a-z]+;base64,/, "");
-
-    const prompt = `Tu es un expert OCR. Ce document est un tableau de dispatch entrepôt.
+  const prompt = `Tu es un expert OCR. Ce document est un tableau de dispatch entrepôt.
 
 Extrait TOUS les nombres à 4 ou 5 chiffres (numéros de magasin) et leur travée associée.
 
@@ -176,44 +180,75 @@ ZONE1 402 9668
 
 Transcris maintenant :`;
 
-    const body = {
-      contents: [
-        {
+  try {
+    const base64Data = imageBase64.replace(/^data:image\/[a-z]+;base64,/, "");
+    let rawText = "";
+    let finishReason = "unknown";
+
+    if (isOpenAICompat) {
+      // ---- OpenAI-compatible path (Groq, Mistral, OpenAI) ----
+      const cfg = OPENAI_COMPAT[userProvider];
+      const body = {
+        model: cfg.model,
+        messages: [{
+          role: "user",
+          content: [
+            { type: "text", text: prompt },
+            { type: "image_url", image_url: { url: `data:image/jpeg;base64,${base64Data}` } },
+          ],
+        }],
+        temperature: 0.0,
+        max_tokens: 8192,
+      };
+      const response = await fetch(`${cfg.baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${userKey}` },
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) {
+        const errText = await response.text();
+        req.log.error({ status: response.status, body: errText, provider: userProvider }, "OpenAI-compat API error");
+        res.status(502).json({ error: `Erreur ${userProvider}: ${response.status}` });
+        return;
+      }
+      const data = await response.json() as { choices?: Array<{ message?: { content?: string }; finish_reason?: string }> };
+      rawText = data.choices?.[0]?.message?.content ?? "";
+      finishReason = data.choices?.[0]?.finish_reason ?? "unknown";
+
+    } else {
+      // ---- Gemini path ----
+      const effectiveBaseUrl = userKey
+        ? "https://generativelanguage.googleapis.com/v1beta"
+        : geminiBaseUrl!;
+      const body = {
+        contents: [{
           role: "user",
           parts: [
             { text: prompt },
             { inline_data: { mime_type: "image/jpeg", data: base64Data } },
           ],
-        },
-      ],
-      generationConfig: {
-        temperature: 0.0,
-        maxOutputTokens: 32768,
-      },
-    };
-
-    const url = `${effectiveBaseUrl}/models/gemini-2.5-pro:generateContent?key=${geminiApiKey}`;
-
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-
-    if (!response.ok) {
-      const errText = await response.text();
-      req.log.error({ status: response.status, body: errText }, "Gemini API error");
-      res.status(502).json({ error: "AI service error" });
-      return;
+        }],
+        generationConfig: { temperature: 0.0, maxOutputTokens: 32768 },
+      };
+      const url = `${effectiveBaseUrl}/models/gemini-2.5-pro:generateContent?key=${geminiApiKey}`;
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) {
+        const errText = await response.text();
+        req.log.error({ status: response.status, body: errText }, "Gemini API error");
+        res.status(502).json({ error: "Erreur Gemini AI" });
+        return;
+      }
+      const geminiData = await response.json() as {
+        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> }; finishReason?: string }>;
+      };
+      const candidate = geminiData.candidates?.[0];
+      rawText = candidate?.content?.parts?.[0]?.text ?? "";
+      finishReason = candidate?.finishReason ?? "unknown";
     }
-
-    const geminiData = await response.json() as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> }; finishReason?: string }>;
-    };
-
-    const candidate = geminiData.candidates?.[0];
-    const rawText = candidate?.content?.parts?.[0]?.text ?? "";
-    const finishReason = candidate?.finishReason ?? "unknown";
 
     req.log.info({ rawTextLength: rawText.length, finishReason, rawText }, "Gemini transcription received");
 
