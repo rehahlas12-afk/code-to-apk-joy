@@ -175,6 +175,8 @@ const TimeTrackingPage = () => {
   const [detailId, setDetailId] = useState<string | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [historyEditMonth, setHistoryEditMonth] = useState<string | null>(null);
+  const [historySearch, setHistorySearch] = useState("");
   const [confirmModeChange, setConfirmModeChange] = useState(false);
 
   const payrollRange = (() => {
