@@ -177,6 +177,17 @@ const Dashboard = () => {
           </button>
         </div>
 
+        {/* Clé API personnelle (Groq) */}
+        <div className="mt-4">
+          <button
+            onClick={() => setApiKeyOpen(true)}
+            className="w-full bg-indigo-700 text-white rounded-xl p-4 flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform"
+          >
+            <Key size={22} />
+            <span className="text-sm font-black">Changer clé API perso (Groq)</span>
+          </button>
+        </div>
+
         <p className="mt-3 text-center text-xs text-gray-500">
           App ouverte {openCount} fois sur ce téléphone
         </p>
