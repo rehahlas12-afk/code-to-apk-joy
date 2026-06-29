@@ -178,6 +178,8 @@ const TimeTrackingPage = () => {
   const [historyEditMonth, setHistoryEditMonth] = useState<string | null>(null);
   const [historySearch, setHistorySearch] = useState("");
   const [confirmModeChange, setConfirmModeChange] = useState(false);
+  const [histRange, setHistRange] = useState<{ from: string; to: string }>({ from: "", to: "" });
+  const [histRangeActive, setHistRangeActive] = useState(false);
 
   const payrollRange = (() => {
     const now = new Date();
@@ -590,7 +592,66 @@ const TimeTrackingPage = () => {
     }, 50);
   };
 
+  // Pointages filtrés selon la plage personnalisée du modal "Visualiser tout"
+  const histRangeDays = useMemo(() => {
+    if (!histRangeActive || !histRange.from || !histRange.to) return [];
+    const from = histRange.from, to = histRange.to;
+    return allHistorySorted.filter(d => d.date >= from && d.date <= to);
+  }, [histRangeActive, histRange.from, histRange.to, allHistorySorted]);
+  const histRangeTotals = histRangeDays.reduce((acc, d) => { const b = dayBreakdown(d); acc.total += b.total; acc.night += b.night; acc.day += b.day; return acc; }, { total: 0, night: 0, day: 0 });
+
+  const buildRangePdfDoc = (from: string, to: string) => {
+    setPdfRange({ from, to });
+    // buildPdf lit pdfRange dans la closure courante — on contourne en passant temporairement
+    const inRange = days.filter(d => d.date >= from && d.date <= to);
+    if (inRange.length === 0) { toast({ title: "Aucun pointage sur cette période", variant: "destructive" }); return null; }
+    // Force la lecture immédiate avec une copie de pdfRange via setter synchrone : on reproduit la logique
+    const prev = pdfRange;
+    (pdfRange as any).from = from; (pdfRange as any).to = to;
+    const doc = buildPdf();
+    (pdfRange as any).from = prev.from; (pdfRange as any).to = prev.to;
+    return doc;
+  };
+
+  const downloadRangePdf = async (from: string, to: string) => {
+    const doc = buildRangePdfDoc(from, to); if (!doc) return;
+    const fileName = `pointage_${info.nom || "agent"}_${from}_${to}.pdf`.replace(/\s+/g, "_");
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const data = String(doc.output("datauristring")).split(",")[1];
+        const saved = await saveBase64ToPhone(fileName, data);
+        toast({ title: "✅ PDF enregistré", description: saved.label });
+        return;
+      } catch (e) { console.error(e); }
+    }
+    doc.save(fileName);
+    toast({ title: "PDF téléchargé", description: fileName });
+  };
+
+  const shareRangePdf = async (from: string, to: string) => {
+    const doc = buildRangePdfDoc(from, to); if (!doc) return;
+    const fileName = `pointage_${info.nom || "agent"}_${from}_${to}.pdf`.replace(/\s+/g, "_");
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const data = String(doc.output("datauristring")).split(",")[1];
+        const saved = await saveBase64ToPhone(fileName, data);
+        await sharePhoneFile({ uri: saved.uri, title: fileName, text: "Pointage PDF", dialogTitle: "Partager le PDF", mimeType: "application/pdf" });
+        return;
+      } catch (e) { console.error(e); toast({ title: "Partage impossible", variant: "destructive" }); return; }
+    }
+    const blob = doc.output("blob");
+    const file = new File([blob], fileName, { type: "application/pdf" });
+    const nav: any = navigator;
+    if (nav.canShare && nav.canShare({ files: [file] })) {
+      try { await nav.share({ files: [file], title: fileName, text: "Pointage PDF" }); return; } catch {}
+    }
+    const url = URL.createObjectURL(blob);
+    window.open(url, "_blank");
+    toast({ title: "Partage non supporté", description: "PDF ouvert dans un onglet." });
+  };
+
   // Édition instantanée d'une journée depuis l'historique
+
   const patchDay = (id: string, patch: Partial<WorkDay>) => {
     const next = days.map(d => d.id === id ? { ...d, ...patch } : d);
     persistDays(next);
@@ -1071,6 +1132,84 @@ const TimeTrackingPage = () => {
               <button onClick={handleExportBackup} className="text-xs bg-purple-700 rounded-lg py-2 font-bold flex items-center justify-center gap-1"><Save size={14}/> Sauvegarder</button>
               <button onClick={handleImportBackup} className="text-xs bg-purple-600 rounded-lg py-2 font-bold flex items-center justify-center gap-1"><Upload size={14}/> Restaurer</button>
             </div>
+
+            {/* Plage personnalisée : choisir 2 dates + afficher tableau + PDF + Partager */}
+            <div className="px-2 py-2 border-b border-gray-700 bg-gray-950 space-y-2">
+              <p className="text-xs font-bold text-blue-300">📅 Choisir une période personnalisée</p>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="block text-xs text-gray-300">Date début
+                  <input type="date" value={histRange.from} max={todayKey} onChange={e => setHistRange({ ...histRange, from: e.target.value })} className="mt-1 w-full rounded-lg bg-gray-800 border border-gray-600 px-2 py-2 text-white text-sm" />
+                </label>
+                <label className="block text-xs text-gray-300">Date fin
+                  <input type="date" value={histRange.to} max={todayKey} onChange={e => setHistRange({ ...histRange, to: e.target.value })} className="mt-1 w-full rounded-lg bg-gray-800 border border-gray-600 px-2 py-2 text-white text-sm" />
+                </label>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => {
+                    if (!histRange.from || !histRange.to || histRange.from > histRange.to) { toast({ title: "Plage invalide", variant: "destructive" }); return; }
+                    setHistRangeActive(true);
+                  }}
+                  className="bg-blue-700 rounded-lg px-3 py-2 text-xs font-bold flex items-center justify-center gap-1"
+                ><Eye size={14}/> Afficher</button>
+                <button
+                  onClick={() => { setHistRangeActive(false); setHistRange({ from: "", to: "" }); }}
+                  className="bg-gray-700 rounded-lg px-3 py-2 text-xs font-bold"
+                >↺ Réinitialiser</button>
+              </div>
+
+              {histRangeActive && (
+                <div className="bg-gray-900 border border-blue-500/50 rounded-lg p-2 space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-1">
+                    <p className="text-[11px] text-gray-300">
+                      Du <b>{new Date(histRange.from).toLocaleDateString("fr-FR")}</b> au <b>{new Date(histRange.to).toLocaleDateString("fr-FR")}</b>
+                    </p>
+                    <p className="text-[11px]">
+                      <span className="text-green-400 font-bold">{formatHours(histRangeTotals.total)}</span>
+                      {" • "}<span className="text-purple-300">nuit {formatHours(histRangeTotals.night)}</span>
+                      {" • "}<span className="text-yellow-300">jour {formatHours(histRangeTotals.day)}</span>
+                    </p>
+                  </div>
+                  <p className="text-[11px] text-gray-400">
+                    {info.nom} {info.prenom} • Agent {info.agent || "—"} • {histRangeDays.length} jour(s)
+                  </p>
+                  <div className="overflow-x-auto max-h-64 overflow-y-auto">
+                    <table className="w-full text-[11px] border-collapse">
+                      <thead className="sticky top-0 bg-gray-900">
+                        <tr className="border-b border-gray-700 text-left">
+                          <th className="py-1 pr-1">Date</th><th>Déb.</th><th>Fin</th><th>Pause</th><th>Total</th><th>Nuit</th><th>Jour</th><th>Note</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {histRangeDays.map(d => {
+                          const b = dayBreakdown(d);
+                          const abs = absenceOf(d);
+                          const h = getHolidayName(d.date);
+                          return (
+                            <tr key={d.id} className={`border-b border-gray-800 ${abs === "maladie" ? "bg-red-950/40" : abs === "conge" ? "bg-emerald-950/40" : abs ? "bg-blue-950/40" : ""}`}>
+                              <td className="py-1 pr-1">{new Date(d.date).toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "2-digit" })}{h && <span className="text-yellow-400"> 🎉</span>}</td>
+                              <td>{abs ? "—" : d.start}</td>
+                              <td>{abs ? "—" : d.end}</td>
+                              <td>{abs ? "—" : (b.pauseMin > 0 ? `${Math.round(b.pauseMin)}m` : "—")}</td>
+                              <td className="font-bold">{abs ? "—" : formatHours(b.total)}</td>
+                              <td className="text-purple-300">{abs ? "—" : formatHours(b.night)}</td>
+                              <td className="text-yellow-300">{abs ? "—" : formatHours(b.day)}</td>
+                              <td className="text-gray-400">{abs ? ABSENCE_LABEL[abs] : (d.cause || "")}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                    {histRangeDays.length === 0 && <p className="text-center text-gray-500 py-3">Aucun pointage sur cette période.</p>}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button onClick={() => downloadRangePdf(histRange.from, histRange.to)} className="bg-purple-700 rounded-lg px-3 py-2 text-xs font-bold flex items-center justify-center gap-1"><Download size={14}/> Télécharger PDF</button>
+                    <button onClick={() => shareRangePdf(histRange.from, histRange.to)} className="bg-emerald-700 rounded-lg px-3 py-2 text-xs font-bold flex items-center justify-center gap-1"><FileText size={14}/> Partager PDF</button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div className="flex-1 overflow-y-auto p-2 space-y-3">
               {groupedByMonth.length === 0 && (
                 <p className="text-center text-gray-500 py-6">{historySearch ? "Aucun mois trouvé." : "Aucun pointage."}</p>

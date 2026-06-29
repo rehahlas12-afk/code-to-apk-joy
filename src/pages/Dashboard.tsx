@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Camera, Search, Eye, Plus, Calculator, Image, LogOut, Download, Upload, CalendarClock, Menu, X, Share2, FileText } from "lucide-react";
+import { Camera, Search, Eye, Plus, Calculator, Image, LogOut, Download, Upload, CalendarClock, Menu, X, Share2, FileText, Key } from "lucide-react";
 import TruckLogo from "@/components/TruckLogo";
 import { getStoreNames, setStoreNames, type StoreName } from "@/lib/store";
 import { quitApplication } from "@/lib/appExit";
@@ -19,6 +19,20 @@ const buttons = [
 const Dashboard = () => {
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [apiKeyOpen, setApiKeyOpen] = useState(false);
+  const [apiKeyValue, setApiKeyValue] = useState<string>(() => {
+    try { return localStorage.getItem("staf_user_groq_key") || ""; } catch { return ""; }
+  });
+
+  const saveApiKey = () => {
+    const v = apiKeyValue.trim();
+    try {
+      if (v) localStorage.setItem("staf_user_groq_key", v);
+      else localStorage.removeItem("staf_user_groq_key");
+    } catch {}
+    setApiKeyOpen(false);
+    toast({ title: v ? "✅ Clé API personnelle enregistrée" : "Clé API personnelle supprimée" });
+  };
 
   const handleQuit = async () => {
     const ok = window.confirm("Voulez-vous quitter l'application ?");
@@ -163,6 +177,17 @@ const Dashboard = () => {
           </button>
         </div>
 
+        {/* Clé API personnelle (Groq) */}
+        <div className="mt-4">
+          <button
+            onClick={() => setApiKeyOpen(true)}
+            className="w-full bg-indigo-700 text-white rounded-xl p-4 flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform"
+          >
+            <Key size={22} />
+            <span className="text-sm font-black">Changer clé API perso (Groq)</span>
+          </button>
+        </div>
+
         <p className="mt-3 text-center text-xs text-gray-500">
           App ouverte {openCount} fois sur ce téléphone
         </p>
@@ -218,6 +243,40 @@ const Dashboard = () => {
                 <LogOut size={24} strokeWidth={2.5} />
                 <span className="font-black text-lg">Quitter l'app</span>
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Dialog : Clé API personnelle */}
+      {apiKeyOpen && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50" onClick={() => setApiKeyOpen(false)}>
+          <div className="bg-gray-900 border-2 border-indigo-500 rounded-2xl p-4 max-w-md w-full space-y-3" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-black text-white">🔑 Clé API personnelle</h2>
+              <button onClick={() => setApiKeyOpen(false)} className="p-2 bg-gray-800 rounded-lg text-white"><X size={18}/></button>
+            </div>
+            <p className="text-xs text-gray-300">
+              Colle ta clé Groq personnelle (gratuite sur console.groq.com).
+              Elle est stockée uniquement sur ton téléphone et utilisée pour lire les plans avec ton propre quota.
+              Laisse vide pour revenir à la clé partagée de l'application.
+            </p>
+            <input
+              type="text"
+              value={apiKeyValue}
+              onChange={(e) => setApiKeyValue(e.target.value)}
+              placeholder="gsk_..."
+              className="w-full rounded-lg bg-gray-800 border border-gray-600 px-3 py-3 text-white text-sm font-mono"
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => { setApiKeyValue(""); }}
+                className="bg-gray-700 text-white rounded-xl p-3 font-bold"
+              >Effacer</button>
+              <button
+                onClick={saveApiKey}
+                className="bg-indigo-700 text-white rounded-xl p-3 font-black"
+              >Enregistrer</button>
             </div>
           </div>
         </div>
