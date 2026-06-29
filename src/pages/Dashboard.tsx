@@ -19,6 +19,20 @@ const buttons = [
 const Dashboard = () => {
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [apiKeyOpen, setApiKeyOpen] = useState(false);
+  const [apiKeyValue, setApiKeyValue] = useState<string>(() => {
+    try { return localStorage.getItem("staf_user_groq_key") || ""; } catch { return ""; }
+  });
+
+  const saveApiKey = () => {
+    const v = apiKeyValue.trim();
+    try {
+      if (v) localStorage.setItem("staf_user_groq_key", v);
+      else localStorage.removeItem("staf_user_groq_key");
+    } catch {}
+    setApiKeyOpen(false);
+    toast({ title: v ? "✅ Clé API personnelle enregistrée" : "Clé API personnelle supprimée" });
+  };
 
   const handleQuit = async () => {
     const ok = window.confirm("Voulez-vous quitter l'application ?");
