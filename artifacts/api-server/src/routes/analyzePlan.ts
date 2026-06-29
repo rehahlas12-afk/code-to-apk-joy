@@ -116,8 +116,9 @@ router.post("/analyze-plan", async (req, res) => {
     || (req.headers["x-gemini-api-key"] as string | undefined)?.trim(); // legacy compat
 
   // Provider configs for OpenAI-compatible APIs
+  // Groq: llama-3.2-90b-vision-preview = 90B params, best vision model on Groq (vs 17B scout)
   const OPENAI_COMPAT: Record<string, { baseUrl: string; model: string }> = {
-    groq:     { baseUrl: "https://api.groq.com/openai/v1",  model: "meta-llama/llama-4-scout-17b-16e-instruct" },
+    groq:     { baseUrl: "https://api.groq.com/openai/v1",  model: "llama-3.2-90b-vision-preview" },
     deepseek: { baseUrl: "https://api.deepseek.com",        model: "deepseek-vl2" },
     openai:   { baseUrl: "https://api.openai.com/v1",       model: "gpt-4o" },
   };
@@ -203,9 +204,13 @@ Transcris maintenant l'intégralité du plan — ne saute aucune ligne :`;
 
     } else {
       // ---- Gemini path ----
-      const effectiveBaseUrl = userKey
+      // Personal keys use gemini-2.0-flash (free, widely available).
+      // Replit's built-in integration uses gemini-2.5-pro (more powerful).
+      const isPersonalKey = !!userKey;
+      const effectiveBaseUrl = isPersonalKey
         ? "https://generativelanguage.googleapis.com/v1beta"
         : geminiBaseUrl!;
+      const geminiModel = isPersonalKey ? "gemini-2.0-flash" : "gemini-2.5-pro";
       const body = {
         contents: [{
           role: "user",
@@ -216,7 +221,7 @@ Transcris maintenant l'intégralité du plan — ne saute aucune ligne :`;
         }],
         generationConfig: { temperature: 0.0, maxOutputTokens: 32768 },
       };
-      const url = `${effectiveBaseUrl}/models/gemini-2.5-pro:generateContent?key=${geminiApiKey}`;
+      const url = `${effectiveBaseUrl}/models/${geminiModel}:generateContent?key=${geminiApiKey}`;
       const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
