@@ -41,8 +41,10 @@ async function analyzeWithAI(
 ): Promise<StoreData[]> {
   onProgress?.(20);
 
+  let userGroqKey: string | undefined;
+  try { userGroqKey = localStorage.getItem("staf_user_groq_key") || undefined; } catch { /* ignore */ }
   const { data, error } = await supabase.functions.invoke("analyze-plan", {
-    body: { imageBase64: imageData },
+    body: { imageBase64: imageData, userGroqKey },
   });
 
   onProgress?.(90);
