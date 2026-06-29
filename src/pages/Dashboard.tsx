@@ -247,6 +247,40 @@ const Dashboard = () => {
           </div>
         </div>
       )}
+
+      {/* Dialog : Clé API personnelle */}
+      {apiKeyOpen && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50" onClick={() => setApiKeyOpen(false)}>
+          <div className="bg-gray-900 border-2 border-indigo-500 rounded-2xl p-4 max-w-md w-full space-y-3" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-black text-white">🔑 Clé API personnelle</h2>
+              <button onClick={() => setApiKeyOpen(false)} className="p-2 bg-gray-800 rounded-lg text-white"><X size={18}/></button>
+            </div>
+            <p className="text-xs text-gray-300">
+              Colle ta clé Groq personnelle (gratuite sur console.groq.com).
+              Elle est stockée uniquement sur ton téléphone et utilisée pour lire les plans avec ton propre quota.
+              Laisse vide pour revenir à la clé partagée de l'application.
+            </p>
+            <input
+              type="text"
+              value={apiKeyValue}
+              onChange={(e) => setApiKeyValue(e.target.value)}
+              placeholder="gsk_..."
+              className="w-full rounded-lg bg-gray-800 border border-gray-600 px-3 py-3 text-white text-sm font-mono"
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => { setApiKeyValue(""); }}
+                className="bg-gray-700 text-white rounded-xl p-3 font-bold"
+              >Effacer</button>
+              <button
+                onClick={saveApiKey}
+                className="bg-indigo-700 text-white rounded-xl p-3 font-black"
+              >Enregistrer</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
