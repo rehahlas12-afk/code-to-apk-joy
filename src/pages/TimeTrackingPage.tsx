@@ -437,14 +437,14 @@ const TimeTrackingPage = () => {
     autoSeededRef.current = key;
   }, [view, mode, info.agent, template]);
 
-  // Sauvegarde automatique (mode auto + édition instantanée dans tous les modes)
+  // Sauvegarde automatique — UNIQUEMENT en mode auto.
+  // En mode manuel, aucune écriture tant que l'utilisateur n'a pas cliqué sur "Enregistrer"
+  // (y compris pendant l'édition d'une journée existante).
   const autoSaveTimerRef = useRef<number | null>(null);
   useEffect(() => {
     if (view !== "main") return;
     if (!form.date) return;
-    // En création : auto-save uniquement si on est en mode auto.
-    // En édition (editId présent) : toujours auto-save pour rendre la modification instantanée.
-    if (!editId && mode !== "auto") return;
+    if (mode !== "auto") return; // manuel = pas d'auto-save, même en édition
     if (autoSaveTimerRef.current) window.clearTimeout(autoSaveTimerRef.current);
     autoSaveTimerRef.current = window.setTimeout(() => {
       if (editId) {
