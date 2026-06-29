@@ -178,6 +178,8 @@ const TimeTrackingPage = () => {
   const [historyEditMonth, setHistoryEditMonth] = useState<string | null>(null);
   const [historySearch, setHistorySearch] = useState("");
   const [confirmModeChange, setConfirmModeChange] = useState(false);
+  const [histRange, setHistRange] = useState<{ from: string; to: string }>({ from: "", to: "" });
+  const [histRangeActive, setHistRangeActive] = useState(false);
 
   const payrollRange = (() => {
     const now = new Date();
