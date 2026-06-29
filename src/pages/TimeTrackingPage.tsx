@@ -592,6 +592,63 @@ const TimeTrackingPage = () => {
     }, 50);
   };
 
+  // Pointages filtrés selon la plage personnalisée du modal "Visualiser tout"
+  const histRangeDays = useMemo(() => {
+    if (!histRangeActive || !histRange.from || !histRange.to) return [];
+    const from = histRange.from, to = histRange.to;
+    return allHistorySorted.filter(d => d.date >= from && d.date <= to);
+  }, [histRangeActive, histRange.from, histRange.to, allHistorySorted]);
+  const histRangeTotals = histRangeDays.reduce((acc, d) => { const b = dayBreakdown(d); acc.total += b.total; acc.night += b.night; acc.day += b.day; return acc; }, { total: 0, night: 0, day: 0 });
+
+  const buildRangePdfDoc = (from: string, to: string) => {
+    setPdfRange({ from, to });
+    // buildPdf lit pdfRange dans la closure courante — on contourne en passant temporairement
+    const inRange = days.filter(d => d.date >= from && d.date <= to);
+    if (inRange.length === 0) { toast({ title: "Aucun pointage sur cette période", variant: "destructive" }); return null; }
+    // Force la lecture immédiate avec une copie de pdfRange via setter synchrone : on reproduit la logique
+    const prev = pdfRange;
+    (pdfRange as any).from = from; (pdfRange as any).to = to;
+    const doc = buildPdf();
+    (pdfRange as any).from = prev.from; (pdfRange as any).to = prev.to;
+    return doc;
+  };
+
+  const downloadRangePdf = async (from: string, to: string) => {
+    const doc = buildRangePdfDoc(from, to); if (!doc) return;
+    const fileName = `pointage_${info.nom || "agent"}_${from}_${to}.pdf`.replace(/\s+/g, "_");
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const data = String(doc.output("datauristring")).split(",")[1];
+        const saved = await saveBase64ToPhone(fileName, data);
+        toast({ title: "✅ PDF enregistré", description: saved.label });
+        return;
+      } catch (e) { console.error(e); }
+    }
+    doc.save(fileName);
+    toast({ title: "PDF téléchargé", description: fileName });
+  };
+
+  const shareRangePdf = async (from: string, to: string) => {
+    const doc = buildRangePdfDoc(from, to); if (!doc) return;
+    const fileName = `pointage_${info.nom || "agent"}_${from}_${to}.pdf`.replace(/\s+/g, "_");
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const data = String(doc.output("datauristring")).split(",")[1];
+        const saved = await saveBase64ToPhone(fileName, data);
+        await sharePhoneFile({ uri: saved.uri, title: fileName, text: "Pointage PDF", dialogTitle: "Partager le PDF", mimeType: "application/pdf" });
+        return;
+      } catch (e) { console.error(e); toast({ title: "Partage impossible", variant: "destructive" }); return; }
+    }
+    const blob = doc.output("blob");
+    const file = new File([blob], fileName, { type: "application/pdf" });
+    const nav: any = navigator;
+    if (nav.canShare && nav.canShare({ files: [file] })) {
+      try { await nav.share({ files: [file], title: fileName, text: "Pointage PDF" }); return; } catch {}
+    }
+    const url = URL.createObjectURL(blob);
+    window.open(url, "_blank");
+    toast({ title: "Partage non supporté", description: "PDF ouvert dans un onglet." });
+
   // Édition instantanée d'une journée depuis l'historique
   const patchDay = (id: string, patch: Partial<WorkDay>) => {
     const next = days.map(d => d.id === id ? { ...d, ...patch } : d);
