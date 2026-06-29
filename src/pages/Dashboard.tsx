@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Camera, Search, Eye, Plus, Calculator, Image, LogOut, Download, Upload, CalendarClock, Menu, X, Share2, FileText } from "lucide-react";
+import { Camera, Search, Eye, Plus, Calculator, Image, LogOut, Download, Upload, CalendarClock, Menu, X, Share2, FileText, Key } from "lucide-react";
 import TruckLogo from "@/components/TruckLogo";
 import { getStoreNames, setStoreNames, type StoreName } from "@/lib/store";
 import { quitApplication } from "@/lib/appExit";
