@@ -117,9 +117,9 @@ router.post("/analyze-plan", async (req, res) => {
 
   // Provider configs for OpenAI-compatible APIs
   const OPENAI_COMPAT: Record<string, { baseUrl: string; model: string }> = {
-    groq:    { baseUrl: "https://api.groq.com/openai/v1",      model: "meta-llama/llama-4-scout-17b-16e-instruct" },
-    mistral: { baseUrl: "https://api.mistral.ai/v1",           model: "pixtral-large-latest" },
-    openai:  { baseUrl: "https://api.openai.com/v1",           model: "gpt-4o" },
+    groq:     { baseUrl: "https://api.groq.com/openai/v1",  model: "meta-llama/llama-4-scout-17b-16e-instruct" },
+    deepseek: { baseUrl: "https://api.deepseek.com",        model: "deepseek-vl2" },
+    openai:   { baseUrl: "https://api.openai.com/v1",       model: "gpt-4o" },
   };
 
   const isOpenAICompat = userKey && userProvider in OPENAI_COMPAT;
@@ -130,55 +130,41 @@ router.post("/analyze-plan", async (req, res) => {
     return;
   }
 
-  const prompt = `Tu es un expert OCR. Ce document est un tableau de dispatch entrepôt.
+  // Universal prompt — designed to work equally well with Gemini, Llama (Groq/Meta), DeepSeek, and OpenAI
+  const prompt = `Tu analyses une image de plan de dispatch entrepôt.
 
-Extrait TOUS les nombres à 4 ou 5 chiffres (numéros de magasin) et leur travée associée.
+FORMAT DE SORTIE — une ligne par magasin :
+ZONE1 [travée] [magasin]
+CRAFT [travée] [magasin]
+DEBORD [travée] [magasin]
 
-FORMAT DE SORTIE — une ligne par entrée, avec OBLIGATOIREMENT le préfixe de zone :
-ZONE1 TRAVÉE MAGASIN1 [MAGASIN2]
-CRAFT TRAVÉE MAGASIN
-DEBORD TRAVÉE MAGASIN
+DÉFINITIONS :
+• Travée = nombre 2-3 chiffres (72-999), DEB1/DEB2..., 99BIS/99BIS1/99BIS2/99BIS3, ou la lettre X
+• Magasin = nombre à 4 ou 5 chiffres exactement
+• IGNORER : nombres 1-2 chiffres (quantités palettes), lettres M et S, heures (ex: 5H00), flèches
 
-IMPORTANT : Le même numéro (ex: 86) peut apparaître à la fois dans la zone CRAFT ET dans la zone DÉBORD sur le même plan. Tu dois identifier dans quelle section physique du plan tu lis chaque entrée et mettre le bon préfixe.
+LES 3 ZONES DU PLAN :
+• DEBORD → colonne verticale sur le côté DROIT. Travées : DEB1, DEB2... ou 72 à 85 (parfois aussi 86+). Lecture droite→gauche : travée à droite, magasin à gauche. Un seul magasin par travée.
+• CRAFT → section HORIZONTALE séparée. Travées 86 à 98. Chaque colonne = une travée : son numéro est EN HAUT, le magasin est EN BAS de cette même colonne. Les colonnes vont du grand au petit de gauche à droite (98...87 86).
+• ZONE1 → tableau principal vertical. Première colonne = travée (99, 99BIS, 100 à 803, X). Colonnes suivantes = magasins (1 ou 2 par ligne). Lecture gauche→droite.
 
-Le plan a TROIS zones physiquement séparées :
+⚠️ ATTENTION : Le numéro 86 peut exister À LA FOIS dans DEBORD (colonne droite) ET dans CRAFT (section horizontale). Identifie la zone d'après la position physique sur l'image.
 
-ZONE 1 (tableau principal vertical, lu de gauche à droite) → préfixe ZONE1 :
-- Colonne 1 = TRAVÉE : nombre 2-3 chiffres (99, 100, 201, 306...), 99BIS/99BIS1/99BIS2/99BIS3, ou la lettre X
-- Colonnes suivantes = MAGASINS : 4 ou 5 chiffres. Peut avoir 1 ou 2 magasins par travée.
-
-ZONE CRAFT (section horizontale séparée, travées 86 à 98) → préfixe CRAFT :
-- Disposition en COLONNES : chaque colonne = une travée indépendante
-- En haut de la colonne : le numéro de travée (ex: 86, 87, 88...)
-- En bas de la même colonne : le numéro de magasin (4-5 chiffres)
-- Les colonnes vont du numéro LE PLUS GRAND à gauche vers le PLUS PETIT à droite (ex: 98...88 87 86)
-- Chaque magasin appartient à la colonne dont il partage le numéro de travée EN HAUT — ne pas décaler d'une colonne.
-
-ZONE DÉBORD (section verticale séparée, travées DEB1/DEB2... ou 72-85 et parfois 86+) → préfixe DEBORD :
-- Disposition VERTICALE lue de droite à gauche : travée à DROITE, magasin à GAUCHE
-- Un seul magasin par travée.
-
-RÈGLES :
-- Ignore : heures (5H00), M, S, nombres 1-2 chiffres (palettes), flèches →
-- Lis chaque section complètement, sans sauter aucune ligne
-
-Exemple de sortie :
+Exemples de sortie :
 DEBORD DEB1 9812
 DEBORD DEB2 11839
 DEBORD 86 9684
 CRAFT 86 8214
 CRAFT 87 7879
 CRAFT 88 10032
-ZONE1 99BIS 7450
-ZONE1 99BIS1 8060
 ZONE1 99 8999
-ZONE1 100 7450
+ZONE1 99BIS1 8060
 ZONE1 103 8176 6317
 ZONE1 306 10892
 ZONE1 X 9037
 ZONE1 402 9668
 
-Transcris maintenant :`;
+Transcris maintenant l'intégralité du plan — ne saute aucune ligne :`;
 
   try {
     const base64Data = imageBase64.replace(/^data:image\/[a-z]+;base64,/, "");
