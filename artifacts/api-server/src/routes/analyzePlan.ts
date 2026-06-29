@@ -204,13 +204,13 @@ Transcris maintenant l'intégralité du plan — ne saute aucune ligne :`;
 
     } else {
       // ---- Gemini path ----
-      // Personal keys use gemini-2.0-flash (free, widely available).
-      // Replit's built-in integration uses gemini-2.5-pro (more powerful).
+      // Personal keys use gemini-2.5-flash (free, much smarter than 2.0-flash, almost as good as 2.5-pro).
+      // Replit's built-in integration uses gemini-2.5-pro (most powerful).
       const isPersonalKey = !!userKey;
       const effectiveBaseUrl = isPersonalKey
         ? "https://generativelanguage.googleapis.com/v1beta"
         : geminiBaseUrl!;
-      const geminiModel = isPersonalKey ? "gemini-2.0-flash" : "gemini-2.5-pro";
+      const geminiModel = isPersonalKey ? "gemini-2.5-flash" : "gemini-2.5-pro";
       const body = {
         contents: [{
           role: "user",
