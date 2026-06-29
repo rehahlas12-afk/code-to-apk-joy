@@ -463,12 +463,17 @@ serve(async (req) => {
 
   try {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
+    const ENV_GROQ_KEY = Deno.env.get("GROQ_API_KEY");
+
+    const { imageBase64, userGroqKey } = await req.json();
+    const GROQ_API_KEY = (typeof userGroqKey === "string" && userGroqKey.trim().length > 10)
+      ? userGroqKey.trim()
+      : ENV_GROQ_KEY;
+
     if (!LOVABLE_API_KEY && !GROQ_API_KEY) {
       throw new Error("Aucune clé IA configurée (GROQ_API_KEY ou LOVABLE_API_KEY)");
     }
 
-    const { imageBase64 } = await req.json();
     if (!imageBase64) {
       return new Response(
         JSON.stringify({ error: "imageBase64 is required" }),
