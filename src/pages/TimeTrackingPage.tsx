@@ -648,8 +648,10 @@ const TimeTrackingPage = () => {
     const url = URL.createObjectURL(blob);
     window.open(url, "_blank");
     toast({ title: "Partage non supporté", description: "PDF ouvert dans un onglet." });
+  };
 
   // Édition instantanée d'une journée depuis l'historique
+
   const patchDay = (id: string, patch: Partial<WorkDay>) => {
     const next = days.map(d => d.id === id ? { ...d, ...patch } : d);
     persistDays(next);
