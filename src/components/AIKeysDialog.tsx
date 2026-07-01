@@ -40,8 +40,8 @@ export function loadAiKeys(): AiKeys {
       parsed.gemini_pro ||
       "";
     let active: AiProviderId = parsed.active;
-    if (active === "gemini_pro" || active === "gemini_flash") active = "gemini";
-    if (!["gemini", "groq", "deepseek"].includes(active)) active = "gemini";
+    if ((active as string) === "gemini_pro" || (active as string) === "gemini_flash") active = "gemini";
+    if (!["gemini", "groq", "deepseek"].includes(active as string)) active = "gemini";
     return {
       ...DEFAULT_KEYS,
       gemini,
