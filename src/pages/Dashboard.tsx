@@ -168,14 +168,24 @@ const Dashboard = () => {
           </button>
         </div>
 
-        {/* Clé API personnelle (Groq) */}
+        {/* Clés IA personnelles (Gemini / Groq / DeepSeek) */}
         <div className="mt-4">
           <button
             onClick={() => setApiKeyOpen(true)}
-            className="w-full bg-indigo-700 text-white rounded-xl p-4 flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform"
+            className={`w-full ${aiConfigured ? "bg-amber-700" : "bg-indigo-700"} text-white rounded-xl p-4 flex items-center justify-between gap-2 shadow-lg active:scale-95 transition-transform`}
           >
-            <Key size={22} />
-            <span className="text-sm font-black">Changer clé API perso (Groq)</span>
+            <div className="flex items-center gap-3">
+              <Key size={26} />
+              <div className="text-left leading-tight">
+                <div className="text-base font-black">Clés IA personnelles</div>
+                <div className="text-xs text-amber-100/90">
+                  {aiConfigured ? `🤖 ${activeProviderLabel(aiKeys)} actif` : "Aucune clé configurée"}
+                </div>
+              </div>
+            </div>
+            <span className={`text-xs font-black px-3 py-1 rounded-full ${aiConfigured ? "bg-yellow-300 text-black" : "bg-white/20 text-white"}`}>
+              {aiConfigured ? "Configurée ✓" : "Configurer"}
+            </span>
           </button>
         </div>
 
