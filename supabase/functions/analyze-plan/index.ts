@@ -456,6 +456,13 @@ const GROQ_VISION_MODELS = [
   "meta-llama/llama-4-scout-17b-16e-instruct",
 ];
 
+type UserKeys = {
+  gemini_pro?: string;
+  gemini_flash?: string;
+  groq?: string;
+  deepseek?: string;
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -465,14 +472,21 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     const ENV_GROQ_KEY = Deno.env.get("GROQ_API_KEY");
 
-    const { imageBase64, userGroqKey } = await req.json();
-    const GROQ_API_KEY = (typeof userGroqKey === "string" && userGroqKey.trim().length > 10)
-      ? userGroqKey.trim()
-      : ENV_GROQ_KEY;
+    const { imageBase64, userGroqKey, userKeys: rawKeys, activeProvider } = await req.json();
+    const userKeys: UserKeys = (rawKeys && typeof rawKeys === "object") ? rawKeys : {};
 
-    if (!LOVABLE_API_KEY && !GROQ_API_KEY) {
-      throw new Error("Aucune clé IA configurée (GROQ_API_KEY ou LOVABLE_API_KEY)");
+    // rétro-compat : ancienne clé Groq isolée
+    if (!userKeys.groq && typeof userGroqKey === "string" && userGroqKey.trim().length > 10) {
+      userKeys.groq = userGroqKey.trim();
     }
+
+    const cleanKey = (v: unknown) => (typeof v === "string" && v.trim().length > 10 ? v.trim() : "");
+    const K = {
+      gemini_pro: cleanKey(userKeys.gemini_pro),
+      gemini_flash: cleanKey(userKeys.gemini_flash),
+      groq: cleanKey(userKeys.groq),
+      deepseek: cleanKey(userKeys.deepseek),
+    };
 
     if (!imageBase64) {
       return new Response(
@@ -519,31 +533,53 @@ Format strict : {"lines":["ligne OCR 1","ligne OCR 2"]}. Aucun markdown.`;
       },
     ]);
 
-    const callGroqModel = (model: string) => fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${GROQ_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ model, temperature: 0, messages: buildMessages() }),
-    });
+    const openaiCompatCall = (url: string, apiKey: string, model: string, extraHeaders: Record<string,string> = {}) =>
+      fetch(url, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+          ...extraHeaders,
+        },
+        body: JSON.stringify({ model, temperature: 0, messages: buildMessages() }),
+      });
 
-    const callLovableModel = (model: string) => fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Lovable-API-Key": LOVABLE_API_KEY ?? "",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ model, temperature: 0, messages: buildMessages() }),
-    });
+    const callGroq = (apiKey: string, model: string) =>
+      openaiCompatCall("https://api.groq.com/openai/v1/chat/completions", apiKey, model);
+    const callGemini = (apiKey: string, model: string) =>
+      openaiCompatCall("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", apiKey, model);
+    const callDeepSeek = (apiKey: string, model: string) =>
+      openaiCompatCall("https://api.deepseek.com/chat/completions", apiKey, model);
+    const callLovable = (model: string) =>
+      openaiCompatCall("https://ai.gateway.lovable.dev/v1/chat/completions", LOVABLE_API_KEY ?? "", model, { "Lovable-API-Key": LOVABLE_API_KEY ?? "" });
 
-    type Attempt = { provider: "groq" | "lovable"; model: string; call: () => Promise<Response> };
-    const attempts: Attempt[] = [];
-    if (GROQ_API_KEY) {
-      for (const model of GROQ_VISION_MODELS) attempts.push({ provider: "groq", model, call: () => callGroqModel(model) });
+    type Attempt = { provider: string; model: string; call: () => Promise<Response> };
+    const providerAttempts: Record<string, Attempt[]> = {
+      gemini_pro:   K.gemini_pro   ? [{ provider: "gemini_pro",   model: "gemini-2.5-pro",   call: () => callGemini(K.gemini_pro, "gemini-2.5-pro") }] : [],
+      gemini_flash: K.gemini_flash ? [{ provider: "gemini_flash", model: "gemini-2.5-flash", call: () => callGemini(K.gemini_flash, "gemini-2.5-flash") }] : [],
+      groq:         K.groq         ? GROQ_VISION_MODELS.map(m => ({ provider: "groq", model: m, call: () => callGroq(K.groq, m) })) : [],
+      deepseek:     K.deepseek     ? [{ provider: "deepseek", model: "deepseek-chat", call: () => callDeepSeek(K.deepseek, "deepseek-chat") }] : [],
+    };
+
+    // Ordre : actif d'abord, puis les autres avec clé perso, puis fallback env
+    const priorityOrder: string[] = [];
+    if (activeProvider && providerAttempts[activeProvider]?.length) priorityOrder.push(activeProvider);
+    for (const p of ["gemini_pro","gemini_flash","groq","deepseek"]) {
+      if (!priorityOrder.includes(p) && providerAttempts[p].length) priorityOrder.push(p);
+    }
+
+    const attempts: Attempt[] = priorityOrder.flatMap(p => providerAttempts[p]);
+
+    // fallback env (Groq partagé + Lovable)
+    if (ENV_GROQ_KEY && !K.groq) {
+      for (const m of GROQ_VISION_MODELS) attempts.push({ provider: "groq-env", model: m, call: () => callGroq(ENV_GROQ_KEY, m) });
     }
     if (LOVABLE_API_KEY) {
-      for (const model of OCR_MODELS) attempts.push({ provider: "lovable", model, call: () => callLovableModel(model) });
+      for (const model of OCR_MODELS) attempts.push({ provider: "lovable", model, call: () => callLovable(model) });
+    }
+
+    if (!attempts.length) {
+      throw new Error("Aucune clé IA configurée. Ajoute une clé perso (Gemini, Groq ou DeepSeek) depuis le menu.");
     }
 
     let bestRead: { provider: string; model: string; content: string; rawText: string; stores: StoreData[]; score: number; travees: number } | null = null;
@@ -551,24 +587,18 @@ Format strict : {"lines":["ligne OCR 1","ligne OCR 2"]}. Aucun markdown.`;
     let lastErrorText = "";
 
     for (const attempt of attempts) {
-      const response = await attempt.call();
+      let response: Response;
+      try {
+        response = await attempt.call();
+      } catch (e) {
+        console.error("Provider call failed:", attempt.provider, attempt.model, e);
+        continue;
+      }
       lastStatus = response.status;
 
       if (!response.ok) {
         lastErrorText = await response.text();
         console.error("AI provider error:", attempt.provider, attempt.model, response.status, lastErrorText);
-        if (attempt.provider === "lovable" && response.status === 429) {
-          return new Response(
-            JSON.stringify({ error: "Trop de requêtes, réessayez dans quelques secondes." }),
-            { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-        if (attempt.provider === "lovable" && response.status === 402) {
-          return new Response(
-            JSON.stringify({ error: "Crédits IA épuisés. Ajoutez des crédits dans Settings > Workspace > Usage." }),
-            { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
         continue;
       }
 
