@@ -41,10 +41,26 @@ async function analyzeWithAI(
 ): Promise<StoreData[]> {
   onProgress?.(20);
 
+  let userKeys: unknown = undefined;
+  let activeProvider: string | undefined;
+  try {
+    const raw = localStorage.getItem("staf_ai_keys");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      userKeys = {
+        gemini_pro: parsed.gemini_pro || "",
+        gemini_flash: parsed.gemini_flash || "",
+        groq: parsed.groq || "",
+        deepseek: parsed.deepseek || "",
+      };
+      activeProvider = parsed.active;
+    }
+  } catch { /* ignore */ }
+  // rétro-compat : ancienne clé Groq seule
   let userGroqKey: string | undefined;
   try { userGroqKey = localStorage.getItem("staf_user_groq_key") || undefined; } catch { /* ignore */ }
   const { data, error } = await supabase.functions.invoke("analyze-plan", {
-    body: { imageBase64: imageData, userGroqKey },
+    body: { imageBase64: imageData, userGroqKey, userKeys, activeProvider },
   });
 
   onProgress?.(90);
