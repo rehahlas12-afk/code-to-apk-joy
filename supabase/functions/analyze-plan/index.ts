@@ -510,7 +510,8 @@ Règles obligatoires :
 6. Ne fusionne jamais une quantité avec le magasin suivant : "6317 F 6 8485" doit rester ce texte brut.
 7. Sépare les zones au lieu de mélanger les colonnes :
    - Écris une ligne "ZONE 1" avant le grand tableau gauche/centre.
-   - Écris une ligne "DEBORD" avant la colonne tout à droite. Les magasins de Débord sont les numéros placés juste à gauche des travées tout à droite (72-85, DEB, DEB1...).
+   - Écris une ligne "DEBORD" avant la colonne tout à droite. Les magasins de Débord sont les numéros placés juste à gauche des travées tout à droite (72-85, DEB, DEB1, DEB2, DEB3, DEB4, DEB5, DEB6).
+   - IMPORTANT : DEB, DEB1, DEB2, DEB3, DEB4, DEB5, DEB6 sont des travées Débord INDÉPENDANTES, exactement comme 72, 73, 74, 75. Chacune contient UN SEUL magasin. Écris chaque DEBn sur sa propre ligne : "DEB1 9571", "DEB2 7822", "DEB3 7576", etc. Ne fusionne jamais deux DEBn ensemble.
    - Écris une ligne "CRAFT" avant la zone Craft indépendante en haut de la page.
    - Zone Craft = travées 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 98. Il y a un seul magasin par travée : par exemple "86 9796" et "92 2971".
    - Ne mélange jamais Craft avec Zone 1 : un magasin Craft ne doit jamais finir en 803, 404 ou 306.
