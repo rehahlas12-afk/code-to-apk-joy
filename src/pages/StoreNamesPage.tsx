@@ -51,23 +51,24 @@ const StoreNamesPage = () => {
       </div>
 
       <div className="p-4 space-y-4">
-        <div className="bg-gray-900 border border-gray-700 rounded-xl p-4 space-y-3">
+        <div className="bg-gray-900 border-2 border-white rounded-2xl p-4 space-y-4">
           <input
             type="text"
+            inputMode="numeric"
             value={number}
             onChange={(e) => setNumber(e.target.value)}
             placeholder="N° Magasin"
-            className="w-full rounded-lg border border-gray-600 bg-gray-800 px-3 py-2 text-base text-white outline-none focus:ring-2 focus:ring-primary"
+            className="w-full rounded-xl border-2 border-gray-600 bg-gray-800 px-4 py-4 text-3xl font-black text-white text-center placeholder:text-gray-500 outline-none focus:ring-2 focus:ring-primary"
           />
           <input
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Nom du Magasin"
-            className="w-full rounded-lg border border-gray-600 bg-gray-800 px-3 py-2 text-base text-white outline-none focus:ring-2 focus:ring-primary"
+            className="w-full rounded-xl border-2 border-gray-600 bg-gray-800 px-4 py-4 text-2xl font-bold text-white text-center placeholder:text-gray-500 outline-none focus:ring-2 focus:ring-primary"
           />
-          <button onClick={handleAdd} className="w-full bg-accent text-accent-foreground rounded-lg py-3 font-bold flex items-center justify-center gap-2">
-            <Plus size={18} /> Ajouter
+          <button onClick={handleAdd} className="w-full bg-accent text-accent-foreground rounded-xl py-5 text-2xl font-black flex items-center justify-center gap-3">
+            <Plus size={28} /> Ajouter magasin
           </button>
         </div>
 
