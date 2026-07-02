@@ -18,14 +18,27 @@ interface SearchResult {
   matches: MatchInfo[];
 }
 
-// Speak the zone like a human: "en débord", "kraft", or nothing for Zone 1
+// Speak the zone like a human: "en débord 3", "kraft", or nothing for Zone 1
 // Lettres seules (X, Y, Z…) ne sont JAMAIS en débord — toujours Zone 1.
 const zonePhrase = (zone: string, travee?: string): string => {
   if (travee && /^[A-Za-z]$/.test(travee.trim())) return "";
   const z = (zone || "").toLowerCase();
-  if (z.includes("deb") || z.includes("déb")) return "en débord";
+  if (z.includes("deb") || z.includes("déb")) {
+    const m = (travee || "").toUpperCase().match(/DEB\s*(\d+)/);
+    if (m) return `en débord ${m[1]}`;
+    return "en débord";
+  }
   if (z.includes("craft") || z.includes("kraft")) return "kraft";
   return "";
+};
+
+// Affichage lisible d'une travée : "DEB3" → "Débord 3"
+const traveeLabel = (t: string): string => {
+  const up = (t || "").toUpperCase();
+  const m = up.match(/^DEB\s*(\d+)$/);
+  if (m) return `Débord ${m[1]}`;
+  if (up === "DEB") return "Débord";
+  return t;
 };
 
 // Insère un espace entre chiffres et lettres pour que la TTS prononce bien "306 X"
