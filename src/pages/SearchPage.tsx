@@ -64,6 +64,7 @@ const SearchPage = () => {
   const [notFound, setNotFound] = useState(false);
   const [listening, setListening] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [showDuplicates, setShowDuplicates] = useState(false);
   const recognitionRef = useRef<VoiceHandle | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
