@@ -45,6 +45,16 @@ export async function startVoice(cb: VoiceCallbacks): Promise<VoiceHandle | null
       }
       let lastPartial = "";
       let finalSent = false;
+      let ended = false;
+      let partialListener: any = null;
+      let listeningListener: any = null;
+      const finish = () => {
+        if (ended) return;
+        ended = true;
+        cb.onEnd?.();
+        try { partialListener?.remove?.(); } catch {}
+        try { listeningListener?.remove?.(); } catch {}
+      };
       const emitFinal = (text: string) => {
         if (finalSent) return;
         const t = (text || "").trim();
@@ -52,35 +62,36 @@ export async function startVoice(cb: VoiceCallbacks): Promise<VoiceHandle | null
         finalSent = true;
         cb.onFinal(t);
       };
-      const partialListener = await native.addListener("partialResults", (data: any) => {
+      partialListener = await native.addListener("partialResults", (data: any) => {
         const text = (data?.matches?.[0] ?? "").toString();
         if (text) { lastPartial = text; cb.onPartial?.(text); }
       });
-      const listeningListener = await native.addListener("listeningState", (data: any) => {
+      listeningListener = await native.addListener("listeningState", (data: any) => {
         if (data?.status === "stopped") {
           if (!finalSent && lastPartial) emitFinal(lastPartial);
-          cb.onEnd?.();
+          finish();
         }
       });
       native.start({
         language: "fr-FR",
-        partialResults: true,
-        popup: false,
+        prompt: " ",
+        partialResults: false,
+        popup: true,
         maxResults: 1,
       }).then((res: any) => {
         const matches: string[] = res?.matches ?? [];
         if (matches.length) emitFinal(matches[0]);
         else if (lastPartial) emitFinal(lastPartial);
+        finish();
       }).catch((e: any) => {
         cb.onError?.(String(e?.message ?? e));
-        cb.onEnd?.();
+        finish();
       });
       return {
         stop: async () => {
-          try { await native.stop(); } catch {}
+          try { native.stop(); } catch {}
           if (!finalSent && lastPartial) emitFinal(lastPartial);
-          try { partialListener.remove(); } catch {}
-          try { listeningListener.remove(); } catch {}
+          finish();
         },
       };
     } catch (e: any) {
@@ -100,20 +111,27 @@ export async function startVoice(cb: VoiceCallbacks): Promise<VoiceHandle | null
   rec.continuous = false;
   rec.interimResults = true;
   let lastText = "";
+  let finalSent = false;
+  const emitFinal = (text: string) => {
+    const t = (text || "").trim();
+    if (!t || finalSent) return;
+    finalSent = true;
+    cb.onFinal(t);
+  };
   rec.onresult = (event: any) => {
     let text = "";
     for (let i = 0; i < event.results.length; i++) text += event.results[i][0].transcript;
     lastText = text;
     if (event.results[event.results.length - 1].isFinal) {
-      cb.onFinal(text);
+      emitFinal(text);
     } else {
       cb.onPartial?.(text);
     }
   };
-  rec.onerror = (e: any) => cb.onError?.(String(e?.error ?? "erreur"));
-  rec.onend = () => { cb.onEnd?.(); if (lastText && !rec._finalSent) { /* noop */ } };
+  rec.onerror = (e: any) => { cb.onError?.(String(e?.error ?? "erreur")); cb.onEnd?.(); };
+  rec.onend = () => { if (lastText) emitFinal(lastText); cb.onEnd?.(); };
   rec.start();
   return {
-    stop: async () => { try { rec.stop(); } catch {} },
+    stop: async () => { try { rec.stop(); } catch {}; if (lastText) emitFinal(lastText); cb.onEnd?.(); },
   };
 }
