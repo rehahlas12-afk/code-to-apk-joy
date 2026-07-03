@@ -182,7 +182,7 @@ const SearchPage = () => {
   }, [announce, computeResult]);
 
   const startListening = useCallback(async () => {
-    speak("Quel magasin cherchez-vous ?");
+    beep();
     setListening(true);
     setTimeout(async () => {
       const handle = await startVoice({
@@ -199,7 +199,7 @@ const SearchPage = () => {
       });
       recognitionRef.current = handle;
       if (!handle) setListening(false);
-    }, 600);
+    }, 300);
   }, [runSearch, speak]);
 
   const stopListening = useCallback(() => {
@@ -208,7 +208,7 @@ const SearchPage = () => {
   }, []);
 
   const startTraveeListening = useCallback(async () => {
-    speak("Quelle travée ?");
+    beep();
     setListening(true);
     setTimeout(async () => {
       const handle = await startVoice({
@@ -224,7 +224,7 @@ const SearchPage = () => {
       });
       recognitionRef.current = handle;
       if (!handle) setListening(false);
-    }, 600);
+    }, 300);
   }, [runTraveeSearch, speak]);
 
 
