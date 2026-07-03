@@ -46,12 +46,14 @@ const beep = () => {
     const ctx = new AC();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-    osc.frequency.value = 880;
-    osc.type = "sine";
-    gain.gain.value = 0.15;
+    osc.frequency.value = 1200;
+    osc.type = "square";
+    gain.gain.setValueAtTime(0.001, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.7, ctx.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.22);
     osc.connect(gain).connect(ctx.destination);
     osc.start();
-    setTimeout(() => { try { osc.stop(); ctx.close(); } catch {} }, 120);
+    setTimeout(() => { try { osc.stop(); ctx.close(); } catch {} }, 240);
   } catch {}
 };
 
@@ -67,6 +69,16 @@ const SearchPage = () => {
   const [showDuplicates, setShowDuplicates] = useState(false);
   const recognitionRef = useRef<VoiceHandle | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const listeningTimeoutRef = useRef<number | null>(null);
+
+  const endListening = useCallback(() => {
+    if (listeningTimeoutRef.current) {
+      window.clearTimeout(listeningTimeoutRef.current);
+      listeningTimeoutRef.current = null;
+    }
+    setListening(false);
+    recognitionRef.current = null;
+  }, []);
 
   const speak = useCallback((text: string) => {
     void speakFr(text);
@@ -183,50 +195,52 @@ const SearchPage = () => {
   }, [announce, computeResult]);
 
   const startListening = useCallback(async () => {
+    try { await recognitionRef.current?.stop(); } catch {}
     beep();
+    window.speechSynthesis?.cancel?.();
     setListening(true);
-    setTimeout(async () => {
-      const handle = await startVoice({
-        onPartial: (text) => setQuery(text),
-        onFinal: (text) => {
-          setQuery(text);
-          const numbers = text.replace(/\s/g, "").match(/\d+/g);
-          const q = numbers && numbers.join("").length >= 3 ? numbers.join("") : text.trim();
-          runSearch(q, true);
-          setListening(false);
-        },
-        onError: (err) => { speak(err); setListening(false); },
-        onEnd: () => setListening(false),
-      });
-      recognitionRef.current = handle;
-      if (!handle) setListening(false);
-    }, 300);
-  }, [runSearch, speak]);
+    listeningTimeoutRef.current = window.setTimeout(() => endListening(), 9000);
+    const handle = await startVoice({
+      onPartial: (text) => setQuery(text),
+      onFinal: (text) => {
+        setQuery(text);
+        const numbers = text.replace(/\s/g, "").match(/\d+/g);
+        const q = numbers && numbers.join("").length >= 3 ? numbers.join("") : text.trim();
+        runSearch(q, true);
+        endListening();
+      },
+      onError: () => endListening(),
+      onEnd: () => endListening(),
+    });
+    recognitionRef.current = handle;
+    if (!handle) endListening();
+  }, [endListening, runSearch]);
 
   const stopListening = useCallback(() => {
     recognitionRef.current?.stop();
-    setListening(false);
-  }, []);
+    endListening();
+  }, [endListening]);
 
   const startTraveeListening = useCallback(async () => {
+    try { await recognitionRef.current?.stop(); } catch {}
     beep();
+    window.speechSynthesis?.cancel?.();
     setListening(true);
-    setTimeout(async () => {
-      const handle = await startVoice({
-        onPartial: (text) => setTraveeQuery(text.toUpperCase()),
-        onFinal: (text) => {
-          const cleaned = text.toUpperCase().replace(/[^A-Z0-9]/g, "");
-          setTraveeQuery(cleaned || text.trim().toUpperCase());
-          runTraveeSearch(cleaned || text.trim());
-          setListening(false);
-        },
-        onError: (err) => { speak(err); setListening(false); },
-        onEnd: () => setListening(false),
-      });
-      recognitionRef.current = handle;
-      if (!handle) setListening(false);
-    }, 300);
-  }, [runTraveeSearch, speak]);
+    listeningTimeoutRef.current = window.setTimeout(() => endListening(), 9000);
+    const handle = await startVoice({
+      onPartial: (text) => setTraveeQuery(text.toUpperCase()),
+      onFinal: (text) => {
+        const cleaned = text.toUpperCase().replace(/[^A-Z0-9]/g, "");
+        setTraveeQuery(cleaned || text.trim().toUpperCase());
+        runTraveeSearch(cleaned || text.trim());
+        endListening();
+      },
+      onError: () => endListening(),
+      onEnd: () => endListening(),
+    });
+    recognitionRef.current = handle;
+    if (!handle) endListening();
+  }, [endListening, runTraveeSearch]);
 
 
   // Auto-déclenche la voix si on arrive avec ?voice=1 (depuis bouton casque global)
@@ -506,9 +520,9 @@ const DuplicatesModal = ({ onClose }: { onClose: () => void }) => {
               return (
                 <div key={g.number} className="bg-gray-900 border-2 border-yellow-500 rounded-xl overflow-hidden">
                   {/* Left header : magasin */}
-                  <div className="bg-yellow-500 text-black px-2 py-1">
-                    {g.name && <p className="text-lg font-black leading-tight truncate">{g.name}</p>}
-                    <p className="text-sm font-bold">N° {g.number}</p>
+                  <div className="m-2 border-4 border-yellow-400 rounded-lg px-2 py-2 bg-black text-center">
+                    {g.name && <p className="text-lg font-black leading-tight truncate text-white">{g.name}</p>}
+                    <p className="text-3xl font-black leading-none text-white">N° {g.number}</p>
                   </div>
                   <table className="w-full table-fixed">
                     <thead>
