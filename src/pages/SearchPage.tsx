@@ -458,6 +458,87 @@ const SearchPage = () => {
           </div>
         )}
       </div>
+
+      {showDuplicates && <DuplicatesModal onClose={() => setShowDuplicates(false)} />}
+    </div>
+  );
+};
+
+// ---- Duplicates modal ------------------------------------------------------
+const DuplicatesModal = ({ onClose }: { onClose: () => void }) => {
+  const stores = getSearchableStores();
+  const names = getStoreNames();
+  const nameOf = (num: string) => names.find((n) => n.number === num)?.name;
+
+  // Group by number, keep those with >1 location
+  const groups = useMemo(() => {
+    const map = new Map<string, { travee: string; zone: string }[]>();
+    for (const s of stores) {
+      if (!map.has(s.number)) map.set(s.number, []);
+      map.get(s.number)!.push({ travee: s.travee, zone: s.zone });
+    }
+    const out: { number: string; name?: string; locations: { travee: string; zone: string }[] }[] = [];
+    for (const [num, locs] of map) {
+      if (locs.length > 1) out.push({ number: num, name: nameOf(num), locations: locs });
+    }
+    out.sort((a, b) => b.locations.length - a.locations.length || a.number.localeCompare(b.number));
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black flex flex-col text-white">
+      <div className="flex items-center gap-2 px-3 py-2 bg-black border-b border-gray-800">
+        <button onClick={onClose} className="p-2 rounded-lg bg-gray-800" aria-label="Fermer">
+          <ArrowLeft size={18} />
+        </button>
+        <h1 className="text-base font-black flex-1">Magasins en double ({groups.length})</h1>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-2">
+        {groups.length === 0 ? (
+          <p className="text-center text-gray-400 mt-10 text-lg font-bold">Aucun magasin en double.</p>
+        ) : (
+          <div className="space-y-3">
+            {groups.map((g) => {
+              const maxPlaces = g.locations.length;
+              const cellW = `${100 / maxPlaces}%`;
+              return (
+                <div key={g.number} className="bg-gray-900 border-2 border-yellow-500 rounded-xl overflow-hidden">
+                  {/* Left header : magasin */}
+                  <div className="bg-yellow-500 text-black px-2 py-1">
+                    {g.name && <p className="text-lg font-black leading-tight truncate">{g.name}</p>}
+                    <p className="text-sm font-bold">N° {g.number}</p>
+                  </div>
+                  <table className="w-full table-fixed">
+                    <thead>
+                      <tr className="bg-gray-800 text-yellow-300 text-xs font-black">
+                        {g.locations.map((_, i) => (
+                          <th key={i} className="py-1 border-r border-black last:border-r-0" style={{ width: cellW }}>
+                            PLACE {i + 1}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="text-center">
+                        {g.locations.map((loc, i) => (
+                          <td key={i} className="py-2 border-r border-gray-700 last:border-r-0 align-middle">
+                            <p className="text-2xl font-black text-green-400 leading-none">{(loc.travee || "").toUpperCase()}</p>
+                            {loc.zone && loc.zone !== "Zone 1" && (
+                              <p className="text-[10px] font-bold text-blue-300 mt-1 uppercase">{loc.zone}</p>
+                            )}
+                          </td>
+                        ))}
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 };
