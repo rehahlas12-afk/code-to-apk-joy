@@ -43,29 +43,42 @@ export async function startVoice(cb: VoiceCallbacks): Promise<VoiceHandle | null
         cb.onError?.("Reconnaissance vocale indisponible");
         return null;
       }
+      let lastPartial = "";
+      let finalSent = false;
+      const emitFinal = (text: string) => {
+        if (finalSent) return;
+        const t = (text || "").trim();
+        if (!t) return;
+        finalSent = true;
+        cb.onFinal(t);
+      };
       const partialListener = await native.addListener("partialResults", (data: any) => {
         const text = (data?.matches?.[0] ?? "").toString();
-        if (text) cb.onPartial?.(text);
+        if (text) { lastPartial = text; cb.onPartial?.(text); }
       });
       const listeningListener = await native.addListener("listeningState", (data: any) => {
         if (data?.status === "stopped") {
+          if (!finalSent && lastPartial) emitFinal(lastPartial);
           cb.onEnd?.();
         }
       });
-      await native.start({
+      native.start({
         language: "fr-FR",
         partialResults: true,
         popup: false,
         maxResults: 1,
       }).then((res: any) => {
         const matches: string[] = res?.matches ?? [];
-        if (matches.length) cb.onFinal(matches[0]);
+        if (matches.length) emitFinal(matches[0]);
+        else if (lastPartial) emitFinal(lastPartial);
       }).catch((e: any) => {
         cb.onError?.(String(e?.message ?? e));
+        cb.onEnd?.();
       });
       return {
         stop: async () => {
           try { await native.stop(); } catch {}
+          if (!finalSent && lastPartial) emitFinal(lastPartial);
           try { partialListener.remove(); } catch {}
           try { listeningListener.remove(); } catch {}
         },

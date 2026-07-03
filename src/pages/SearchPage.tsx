@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Mic, Search as SearchIcon, X } from "lucide-react";
-import { searchStore, searchStoreFuzzy, suggestStores, searchByTravee, getSearchableStores, type StoreSuggestion, type TraveeResult } from "@/lib/store";
+import { ArrowLeft, Mic, Search as SearchIcon, X, Copy } from "lucide-react";
+import { searchStore, searchStoreFuzzy, suggestStores, searchByTravee, getSearchableStores, getStoreNames, type StoreSuggestion, type TraveeResult } from "@/lib/store";
 import { speakFr } from "@/lib/speech";
 import { startVoice, type VoiceHandle } from "@/lib/voiceInput";
 
@@ -32,17 +32,28 @@ const zonePhrase = (zone: string, travee?: string): string => {
   return "";
 };
 
-// Affichage lisible d'une travée : "DEB3" → "Débord 3"
-const traveeLabel = (t: string): string => {
-  const up = (t || "").toUpperCase();
-  const m = up.match(/^DEB\s*(\d+)$/);
-  if (m) return `Débord ${m[1]}`;
-  if (up === "DEB") return "Débord";
-  return t;
-};
+// Affichage : conserver la forme du plan (DEB1, DEB2, …)
+const traveeLabel = (t: string): string => (t || "").toUpperCase();
 
 // Insère un espace entre chiffres et lettres pour que la TTS prononce bien "306 X"
 const traveeSpoken = (t: string) => t.replace(/(\d)([A-Za-z])/g, "$1 $2").replace(/([A-Za-z])(\d)/g, "$1 $2");
+
+// Petit bip court (remplace le message "Quel magasin cherchez-vous ?")
+const beep = () => {
+  try {
+    const AC = (window as any).AudioContext || (window as any).webkitAudioContext;
+    if (!AC) return;
+    const ctx = new AC();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.frequency.value = 880;
+    osc.type = "sine";
+    gain.gain.value = 0.15;
+    osc.connect(gain).connect(ctx.destination);
+    osc.start();
+    setTimeout(() => { try { osc.stop(); ctx.close(); } catch {} }, 120);
+  } catch {}
+};
 
 const SearchPage = () => {
   const navigate = useNavigate();
@@ -53,6 +64,7 @@ const SearchPage = () => {
   const [notFound, setNotFound] = useState(false);
   const [listening, setListening] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [showDuplicates, setShowDuplicates] = useState(false);
   const recognitionRef = useRef<VoiceHandle | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -171,7 +183,7 @@ const SearchPage = () => {
   }, [announce, computeResult]);
 
   const startListening = useCallback(async () => {
-    speak("Quel magasin cherchez-vous ?");
+    beep();
     setListening(true);
     setTimeout(async () => {
       const handle = await startVoice({
@@ -188,7 +200,7 @@ const SearchPage = () => {
       });
       recognitionRef.current = handle;
       if (!handle) setListening(false);
-    }, 600);
+    }, 300);
   }, [runSearch, speak]);
 
   const stopListening = useCallback(() => {
@@ -197,7 +209,7 @@ const SearchPage = () => {
   }, []);
 
   const startTraveeListening = useCallback(async () => {
-    speak("Quelle travée ?");
+    beep();
     setListening(true);
     setTimeout(async () => {
       const handle = await startVoice({
@@ -213,7 +225,7 @@ const SearchPage = () => {
       });
       recognitionRef.current = handle;
       if (!handle) setListening(false);
-    }, 600);
+    }, 300);
   }, [runTraveeSearch, speak]);
 
 
@@ -342,6 +354,18 @@ const SearchPage = () => {
         </div>
       </div>
 
+      {/* Duplicates button */}
+      <div className="px-2 pt-2">
+        <button
+          onClick={() => setShowDuplicates(true)}
+          className="w-full flex items-center justify-center gap-2 bg-yellow-500 text-black font-black text-lg py-3 rounded-xl border-2 border-yellow-300 active:bg-yellow-600"
+        >
+          <Copy size={22} /> MAGASINS EN DOUBLE
+        </button>
+      </div>
+
+
+
       {/* Result display */}
       <div className="flex-1 overflow-y-auto px-2 py-2" onClick={() => setShowSuggestions(false)}>
         {result && (
@@ -431,6 +455,87 @@ const SearchPage = () => {
                 <p className="text-xs mt-2 text-gray-600">Vous pouvez aussi taper un n° de travée (ex: 306).</p>
               </>
             )}
+          </div>
+        )}
+      </div>
+
+      {showDuplicates && <DuplicatesModal onClose={() => setShowDuplicates(false)} />}
+    </div>
+  );
+};
+
+// ---- Duplicates modal ------------------------------------------------------
+const DuplicatesModal = ({ onClose }: { onClose: () => void }) => {
+  const stores = getSearchableStores();
+  const names = getStoreNames();
+  const nameOf = (num: string) => names.find((n) => n.number === num)?.name;
+
+  // Group by number, keep those with >1 location
+  const groups = useMemo(() => {
+    const map = new Map<string, { travee: string; zone: string }[]>();
+    for (const s of stores) {
+      if (!map.has(s.number)) map.set(s.number, []);
+      map.get(s.number)!.push({ travee: s.travee, zone: s.zone });
+    }
+    const out: { number: string; name?: string; locations: { travee: string; zone: string }[] }[] = [];
+    for (const [num, locs] of map) {
+      if (locs.length > 1) out.push({ number: num, name: nameOf(num), locations: locs });
+    }
+    out.sort((a, b) => b.locations.length - a.locations.length || a.number.localeCompare(b.number));
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black flex flex-col text-white">
+      <div className="flex items-center gap-2 px-3 py-2 bg-black border-b border-gray-800">
+        <button onClick={onClose} className="p-2 rounded-lg bg-gray-800" aria-label="Fermer">
+          <ArrowLeft size={18} />
+        </button>
+        <h1 className="text-base font-black flex-1">Magasins en double ({groups.length})</h1>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-2">
+        {groups.length === 0 ? (
+          <p className="text-center text-gray-400 mt-10 text-lg font-bold">Aucun magasin en double.</p>
+        ) : (
+          <div className="space-y-3">
+            {groups.map((g) => {
+              const maxPlaces = g.locations.length;
+              const cellW = `${100 / maxPlaces}%`;
+              return (
+                <div key={g.number} className="bg-gray-900 border-2 border-yellow-500 rounded-xl overflow-hidden">
+                  {/* Left header : magasin */}
+                  <div className="bg-yellow-500 text-black px-2 py-1">
+                    {g.name && <p className="text-lg font-black leading-tight truncate">{g.name}</p>}
+                    <p className="text-sm font-bold">N° {g.number}</p>
+                  </div>
+                  <table className="w-full table-fixed">
+                    <thead>
+                      <tr className="bg-gray-800 text-yellow-300 text-xs font-black">
+                        {g.locations.map((_, i) => (
+                          <th key={i} className="py-1 border-r border-black last:border-r-0" style={{ width: cellW }}>
+                            PLACE {i + 1}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="text-center">
+                        {g.locations.map((loc, i) => (
+                          <td key={i} className="py-2 border-r border-gray-700 last:border-r-0 align-middle">
+                            <p className="text-2xl font-black text-green-400 leading-none">{(loc.travee || "").toUpperCase()}</p>
+                            {loc.zone && loc.zone !== "Zone 1" && (
+                              <p className="text-[10px] font-bold text-blue-300 mt-1 uppercase">{loc.zone}</p>
+                            )}
+                          </td>
+                        ))}
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
