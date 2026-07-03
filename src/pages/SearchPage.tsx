@@ -354,6 +354,18 @@ const SearchPage = () => {
         </div>
       </div>
 
+      {/* Duplicates button */}
+      <div className="px-2 pt-2">
+        <button
+          onClick={() => setShowDuplicates(true)}
+          className="w-full flex items-center justify-center gap-2 bg-yellow-500 text-black font-black text-lg py-3 rounded-xl border-2 border-yellow-300 active:bg-yellow-600"
+        >
+          <Copy size={22} /> MAGASINS EN DOUBLE
+        </button>
+      </div>
+
+
+
       {/* Result display */}
       <div className="flex-1 overflow-y-auto px-2 py-2" onClick={() => setShowSuggestions(false)}>
         {result && (
