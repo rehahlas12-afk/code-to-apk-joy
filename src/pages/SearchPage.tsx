@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Mic, Search as SearchIcon, X } from "lucide-react";
-import { searchStore, searchStoreFuzzy, suggestStores, searchByTravee, getSearchableStores, type StoreSuggestion, type TraveeResult } from "@/lib/store";
+import { ArrowLeft, Mic, Search as SearchIcon, X, Copy } from "lucide-react";
+import { searchStore, searchStoreFuzzy, suggestStores, searchByTravee, getSearchableStores, getStoreNames, type StoreSuggestion, type TraveeResult } from "@/lib/store";
 import { speakFr } from "@/lib/speech";
 import { startVoice, type VoiceHandle } from "@/lib/voiceInput";
 
