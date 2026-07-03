@@ -32,17 +32,28 @@ const zonePhrase = (zone: string, travee?: string): string => {
   return "";
 };
 
-// Affichage lisible d'une travée : "DEB3" → "Débord 3"
-const traveeLabel = (t: string): string => {
-  const up = (t || "").toUpperCase();
-  const m = up.match(/^DEB\s*(\d+)$/);
-  if (m) return `Débord ${m[1]}`;
-  if (up === "DEB") return "Débord";
-  return t;
-};
+// Affichage : conserver la forme du plan (DEB1, DEB2, …)
+const traveeLabel = (t: string): string => (t || "").toUpperCase();
 
 // Insère un espace entre chiffres et lettres pour que la TTS prononce bien "306 X"
 const traveeSpoken = (t: string) => t.replace(/(\d)([A-Za-z])/g, "$1 $2").replace(/([A-Za-z])(\d)/g, "$1 $2");
+
+// Petit bip court (remplace le message "Quel magasin cherchez-vous ?")
+const beep = () => {
+  try {
+    const AC = (window as any).AudioContext || (window as any).webkitAudioContext;
+    if (!AC) return;
+    const ctx = new AC();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.frequency.value = 880;
+    osc.type = "sine";
+    gain.gain.value = 0.15;
+    osc.connect(gain).connect(ctx.destination);
+    osc.start();
+    setTimeout(() => { try { osc.stop(); ctx.close(); } catch {} }, 120);
+  } catch {}
+};
 
 const SearchPage = () => {
   const navigate = useNavigate();
