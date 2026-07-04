@@ -220,7 +220,7 @@ function normalizePotentialNumber(token: string): string {
 
 // Plages de travées sur les plans STAF (corrigé par le dispatch Pékin) :
 //   - Craft  : 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 98  (un seul magasin par travée)
-//   - Débord : 72-85 + DEB / DEB1-6
+//   - Débord : 72-86 + DEB / DEB1-6 (86 peut aussi exister en Craft selon le contexte)
 //   - Zone 1 : lettres seules (X, Y...), 99, 99BIS, 100+, 201+, 301+, 404, 803...
 const CRAFT_TRAVEES = new Set(["86","87","88","89","90","91","92","93","94","95","96","98"]);
 
@@ -345,7 +345,7 @@ function isTrailingDebordTraveeToken(token: string): boolean {
   const digits = tokenDigits(token);
   if (!/^\d{2}$/.test(digits)) return false;
   const value = Number(digits);
-  return value >= 72 && value <= 85;
+  return value >= 72 && value <= 86;
 }
 
 function readStoreEndingBefore(tokens: string[], endExclusive: number): { number: string; startIndex: number } | null {
@@ -620,10 +620,6 @@ function chooseBestPlanRead(primaryStores: StoreData[], rawTextStores: StoreData
 
   const primaryQuality = getReadQuality(primaryStores);
   const rawQuality = getReadQuality(rawTextStores);
-  const mergedStores = dedupeStores([...primaryStores, ...rawTextStores]);
-  const mergedQuality = getReadQuality(mergedStores);
-
-  if (mergedQuality.score >= Math.max(primaryQuality.score, rawQuality.score)) return mergedStores;
   return rawQuality.score > primaryQuality.score ? rawTextStores : primaryStores;
 }
 

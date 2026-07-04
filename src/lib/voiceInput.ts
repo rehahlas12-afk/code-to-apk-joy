@@ -72,17 +72,19 @@ export async function startVoice(cb: VoiceCallbacks): Promise<VoiceHandle | null
           finish();
         }
       });
+      // Android : les résultats partiels ne marchent pas avec popup=true.
+      // Avec partialResults=true, start() peut résoudre tout de suite sans résultat :
+      // on garde donc l'écoute active jusqu'à listeningState=stopped ou stop().
       native.start({
         language: "fr-FR",
-        prompt: " ",
-        partialResults: false,
-        popup: true,
+        prompt: "",
+        partialResults: true,
+        popup: false,
         maxResults: 1,
       }).then((res: any) => {
         const matches: string[] = res?.matches ?? [];
         if (matches.length) emitFinal(matches[0]);
-        else if (lastPartial) emitFinal(lastPartial);
-        finish();
+        if (matches.length) finish();
       }).catch((e: any) => {
         cb.onError?.(String(e?.message ?? e));
         finish();

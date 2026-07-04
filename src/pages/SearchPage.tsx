@@ -44,16 +44,23 @@ const beep = () => {
     const AC = (window as any).AudioContext || (window as any).webkitAudioContext;
     if (!AC) return;
     const ctx = new AC();
+    void ctx.resume?.();
     const osc = ctx.createOscillator();
+    const osc2 = ctx.createOscillator();
     const gain = ctx.createGain();
-    osc.frequency.value = 1200;
+    osc.frequency.value = 1500;
     osc.type = "square";
+    osc2.frequency.value = 900;
+    osc2.type = "sine";
     gain.gain.setValueAtTime(0.001, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.7, ctx.currentTime + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.22);
-    osc.connect(gain).connect(ctx.destination);
+    gain.gain.exponentialRampToValueAtTime(1, ctx.currentTime + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.34);
+    osc.connect(gain);
+    osc2.connect(gain);
+    gain.connect(ctx.destination);
     osc.start();
-    setTimeout(() => { try { osc.stop(); ctx.close(); } catch {} }, 240);
+    osc2.start();
+    setTimeout(() => { try { osc.stop(); osc2.stop(); ctx.close(); } catch {} }, 360);
   } catch {}
 };
 
@@ -87,11 +94,17 @@ const SearchPage = () => {
   const computeResult = useCallback((number: string, name?: string): SearchResult => {
     const stores = getSearchableStores();
     const all = stores.filter(s => s.number === number);
+    const zoneOrder = (z: string) => {
+      const n = (z || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+      if (n.includes("craft") || n.includes("kraft")) return 2;
+      if (n.includes("debord") || n.includes("deb")) return 1;
+      return 0;
+    };
     const sortKey = (t: string) => {
       const n = parseInt(t.replace(/\D/g, ""), 10);
       return isNaN(n) ? Number.MAX_SAFE_INTEGER : n;
     };
-    const sorted = [...all].sort((a, b) => sortKey(a.travee) - sortKey(b.travee) || a.travee.localeCompare(b.travee));
+    const sorted = [...all].sort((a, b) => zoneOrder(a.zone) - zoneOrder(b.zone) || sortKey(a.travee) - sortKey(b.travee) || a.travee.localeCompare(b.travee));
     const matches: MatchInfo[] = sorted.map((m) => {
       const allInTravee = stores.filter((s) => s.travee === m.travee && s.zone === m.zone);
       let emp = allInTravee.findIndex((s) => s.number === m.number);
@@ -199,11 +212,15 @@ const SearchPage = () => {
     beep();
     window.speechSynthesis?.cancel?.();
     setListening(true);
-    listeningTimeoutRef.current = window.setTimeout(() => endListening(), 9000);
+    listeningTimeoutRef.current = window.setTimeout(() => {
+      void recognitionRef.current?.stop();
+      endListening();
+    }, 9000);
     const handle = await startVoice({
-      onPartial: (text) => setQuery(text),
+      onPartial: (text) => { setQuery(text); setShowSuggestions(true); },
       onFinal: (text) => {
         setQuery(text);
+        setShowSuggestions(true);
         const numbers = text.replace(/\s/g, "").match(/\d+/g);
         const q = numbers && numbers.join("").length >= 3 ? numbers.join("") : text.trim();
         runSearch(q, true);
@@ -226,7 +243,10 @@ const SearchPage = () => {
     beep();
     window.speechSynthesis?.cancel?.();
     setListening(true);
-    listeningTimeoutRef.current = window.setTimeout(() => endListening(), 9000);
+    listeningTimeoutRef.current = window.setTimeout(() => {
+      void recognitionRef.current?.stop();
+      endListening();
+    }, 9000);
     const handle = await startVoice({
       onPartial: (text) => setTraveeQuery(text.toUpperCase()),
       onFinal: (text) => {
@@ -483,6 +503,16 @@ const DuplicatesModal = ({ onClose }: { onClose: () => void }) => {
   const stores = getSearchableStores();
   const names = getStoreNames();
   const nameOf = (num: string) => names.find((n) => n.number === num)?.name;
+  const zoneOrder = (z: string) => {
+    const n = (z || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    if (n.includes("craft") || n.includes("kraft")) return 2;
+    if (n.includes("debord") || n.includes("deb")) return 1;
+    return 0;
+  };
+  const traveeOrder = (t: string) => {
+    const n = parseInt(String(t || "").replace(/\D/g, ""), 10);
+    return Number.isFinite(n) ? n : Number.MAX_SAFE_INTEGER;
+  };
 
   // Group by number, keep those with >1 location
   const groups = useMemo(() => {
@@ -493,7 +523,13 @@ const DuplicatesModal = ({ onClose }: { onClose: () => void }) => {
     }
     const out: { number: string; name?: string; locations: { travee: string; zone: string }[] }[] = [];
     for (const [num, locs] of map) {
-      if (locs.length > 1) out.push({ number: num, name: nameOf(num), locations: locs });
+      if (locs.length > 1) {
+        out.push({
+          number: num,
+          name: nameOf(num),
+          locations: [...locs].sort((a, b) => zoneOrder(a.zone) - zoneOrder(b.zone) || traveeOrder(a.travee) - traveeOrder(b.travee) || a.travee.localeCompare(b.travee)),
+        });
+      }
     }
     out.sort((a, b) => b.locations.length - a.locations.length || a.number.localeCompare(b.number));
     return out;

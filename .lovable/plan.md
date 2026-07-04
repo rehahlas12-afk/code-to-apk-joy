@@ -1,39 +1,21 @@
+Je vais corriger exactement ces deux points :
 
+1. Micro dans l’APK
+- Revenir à une écoute Android qui renvoie du texte pendant que vous parlez.
+- Garder le bouton vert quand il n’écoute pas, rouge uniquement pendant l’écoute, puis retour automatique en vert.
+- Remplir le champ avec le nom ou le numéro prononcé dès qu’un résultat vocal arrive.
+- Renforcer le bip pour qu’il soit plus audible, sans phrase vocale avant l’écoute.
 
-# Plan : Préparer l'application pour installation sur Android (APK)
+2. Tableau “Magasins en double”
+- Le tableau ne devra afficher que les positions réellement présentes dans le plan actif.
+- Corriger la lecture des zones pour que les exemples soient gérés comme demandé :
+  - 8214 : PLACE 1 = 306 Zone 1, PLACE 2 = 88 Craft.
+  - 9083 : PLACE 1 = 86 Débord, PLACE 2 = 92 Craft.
+- Éviter que le parser mélange Débord, Craft et Zone 1 quand les mêmes numéros de travée existent dans plusieurs zones.
+- Conserver l’affichage malvoyant : contour jaune, intérieur noir, numéro en blanc très grand.
 
-## Objectif
-Configurer Capacitor pour que vous puissiez compiler l'app en fichier APK et l'installer directement sur votre téléphone Android.
-
-## Ce que je vais faire dans le code
-
-1. **Installer Capacitor** : Ajouter les dépendances `@capacitor/core`, `@capacitor/cli`, `@capacitor/android`
-2. **Initialiser Capacitor** : Créer le fichier de configuration `capacitor.config.ts` avec les bons paramètres
-3. **Configurer le hot-reload** : Pointer vers le serveur de prévisualisation pour tester en direct
-
-## Ce que VOUS devrez faire sur votre ordinateur
-
-Une fois que j'ai terminé la configuration, vous devrez suivre ces étapes :
-
-1. **Exporter le projet** : Cliquez sur le bouton "Export to Github" dans Lovable, puis clonez le repo sur votre PC
-2. **Installer les outils** :
-   - Installer [Node.js](https://nodejs.org)
-   - Installer [Android Studio](https://developer.android.com/studio)
-3. **Lancer ces commandes** dans le dossier du projet :
-   ```text
-   npm install
-   npx cap add android
-   npx cap update android
-   npm run build
-   npx cap sync
-   npx cap run android
-   ```
-4. **Générer l'APK** : Dans Android Studio, ouvrir le dossier `android/`, puis Build > Build APK
-5. **Installer l'APK** : Transférer le fichier APK sur votre téléphone et l'installer
-
-Guide complet : [blog Lovable sur Capacitor](https://lovable.dev/blog/mobile-app-with-lovable-and-capacitor)
-
-## Fichiers modifiés
-- `package.json` : ajout des dépendances Capacitor
-- `capacitor.config.ts` : nouveau fichier de configuration
-
+Technique :
+- Modifier `src/lib/voiceInput.ts` pour l’écoute native Android Capacitor.
+- Modifier `src/pages/SearchPage.tsx` pour mieux gérer l’état du micro et le bip.
+- Modifier `src/lib/ocr.ts` et la fonction backend `analyze-plan` pour mieux extraire Craft/Débord/Zone 1 et supprimer les faux doublons.
+- Ajouter/adapter des tests sur les cas 8214 et 9083 pour éviter que le problème revienne.
