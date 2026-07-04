@@ -123,6 +123,7 @@ describe("plan search", () => {
   it("keeps right-side Débord separate from independent Craft", () => {
     const stores = parseOcrText(`
       201 9999 M 4 1111 M 8 85
+      304 7878 M 15 9083 M 17 86
       86 CRAFT 2222
       CRAFT
       87 3333
@@ -131,9 +132,31 @@ describe("plan search", () => {
     expect(stores).toEqual(
       expect.arrayContaining([
         { number: "1111", travee: "85", zone: "Débord" },
+        { number: "9083", travee: "86", zone: "Débord" },
         { number: "9999", travee: "201", zone: "Zone 1" },
         { number: "2222", travee: "86", zone: "Craft" },
         { number: "3333", travee: "87", zone: "Craft" },
+      ]),
+    );
+  });
+
+  it("parses the duplicated stores from the uploaded plan without mixing zones", () => {
+    const stores = parseOcrText(`
+      ZONE 1
+      306 8214
+      DEBORD
+      86 9083
+      CRAFT
+      88 8214
+      92 9083
+    `);
+
+    expect(stores).toEqual(
+      expect.arrayContaining([
+        { number: "8214", travee: "306", zone: "Zone 1" },
+        { number: "8214", travee: "88", zone: "Craft" },
+        { number: "9083", travee: "86", zone: "Débord" },
+        { number: "9083", travee: "92", zone: "Craft" },
       ]),
     );
   });
