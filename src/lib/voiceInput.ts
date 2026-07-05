@@ -30,6 +30,7 @@ export async function startVoice(cb: VoiceCallbacks): Promise<VoiceHandle | null
   const native = await getNative();
   if (native) {
     try {
+      try { await native.removeAllListeners?.(); } catch {}
       const perm = await native.checkPermissions();
       if (perm.speechRecognition !== "granted") {
         const req = await native.requestPermissions();
@@ -46,15 +47,26 @@ export async function startVoice(cb: VoiceCallbacks): Promise<VoiceHandle | null
       let lastPartial = "";
       let finalSent = false;
       let ended = false;
+      let stoppedSeen = false;
+      let finishTimer: ReturnType<typeof setTimeout> | null = null;
       let partialListener: any = null;
       let listeningListener: any = null;
+
+      const clearFinishTimer = () => {
+        if (!finishTimer) return;
+        clearTimeout(finishTimer);
+        finishTimer = null;
+      };
+
       const finish = () => {
         if (ended) return;
         ended = true;
-        cb.onEnd?.();
+        clearFinishTimer();
         try { partialListener?.remove?.(); } catch {}
         try { listeningListener?.remove?.(); } catch {}
+        cb.onEnd?.();
       };
+
       const emitFinal = (text: string) => {
         if (finalSent) return;
         const t = (text || "").trim();
@@ -62,14 +74,37 @@ export async function startVoice(cb: VoiceCallbacks): Promise<VoiceHandle | null
         finalSent = true;
         cb.onFinal(t);
       };
-      partialListener = await native.addListener("partialResults", (data: any) => {
-        const text = (data?.matches?.[0] ?? "").toString();
-        if (text) { lastPartial = text; cb.onPartial?.(text); }
-      });
-      listeningListener = await native.addListener("listeningState", (data: any) => {
-        if (data?.status === "stopped") {
+
+      const scheduleFinish = (delay = 1200) => {
+        clearFinishTimer();
+        finishTimer = setTimeout(() => {
           if (!finalSent && lastPartial) emitFinal(lastPartial);
           finish();
+        }, delay);
+      };
+
+      partialListener = await native.addListener("partialResults", (data: any) => {
+        const text = (data?.matches?.[0] ?? "").toString();
+        if (!text) return;
+        lastPartial = text;
+        cb.onPartial?.(text);
+
+        // Sur Android le plugin envoie souvent le résultat final via
+        // "partialResults" APRÈS l'événement "stopped". On garde donc
+        // l'écoute ouverte quelques instants et on valide ce texte.
+        if (stoppedSeen) {
+          emitFinal(text);
+          scheduleFinish(150);
+        }
+      });
+      listeningListener = await native.addListener("listeningState", (data: any) => {
+        if (data?.status === "started") {
+          stoppedSeen = false;
+          clearFinishTimer();
+        }
+        if (data?.status === "stopped") {
+          stoppedSeen = true;
+          scheduleFinish(1500);
         }
       });
       // Android : les résultats partiels ne marchent pas avec popup=true.
@@ -84,14 +119,15 @@ export async function startVoice(cb: VoiceCallbacks): Promise<VoiceHandle | null
       }).then((res: any) => {
         const matches: string[] = res?.matches ?? [];
         if (matches.length) emitFinal(matches[0]);
-        if (matches.length) finish();
+        if (matches.length) scheduleFinish(150);
       }).catch((e: any) => {
+        if (!finalSent && lastPartial) emitFinal(lastPartial);
         cb.onError?.(String(e?.message ?? e));
-        finish();
+        scheduleFinish(150);
       });
       return {
         stop: async () => {
-          try { native.stop(); } catch {}
+          try { await native.stop(); } catch {}
           if (!finalSent && lastPartial) emitFinal(lastPartial);
           finish();
         },

@@ -1,8 +1,8 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Mic, Search as SearchIcon, X, Copy } from "lucide-react";
-import { searchStore, searchStoreFuzzy, suggestStores, searchByTravee, getSearchableStores, getStoreNames, type StoreSuggestion, type TraveeResult } from "@/lib/store";
-import { speakFr } from "@/lib/speech";
+import { searchStore, searchStoreFuzzy, suggestStores, searchByTravee, getSearchableStores, getDuplicateStoreGroups, type StoreSuggestion, type TraveeResult } from "@/lib/store";
+import { speakFr, stopSpeaking } from "@/lib/speech";
 import { startVoice, type VoiceHandle } from "@/lib/voiceInput";
 
 interface MatchInfo {
@@ -210,7 +210,7 @@ const SearchPage = () => {
   const startListening = useCallback(async () => {
     try { await recognitionRef.current?.stop(); } catch {}
     beep();
-    window.speechSynthesis?.cancel?.();
+    void stopSpeaking();
     setListening(true);
     listeningTimeoutRef.current = window.setTimeout(() => {
       void recognitionRef.current?.stop();
@@ -241,7 +241,7 @@ const SearchPage = () => {
   const startTraveeListening = useCallback(async () => {
     try { await recognitionRef.current?.stop(); } catch {}
     beep();
-    window.speechSynthesis?.cancel?.();
+    void stopSpeaking();
     setListening(true);
     listeningTimeoutRef.current = window.setTimeout(() => {
       void recognitionRef.current?.stop();
@@ -500,41 +500,26 @@ const SearchPage = () => {
 
 // ---- Duplicates modal ------------------------------------------------------
 const DuplicatesModal = ({ onClose }: { onClose: () => void }) => {
-  const stores = getSearchableStores();
-  const names = getStoreNames();
-  const nameOf = (num: string) => names.find((n) => n.number === num)?.name;
-  const zoneOrder = (z: string) => {
-    const n = (z || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-    if (n.includes("craft") || n.includes("kraft")) return 2;
-    if (n.includes("debord") || n.includes("deb")) return 1;
-    return 0;
-  };
-  const traveeOrder = (t: string) => {
-    const n = parseInt(String(t || "").replace(/\D/g, ""), 10);
-    return Number.isFinite(n) ? n : Number.MAX_SAFE_INTEGER;
-  };
+  const groups = useMemo(() => getDuplicateStoreGroups(), []);
+  const maxLocations = Math.max(2, ...groups.map((group) => group.locations.length));
+  const visiblePlaceCount = Math.min(3, maxLocations);
+  const hasMoreColumn = maxLocations > 3;
+  const headers = [
+    ...Array.from({ length: visiblePlaceCount }, (_, index) => `PLACE ${index + 1}`),
+    ...(hasMoreColumn ? ["PLUS"] : []),
+  ];
 
-  // Group by number, keep those with >1 location
-  const groups = useMemo(() => {
-    const map = new Map<string, { travee: string; zone: string }[]>();
-    for (const s of stores) {
-      if (!map.has(s.number)) map.set(s.number, []);
-      map.get(s.number)!.push({ travee: s.travee, zone: s.zone });
-    }
-    const out: { number: string; name?: string; locations: { travee: string; zone: string }[] }[] = [];
-    for (const [num, locs] of map) {
-      if (locs.length > 1) {
-        out.push({
-          number: num,
-          name: nameOf(num),
-          locations: [...locs].sort((a, b) => zoneOrder(a.zone) - zoneOrder(b.zone) || traveeOrder(a.travee) - traveeOrder(b.travee) || a.travee.localeCompare(b.travee)),
-        });
-      }
-    }
-    out.sort((a, b) => b.locations.length - a.locations.length || a.number.localeCompare(b.number));
-    return out;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const renderLocation = (loc?: { travee: string; zone: string }) => {
+    if (!loc) return <span className="text-gray-700">—</span>;
+    return (
+      <>
+        <p className="text-3xl font-black text-green-400 leading-none">{(loc.travee || "").toUpperCase()}</p>
+        {loc.zone && loc.zone !== "Zone 1" && (
+          <p className="text-[10px] font-bold text-blue-300 mt-1 uppercase">{loc.zone}</p>
+        )}
+      </>
+    );
+  };
 
   return (
     <div className="fixed inset-0 z-50 bg-black flex flex-col text-white">
@@ -549,43 +534,43 @@ const DuplicatesModal = ({ onClose }: { onClose: () => void }) => {
         {groups.length === 0 ? (
           <p className="text-center text-gray-400 mt-10 text-lg font-bold">Aucun magasin en double.</p>
         ) : (
-          <div className="space-y-3">
-            {groups.map((g) => {
-              const maxPlaces = g.locations.length;
-              const cellW = `${100 / maxPlaces}%`;
-              return (
-                <div key={g.number} className="bg-gray-900 border-2 border-yellow-500 rounded-xl overflow-hidden">
-                  {/* Left header : magasin */}
-                  <div className="m-2 border-4 border-yellow-400 rounded-lg px-2 py-2 bg-black text-center">
-                    {g.name && <p className="text-lg font-black leading-tight truncate text-white">{g.name}</p>}
-                    <p className="text-3xl font-black leading-none text-white">N° {g.number}</p>
-                  </div>
-                  <table className="w-full table-fixed">
-                    <thead>
-                      <tr className="bg-gray-800 text-yellow-300 text-xs font-black">
-                        {g.locations.map((_, i) => (
-                          <th key={i} className="py-1 border-r border-black last:border-r-0" style={{ width: cellW }}>
-                            PLACE {i + 1}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr className="text-center">
-                        {g.locations.map((loc, i) => (
-                          <td key={i} className="py-2 border-r border-gray-700 last:border-r-0 align-middle">
-                            <p className="text-2xl font-black text-green-400 leading-none">{(loc.travee || "").toUpperCase()}</p>
-                            {loc.zone && loc.zone !== "Zone 1" && (
-                              <p className="text-[10px] font-bold text-blue-300 mt-1 uppercase">{loc.zone}</p>
-                            )}
-                          </td>
-                        ))}
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              );
-            })}
+          <div className="border-2 border-yellow-500 rounded-xl overflow-hidden bg-gray-950">
+            <table className="w-full table-fixed">
+              <thead>
+                <tr className="bg-gray-800 text-yellow-300 text-[10px] font-black">
+                  <th className="w-[34%] py-2 border-r border-black">MAGASIN</th>
+                  {headers.map((header) => (
+                    <th key={header} className="py-2 border-r border-black last:border-r-0">{header}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {groups.map((g) => (
+                  <tr key={g.number} className="border-t-2 border-gray-800 text-center align-middle">
+                    <td className="p-1 border-r border-gray-700 align-middle">
+                      <div className="border-4 border-yellow-400 rounded-lg px-1 py-2 bg-black text-center">
+                        {g.name && <p className="text-base font-black leading-tight break-words text-white">{g.name}</p>}
+                        <p className="text-3xl font-black leading-none text-white">{g.number}</p>
+                      </div>
+                    </td>
+                    {Array.from({ length: visiblePlaceCount }, (_, index) => (
+                      <td key={index} className="px-1 py-3 border-r border-gray-700 align-middle">
+                        {renderLocation(g.locations[index])}
+                      </td>
+                    ))}
+                    {hasMoreColumn && (
+                      <td className="px-1 py-2 align-middle">
+                        <div className="space-y-2">
+                          {g.locations.slice(3).map((loc, index) => (
+                            <div key={`${loc.zone}-${loc.travee}-${index}`}>{renderLocation(loc)}</div>
+                          ))}
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>

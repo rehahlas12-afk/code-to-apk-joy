@@ -1,6 +1,13 @@
 import { Capacitor } from "@capacitor/core";
 import { QueueStrategy, TextToSpeech } from "@capacitor-community/text-to-speech";
 
+export async function stopSpeaking(): Promise<void> {
+  try { window.speechSynthesis?.cancel?.(); } catch {}
+
+  if (!Capacitor.isNativePlatform()) return;
+  try { await TextToSpeech.stop(); } catch {}
+}
+
 export async function speakFr(text: string): Promise<void> {
   const clean = text.trim();
   if (!clean) return;

@@ -431,6 +431,60 @@ export interface StoreSuggestion {
   score: number;
 }
 
+export interface DuplicateStoreGroup {
+  number: string;
+  name?: string;
+  locations: { travee: string; zone: string }[];
+}
+
+function zoneSortValue(zone: string): number {
+  const normalized = normalizeZone(zone);
+  if (normalized === "Débord") return 1;
+  if (normalized === "Craft") return 2;
+  return 0;
+}
+
+function traveeSortValue(travee: string): number {
+  const normalized = String(travee || "").trim().toUpperCase();
+  const deb = normalized.match(/^DEB\s*(\d*)$/);
+  if (deb) return 10_000 + (deb[1] ? Number(deb[1]) : 0);
+  const n = parseInt(normalized.replace(/\D/g, ""), 10);
+  return Number.isFinite(n) ? n : Number.MAX_SAFE_INTEGER;
+}
+
+export function getDuplicateStoreGroups(): DuplicateStoreGroup[] {
+  const stores = getSearchableStores();
+  const names = getStoreNames();
+  const nameOf = (num: string) => names.find((n) => n.number === num)?.name;
+  const grouped = new Map<string, Map<string, { travee: string; zone: string }>>();
+
+  for (const store of stores) {
+    const number = String(store.number || "").trim();
+    const travee = String(store.travee || "").trim().toUpperCase();
+    const zone = normalizeZone(store.zone);
+
+    if (!/^\d{4,5}$/.test(number)) continue;
+    if (!travee || travee === "?") continue;
+
+    if (!grouped.has(number)) grouped.set(number, new Map());
+    grouped.get(number)!.set(`${zone}|${travee}`, { travee, zone });
+  }
+
+  const duplicates: DuplicateStoreGroup[] = [];
+  for (const [number, locationMap] of grouped) {
+    const locations = [...locationMap.values()].sort(
+      (a, b) => zoneSortValue(a.zone) - zoneSortValue(b.zone)
+        || traveeSortValue(a.travee) - traveeSortValue(b.travee)
+        || a.travee.localeCompare(b.travee),
+    );
+
+    if (locations.length <= 1) continue;
+    duplicates.push({ number, name: nameOf(number), locations });
+  }
+
+  return duplicates.sort((a, b) => b.locations.length - a.locations.length || a.number.localeCompare(b.number));
+}
+
 // Autocomplete-style suggestions: matches by name prefix/contains and by number
 export function suggestStores(query: string, limit = 30): StoreSuggestion[] {
   const stores = getSearchableStores();

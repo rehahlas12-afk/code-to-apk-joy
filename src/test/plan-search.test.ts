@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { parseOcrText, reconstructTextFromGeometry } from "../lib/ocr";
-import { activatePlan, getStores, savePlan, searchStore, suggestStores } from "../lib/store";
+import { activatePlan, getDuplicateStoreGroups, getStores, savePlan, searchStore, suggestStores } from "../lib/store";
 
 describe("plan search", () => {
   beforeEach(() => {
@@ -203,5 +203,34 @@ describe("plan search", () => {
         { number: "9083", travee: "DEB4", zone: "Débord" },
       ]),
     );
+  });
+
+  it("shows every duplicated store from the active plan once per real location", () => {
+    savePlan({
+      id: "plan-a",
+      imageData: "a",
+      stores: [
+        { number: "9083", travee: "86", zone: "Débord" },
+        { number: "9083", travee: "92", zone: "Craft" },
+        { number: "9083", travee: "92", zone: "Craft" },
+        { number: "7859", travee: "94", zone: "Craft" },
+        { number: "7859", travee: "704", zone: "Zone 1" },
+        { number: "10032", travee: "95", zone: "Craft" },
+        { number: "10032", travee: "201", zone: "Zone 1" },
+        { number: "8214", travee: "306", zone: "Zone 1" },
+        { number: "8214", travee: "88", zone: "Craft" },
+        { number: "1111", travee: "101", zone: "Zone 1" },
+      ],
+      date: "01/01/2026",
+      time: "08:00:00",
+    });
+
+    const groups = getDuplicateStoreGroups();
+
+    expect(groups.map((group) => group.number)).toEqual(["10032", "7859", "8214", "9083"]);
+    expect(groups.find((group) => group.number === "9083")?.locations).toEqual([
+      { travee: "86", zone: "Débord" },
+      { travee: "92", zone: "Craft" },
+    ]);
   });
 });
