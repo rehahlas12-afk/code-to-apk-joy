@@ -210,7 +210,7 @@ const SearchPage = () => {
   const startListening = useCallback(async () => {
     try { await recognitionRef.current?.stop(); } catch {}
     beep();
-    void stopSpeaking();
+    await stopSpeaking();
     setListening(true);
     listeningTimeoutRef.current = window.setTimeout(() => {
       void recognitionRef.current?.stop();
@@ -241,7 +241,7 @@ const SearchPage = () => {
   const startTraveeListening = useCallback(async () => {
     try { await recognitionRef.current?.stop(); } catch {}
     beep();
-    void stopSpeaking();
+    await stopSpeaking();
     setListening(true);
     listeningTimeoutRef.current = window.setTimeout(() => {
       void recognitionRef.current?.stop();
