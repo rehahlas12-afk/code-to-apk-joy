@@ -47,7 +47,7 @@ function tokenizeLine(normalizedLine: string): string[] {
 }
 
 function isServiceToken(token: string): boolean {
-  return /^(M|F|S|H)$/.test(token) || /^5H0{2}$/.test(token) || /^H0{2}$/.test(token) || /^DEB\d?$/.test(token);
+  return /^(M|F|S|H|ZONE|CRAFT|CRAFTER|KRAFT|DEBORD)$/.test(token) || /^5H0{2}$/.test(token) || /^H0{2}$/.test(token) || /^DEB\d?$/.test(token);
 }
 
 function isTraveeToken(token: string): boolean {
@@ -71,7 +71,7 @@ function detectLineZone(normalizedLine: string, tokens: string[]): { zone: strin
     const isDebTraveeAtEnd = zone === "Débord" && tokens.some((token, index) => /^DEB\d?$/.test(token) && index > 0);
     if (isDebTraveeAtEnd) return { zone: null, explicit: false, persistent: false };
 
-    const containsStores = tokens.some((_, index) => canReadStoreAt(tokens, index));
+    const containsStores = tokens.some((_, index) => canReadStoreAt(tokens, index, zone));
     const isStandaloneHeader = tokens.length <= 3 || !containsStores;
 
     return { zone, explicit: true, persistent: zone === "Zone 1" ? true : isStandaloneHeader };
@@ -108,7 +108,7 @@ function extractTravee(normalizedLine: string, currentTravee: string): string {
   return tokens.find(isTraveeToken) ?? currentTravee;
 }
 
-function extractStoreNumbers(normalizedLine: string): string[] {
+function extractStoreNumbers(normalizedLine: string, zoneContext?: string | null): string[] {
   const storeNumbers = new Set<string>();
   const tokens = tokenizeLine(normalizedLine);
 
@@ -129,6 +129,7 @@ function extractStoreNumbers(normalizedLine: string): string[] {
     let cursor = i + 1;
     while (combined.length < 5 && cursor < tokens.length) {
       if (isServiceToken(tokens[cursor])) break;
+      if (shouldKeepSeparateTraveeTokens(tokens[i], tokens[cursor], zoneContext)) break;
 
       const nextToken = normalizePotentialNumber(tokens[cursor]).replace(/[^0-9]/g, "");
       if (!nextToken || combined.length + nextToken.length > 5) break;
@@ -150,12 +151,27 @@ function tokenDigits(token: string): string {
   return normalizePotentialNumber(token).replace(/[^0-9]/g, "");
 }
 
+function normalizeZoneName(zone?: string | null): string {
+  const normalized = (zone || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  if (normalized.includes("craft") || normalized.includes("kraft")) return "Craft";
+  if (normalized.includes("debord") || normalized.includes("deb")) return "Débord";
+  return "Zone 1";
+}
+
 function isTrailingDebordTraveeToken(token: string): boolean {
   if (/^DEB\d?$/.test(token)) return true;
   const digits = tokenDigits(token);
   if (!/^\d{2}$/.test(digits)) return false;
   const value = Number(digits);
   return value >= 72 && value <= 86;
+}
+
+function shouldKeepSeparateTraveeTokens(left: string, right: string, zoneContext?: string | null): boolean {
+  const zone = normalizeZoneName(zoneContext);
+  if (/^DEB\d?$/.test(left) && /^DEB\d?$/.test(right)) return true;
+  if (zone === "Craft") return isCraftTraveeToken(left) && isCraftTraveeToken(right);
+  if (zone === "Débord") return isTrailingDebordTraveeToken(left) && isTrailingDebordTraveeToken(right);
+  return false;
 }
 
 function readStoreEndingBefore(tokens: string[], endExclusive: number): { number: string; startIndex: number } | null {
@@ -226,7 +242,7 @@ function extractExplicitCraftEntries(tokens: string[]): LineStoreEntry[] {
     const first = tokenDigits(tokens[index + 1] ?? "");
     const second = tokenDigits(tokens[index + 2] ?? "");
     const directTwoParts = first && second && first.length < 4 && second.length < 4 ? first + second : "";
-    if (/^\d{4,5}$/.test(directTwoParts)) {
+    if (!shouldKeepSeparateTraveeTokens(tokens[index + 1] ?? "", tokens[index + 2] ?? "", "Craft") && /^\d{4,5}$/.test(directTwoParts)) {
       entries.push({ number: directTwoParts, travee: tokens[index], zone: "Craft" });
       index += 2;
       continue;
@@ -263,7 +279,7 @@ function extractTrailingDebordEntry(tokens: string[]): { entry: LineStoreEntry; 
   };
 }
 
-function canReadStoreAt(tokens: string[], index: number): boolean {
+function canReadStoreAt(tokens: string[], index: number, zoneContext?: string | null): boolean {
   if (index < 0 || index >= tokens.length) return false;
   if (isServiceToken(tokens[index])) return false;
 
@@ -276,6 +292,7 @@ function canReadStoreAt(tokens: string[], index: number): boolean {
   let cursor = index + 1;
   while (combined.length < 5 && cursor < tokens.length) {
     if (isServiceToken(tokens[cursor])) break;
+    if (shouldKeepSeparateTraveeTokens(tokens[index], tokens[cursor], zoneContext)) break;
     const nextDigits = tokenDigits(tokens[cursor]);
     if (isTraveeToken(tokens[cursor]) && !/^\d{1,3}$/.test(nextDigits)) break;
     if (!nextDigits || combined.length + nextDigits.length > 5) break;
@@ -287,9 +304,9 @@ function canReadStoreAt(tokens: string[], index: number): boolean {
   return false;
 }
 
-function hasReadableStoreAfter(tokens: string[], index: number): boolean {
+function hasReadableStoreAfter(tokens: string[], index: number, zoneContext?: string | null): boolean {
   for (let cursor = index + 1; cursor < tokens.length; cursor += 1) {
-    if (canReadStoreAt(tokens, cursor)) return true;
+    if (canReadStoreAt(tokens, cursor, zoneContext)) return true;
   }
   return false;
 }
@@ -299,12 +316,12 @@ function isQuantityToken(tokens: string[], index: number): boolean {
   return /^\d{1,2}$/.test(digits) && (/^(M|F|S)$/.test(tokens[index - 1] ?? "") || /^(M|F|S)$/.test(tokens[index - 2] ?? ""));
 }
 
-function isLineTraveeAnchor(tokens: string[], index: number, explicitZoneOnLine: boolean): boolean {
+function isLineTraveeAnchor(tokens: string[], index: number, explicitZoneOnLine: boolean, zoneContext?: string | null): boolean {
   const token = tokens[index];
   if (!isTraveeToken(token)) return false;
   if (isQuantityToken(tokens, index)) return false;
 
-  const hasStoreAfter = hasReadableStoreAfter(tokens, index);
+  const hasStoreAfter = hasReadableStoreAfter(tokens, index, zoneContext);
   if (isCraftTraveeToken(token)) return hasStoreAfter;
   if (index === 0) return hasStoreAfter;
   if (!hasStoreAfter) return false;
@@ -338,13 +355,13 @@ function extractLineStoreEntries(
 
   const anchors = workingTokens
     .map((token, index) => ({ token, index }))
-    .filter(({ index }) => isLineTraveeAnchor(workingTokens, index, explicitZoneOnLine));
+    .filter(({ index }) => isLineTraveeAnchor(workingTokens, index, explicitZoneOnLine, explicitZoneName));
 
   const debordEntries = trailingDebord ? [trailingDebord.entry] : [];
 
   if (!anchors.length) {
     return [
-      ...extractStoreNumbers(workingTokens.join(" ")).map((number) => ({ number, travee: currentTravee || "?" })),
+      ...extractStoreNumbers(workingTokens.join(" "), explicitZoneName).map((number) => ({ number, travee: currentTravee || "?" })),
       ...debordEntries,
     ];
   }
@@ -352,7 +369,7 @@ function extractLineStoreEntries(
   const anchoredEntries = anchors.flatMap((anchor, anchorIndex) => {
     const nextAnchorIndex = anchors[anchorIndex + 1]?.index ?? workingTokens.length;
     const segment = [anchor.token, ...workingTokens.slice(anchor.index + 1, nextAnchorIndex)].join(" ");
-    return extractStoreNumbers(segment).map((number) => ({ number, travee: anchor.token }));
+    return extractStoreNumbers(segment, explicitZoneName).map((number) => ({ number, travee: anchor.token }));
   });
 
   return [...anchoredEntries, ...debordEntries];
@@ -506,14 +523,14 @@ Règles obligatoires :
 2. Retourne les lignes dans l'ordre visuel, de haut en bas puis gauche à droite.
 3. Conserve les travées visibles (72, 86, 306, 99BIS, DEB, DEB4, X, Y...).
 4. Conserve les textes de cellule tels que vus : magasins, M/F/S, quantités, 5H00, DEB.
-5. N'ajoute jamais un magasin supposé. Ne complète jamais un chiffre flou. Si c'est illisible, écris "?".
+5. N'ajoute jamais un magasin supposé. Ne complète jamais un chiffre flou. Si c'est illisible, écris "?". Si une case est vide, n'écris aucun numéro pour cette case.
 6. Ne fusionne jamais une quantité avec le magasin suivant : "6317 F 6 8485" doit rester ce texte brut.
 7. Sépare les zones au lieu de mélanger les colonnes :
    - Écris une ligne "ZONE 1" avant le grand tableau gauche/centre.
    - Écris une ligne "DEBORD" avant la colonne tout à droite. Les magasins de Débord sont les numéros placés juste à gauche des travées tout à droite (72-86, DEB, DEB1, DEB2, DEB3, DEB4, DEB5, DEB6). Exemple réel : "86 9083" signifie magasin 9083 en débord 86.
    - IMPORTANT : DEB, DEB1, DEB2, DEB3, DEB4, DEB5, DEB6 sont des travées Débord INDÉPENDANTES, exactement comme 72, 73, 74, 75. Chacune contient UN SEUL magasin. Écris chaque DEBn sur sa propre ligne : "DEB1 9571", "DEB2 7822", "DEB3 7576", etc. Ne fusionne jamais deux DEBn ensemble.
    - Écris une ligne "CRAFT" avant la zone Craft indépendante en haut de la page.
-   - Zone Craft = travées 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 98. Il y a un seul magasin par travée : par exemple "88 8214" et "92 9083".
+   - Zone Craft = travées 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 98. Il y a un seul magasin par travée quand un numéro de magasin est réellement écrit : par exemple "88 8214" et "92 9083". Si tu vois seulement les travées "86 87 88 89" sans numéro magasin dans les cases, ne transforme jamais ces travées en magasins.
    - Ne mélange jamais Craft avec Zone 1 : un magasin Craft ne doit jamais finir en 803, 404 ou 306.
    - Les travées lettre seules comme X sont des travées Zone 1 séparées : "306 10892 X 8214" signifie 10892 en 306 et 8214 en X.
    - Ne mets jamais un magasin de la colonne tout à droite dans Zone 1.

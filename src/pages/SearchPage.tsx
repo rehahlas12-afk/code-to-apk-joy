@@ -64,6 +64,8 @@ const beep = () => {
   } catch {}
 };
 
+const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
 const SearchPage = () => {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
@@ -209,9 +211,10 @@ const SearchPage = () => {
 
   const startListening = useCallback(async () => {
     try { await recognitionRef.current?.stop(); } catch {}
-    beep();
     await stopSpeaking();
     setListening(true);
+    beep();
+    await wait(420);
     listeningTimeoutRef.current = window.setTimeout(() => {
       void recognitionRef.current?.stop();
       endListening();
@@ -240,9 +243,10 @@ const SearchPage = () => {
 
   const startTraveeListening = useCallback(async () => {
     try { await recognitionRef.current?.stop(); } catch {}
-    beep();
     await stopSpeaking();
     setListening(true);
+    beep();
+    await wait(420);
     listeningTimeoutRef.current = window.setTimeout(() => {
       void recognitionRef.current?.stop();
       endListening();
