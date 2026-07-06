@@ -251,7 +251,7 @@ function tokenizeLine(normalizedLine: string): string[] {
 }
 
 function isServiceToken(token: string): boolean {
-  return /^(M|F|S|H)$/.test(token) || /^5H0{2}$/.test(token) || /^H0{2}$/.test(token) || /^DEB\d?$/.test(token);
+  return /^(M|F|S|H|ZONE|CRAFT|CRAFTER|KRAFT|DEBORD)$/.test(token) || /^5H0{2}$/.test(token) || /^H0{2}$/.test(token) || /^DEB\d?$/.test(token);
 }
 
 function detectLineZone(normalizedLine: string, tokens: string[]): { zone: string | null; explicit: boolean; persistent: boolean } {
