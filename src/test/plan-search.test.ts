@@ -184,6 +184,22 @@ describe("plan search", () => {
     expect(stores).not.toEqual(expect.arrayContaining([{ number: "9796", travee: "803", zone: "Zone 1" }]));
   });
 
+  it("does not invent stores from empty Craft or Débord travée rows", () => {
+    const stores = parseOcrText(`
+      CRAFT
+      86 87 88 89 90 91 92
+      DEBORD
+      72 73 74 75 76 77 78 79 80 81 82 83 84 85 86
+      ZONE 1
+      306 10892
+    `);
+
+    expect(stores).toEqual([{ number: "10892", travee: "306", zone: "Zone 1" }]);
+    expect(stores.map((store) => store.number)).not.toEqual(
+      expect.arrayContaining(["8788", "8990", "7273", "7475", "8586"]),
+    );
+  });
+
   it("reconstructs OCR lines from word geometry when text blocks are broken", () => {
     const geometricText = reconstructTextFromGeometry([
       { text: "ZONE", bbox: { x0: 10, y0: 10, x1: 45, y1: 24 } },

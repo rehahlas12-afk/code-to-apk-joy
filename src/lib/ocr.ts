@@ -261,7 +261,7 @@ function detectLineZone(normalizedLine: string, tokens: string[]): { zone: strin
     const isDebTraveeAtEnd = zone === "Débord" && tokens.some((token, index) => /^DEB\d?$/.test(token) && index > 0);
     if (isDebTraveeAtEnd) return { zone: null, explicit: false, persistent: false };
 
-    const containsStores = tokens.some((_, index) => canReadStoreAt(tokens, index));
+    const containsStores = tokens.some((_, index) => canReadStoreAt(tokens, index, zone));
     const isStandaloneHeader = tokens.length <= 3 || !containsStores;
 
     return {
@@ -295,7 +295,7 @@ function extractTravee(normalizedLine: string, currentTravee: string): string {
   return tokens.find(isTraveeToken) ?? currentTravee;
 }
 
-function extractStoreNumbers(normalizedLine: string): string[] {
+function extractStoreNumbers(normalizedLine: string, zoneContext?: string | null): string[] {
   const storeNumbers = new Set<string>();
   const tokens = tokenizeLine(normalizedLine);
 
@@ -316,6 +316,7 @@ function extractStoreNumbers(normalizedLine: string): string[] {
     let cursor = i + 1;
     while (combined.length < 5 && cursor < tokens.length) {
       if (isServiceToken(tokens[cursor])) break;
+      if (shouldKeepSeparateTraveeTokens(tokens[i], tokens[cursor], zoneContext)) break;
 
       const nextToken = normalizePotentialNumber(tokens[cursor]).replace(/[^0-9]/g, "");
       if (!nextToken || combined.length + nextToken.length > 5) break;
@@ -340,12 +341,27 @@ function tokenDigits(token: string): string {
   return normalizePotentialNumber(token).replace(/[^0-9]/g, "");
 }
 
+function normalizeZoneName(zone?: string | null): string {
+  const normalized = (zone || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  if (normalized.includes("craft") || normalized.includes("kraft")) return "Craft";
+  if (normalized.includes("debord") || normalized.includes("deb")) return "Débord";
+  return "Zone 1";
+}
+
 function isTrailingDebordTraveeToken(token: string): boolean {
   if (/^DEB\d?$/.test(token)) return true;
   const digits = tokenDigits(token);
   if (!/^\d{2}$/.test(digits)) return false;
   const value = Number(digits);
   return value >= 72 && value <= 86;
+}
+
+function shouldKeepSeparateTraveeTokens(left: string, right: string, zoneContext?: string | null): boolean {
+  const zone = normalizeZoneName(zoneContext);
+  if (/^DEB\d?$/.test(left) && /^DEB\d?$/.test(right)) return true;
+  if (zone === "Craft") return isCraftTraveeToken(left) && isCraftTraveeToken(right);
+  if (zone === "Débord") return isTrailingDebordTraveeToken(left) && isTrailingDebordTraveeToken(right);
+  return false;
 }
 
 function readStoreEndingBefore(tokens: string[], endExclusive: number): { number: string; startIndex: number } | null {
@@ -420,7 +436,7 @@ function extractExplicitCraftEntries(tokens: string[]): LineStoreEntry[] {
     const first = tokenDigits(tokens[index + 1] ?? "");
     const second = tokenDigits(tokens[index + 2] ?? "");
     const directTwoParts = first && second && first.length < 4 && second.length < 4 ? first + second : "";
-    if (/^\d{4,5}$/.test(directTwoParts)) {
+    if (!shouldKeepSeparateTraveeTokens(tokens[index + 1] ?? "", tokens[index + 2] ?? "", "Craft") && /^\d{4,5}$/.test(directTwoParts)) {
       entries.push({ number: directTwoParts, travee: tokens[index], zone: "Craft" });
       index += 2;
       continue;
@@ -460,7 +476,7 @@ function extractTrailingDebordEntry(tokens: string[]): { entry: LineStoreEntry; 
   };
 }
 
-function canReadStoreAt(tokens: string[], index: number): boolean {
+function canReadStoreAt(tokens: string[], index: number, zoneContext?: string | null): boolean {
   if (index < 0 || index >= tokens.length) return false;
   if (isServiceToken(tokens[index])) return false;
 
@@ -473,6 +489,7 @@ function canReadStoreAt(tokens: string[], index: number): boolean {
   let cursor = index + 1;
   while (combined.length < 5 && cursor < tokens.length) {
     if (isServiceToken(tokens[cursor])) break;
+    if (shouldKeepSeparateTraveeTokens(tokens[index], tokens[cursor], zoneContext)) break;
     const nextDigits = tokenDigits(tokens[cursor]);
     if (isTraveeToken(tokens[cursor]) && !/^\d{1,3}$/.test(nextDigits)) break;
     if (!nextDigits || combined.length + nextDigits.length > 5) break;
@@ -484,9 +501,9 @@ function canReadStoreAt(tokens: string[], index: number): boolean {
   return false;
 }
 
-function hasReadableStoreAfter(tokens: string[], index: number): boolean {
+function hasReadableStoreAfter(tokens: string[], index: number, zoneContext?: string | null): boolean {
   for (let cursor = index + 1; cursor < tokens.length; cursor += 1) {
-    if (canReadStoreAt(tokens, cursor)) return true;
+    if (canReadStoreAt(tokens, cursor, zoneContext)) return true;
   }
   return false;
 }
@@ -496,12 +513,12 @@ function isQuantityToken(tokens: string[], index: number): boolean {
   return /^\d{1,2}$/.test(digits) && (/^(M|F|S)$/.test(tokens[index - 1] ?? "") || /^(M|F|S)$/.test(tokens[index - 2] ?? ""));
 }
 
-function isLineTraveeAnchor(tokens: string[], index: number, explicitZoneOnLine: boolean): boolean {
+function isLineTraveeAnchor(tokens: string[], index: number, explicitZoneOnLine: boolean, zoneContext?: string | null): boolean {
   const token = tokens[index];
   if (!isTraveeToken(token)) return false;
   if (isQuantityToken(tokens, index)) return false;
 
-  const hasStoreAfter = hasReadableStoreAfter(tokens, index);
+  const hasStoreAfter = hasReadableStoreAfter(tokens, index, zoneContext);
   if (isCraftTraveeToken(token)) return hasStoreAfter;
   if (index === 0) return hasStoreAfter;
   if (!hasStoreAfter) return false;
@@ -537,13 +554,13 @@ function extractLineStoreEntries(
 
   const anchors = workingTokens
     .map((token, index) => ({ token, index }))
-    .filter(({ index }) => isLineTraveeAnchor(workingTokens, index, explicitZoneOnLine));
+    .filter(({ index }) => isLineTraveeAnchor(workingTokens, index, explicitZoneOnLine, explicitZoneName));
 
   const debordEntries = trailingDebord ? [trailingDebord.entry] : [];
 
   if (!anchors.length) {
     return [
-      ...extractStoreNumbers(workingTokens.join(" ")).map((number) => ({ number, travee: currentTravee || "?" })),
+      ...extractStoreNumbers(workingTokens.join(" "), explicitZoneName).map((number) => ({ number, travee: currentTravee || "?" })),
       ...debordEntries,
     ];
   }
@@ -551,7 +568,7 @@ function extractLineStoreEntries(
   const anchoredEntries = anchors.flatMap((anchor, anchorIndex) => {
     const nextAnchorIndex = anchors[anchorIndex + 1]?.index ?? workingTokens.length;
     const segment = [anchor.token, ...workingTokens.slice(anchor.index + 1, nextAnchorIndex)].join(" ");
-    return extractStoreNumbers(segment).map((number) => ({ number, travee: anchor.token }));
+    return extractStoreNumbers(segment, explicitZoneName).map((number) => ({ number, travee: anchor.token }));
   });
 
   return [...anchoredEntries, ...debordEntries];
