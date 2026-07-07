@@ -214,7 +214,6 @@ const SearchPage = () => {
     await stopSpeaking();
     setListening(true);
     beep();
-    await wait(420);
     listeningTimeoutRef.current = window.setTimeout(() => {
       void recognitionRef.current?.stop();
       endListening();
@@ -246,7 +245,6 @@ const SearchPage = () => {
     await stopSpeaking();
     setListening(true);
     beep();
-    await wait(420);
     listeningTimeoutRef.current = window.setTimeout(() => {
       void recognitionRef.current?.stop();
       endListening();
