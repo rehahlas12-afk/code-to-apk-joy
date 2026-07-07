@@ -64,8 +64,6 @@ const beep = () => {
   } catch {}
 };
 
-const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
-
 const SearchPage = () => {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
