@@ -184,10 +184,27 @@ describe("plan search", () => {
     expect(stores).not.toEqual(expect.arrayContaining([{ number: "9796", travee: "803", zone: "Zone 1" }]));
   });
 
+  it("recognizes the top Craft header row including 97 and maps stores directly below", () => {
+    const stores = parseOcrText(`
+      CRAFT
+      86 CRAFT 87 88 89
+      97 96 7859 82 14 10032
+    `);
+
+    expect(stores).toEqual(
+      expect.arrayContaining([
+        { number: "9796", travee: "86", zone: "Craft" },
+        { number: "7859", travee: "87", zone: "Craft" },
+        { number: "8214", travee: "88", zone: "Craft" },
+        { number: "10032", travee: "89", zone: "Craft" },
+      ]),
+    );
+  });
+
   it("does not invent stores from empty Craft or Débord travée rows", () => {
     const stores = parseOcrText(`
       CRAFT
-      86 87 88 89 90 91 92
+      86 87 88 89 90 91 92 93 94 95 96 97 98
       DEBORD
       72 73 74 75 76 77 78 79 80 81 82 83 84 85 86
       ZONE 1

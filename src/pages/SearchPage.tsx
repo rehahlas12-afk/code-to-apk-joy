@@ -64,8 +64,6 @@ const beep = () => {
   } catch {}
 };
 
-const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
-
 const SearchPage = () => {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
@@ -214,7 +212,6 @@ const SearchPage = () => {
     await stopSpeaking();
     setListening(true);
     beep();
-    await wait(420);
     listeningTimeoutRef.current = window.setTimeout(() => {
       void recognitionRef.current?.stop();
       endListening();
@@ -246,7 +243,6 @@ const SearchPage = () => {
     await stopSpeaking();
     setListening(true);
     beep();
-    await wait(420);
     listeningTimeoutRef.current = window.setTimeout(() => {
       void recognitionRef.current?.stop();
       endListening();

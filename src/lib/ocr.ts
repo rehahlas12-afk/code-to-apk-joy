@@ -219,13 +219,40 @@ function normalizePotentialNumber(token: string): string {
 }
 
 // Plages de travées sur les plans STAF (corrigé par le dispatch Pékin) :
-//   - Craft  : 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 98  (un seul magasin par travée)
+//   - Craft  : 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98  (un seul magasin par travée)
 //   - Débord : 72-86 + DEB / DEB1-6 (86 peut aussi exister en Craft selon le contexte)
 //   - Zone 1 : lettres seules (X, Y...), 99, 99BIS, 100+, 201+, 301+, 404, 803...
-const CRAFT_TRAVEES = new Set(["86","87","88","89","90","91","92","93","94","95","96","98"]);
+const CRAFT_TRAVEE_ORDER = ["86","87","88","89","90","91","92","93","94","95","96","97","98"];
+const CRAFT_TRAVEES = new Set(CRAFT_TRAVEE_ORDER);
 
 function isCraftTraveeToken(token: string): boolean {
   return CRAFT_TRAVEES.has(tokenDigits(token));
+}
+
+function craftOrderIndex(token: string): number {
+  return CRAFT_TRAVEE_ORDER.indexOf(tokenDigits(token));
+}
+
+function getCraftTokens(tokens: string[]): string[] {
+  return tokens.map(tokenDigits).filter((digits) => CRAFT_TRAVEES.has(digits));
+}
+
+function getCraftHeaderTravees(tokens: string[]): string[] {
+  const craftTokens = getCraftTokens(tokens);
+  if (craftTokens.length < 3) return [];
+
+  const indexes = craftTokens.map((token) => CRAFT_TRAVEE_ORDER.indexOf(token));
+  const consecutivePairs = indexes.filter((value, index) => index > 0 && value === indexes[index - 1] + 1).length;
+  return consecutivePairs >= Math.min(2, craftTokens.length - 1) ? craftTokens : [];
+}
+
+function isCraftHeaderContinuation(tokens: string[], anchorIndex: number): boolean {
+  const anchorOrder = craftOrderIndex(tokens[anchorIndex]);
+  if (anchorOrder < 0) return false;
+
+  const nextCraft = tokens.slice(anchorIndex + 1).filter(isCraftTraveeToken).slice(0, 2);
+  if (nextCraft.length < 2) return false;
+  return craftOrderIndex(nextCraft[0]) === anchorOrder + 1 && craftOrderIndex(nextCraft[1]) === anchorOrder + 2;
 }
 
 function inferZoneFromTravee(travee: string, fallbackZone: string, _explicitZoneOnLine = false): string {
@@ -436,7 +463,7 @@ function extractExplicitCraftEntries(tokens: string[]): LineStoreEntry[] {
     const first = tokenDigits(tokens[index + 1] ?? "");
     const second = tokenDigits(tokens[index + 2] ?? "");
     const directTwoParts = first && second && first.length < 4 && second.length < 4 ? first + second : "";
-    if (!shouldKeepSeparateTraveeTokens(tokens[index + 1] ?? "", tokens[index + 2] ?? "", "Craft") && /^\d{4,5}$/.test(directTwoParts)) {
+    if (!isCraftHeaderContinuation(tokens, index) && /^\d{4,5}$/.test(directTwoParts)) {
       entries.push({ number: directTwoParts, travee: tokens[index], zone: "Craft" });
       index += 2;
       continue;
@@ -450,6 +477,38 @@ function extractExplicitCraftEntries(tokens: string[]): LineStoreEntry[] {
   }
 
   return entries;
+}
+
+function extractCraftStoreRowNumbers(tokens: string[]): string[] {
+  const stores: string[] = [];
+
+  for (let index = 0; index < tokens.length; index += 1) {
+    if (isServiceToken(tokens[index])) continue;
+    const first = tokenDigits(tokens[index]);
+    if (!first) continue;
+
+    if (/^\d{4,5}$/.test(first)) {
+      stores.push(first);
+      continue;
+    }
+
+    let combined = first;
+    let cursor = index + 1;
+    while (combined.length < 5 && cursor < tokens.length) {
+      if (isServiceToken(tokens[cursor])) break;
+      const next = tokenDigits(tokens[cursor]);
+      if (!next || combined.length + next.length > 5) break;
+      combined += next;
+      if (/^\d{4,5}$/.test(combined)) {
+        stores.push(combined);
+        index = cursor;
+        break;
+      }
+      cursor += 1;
+    }
+  }
+
+  return stores;
 }
 
 function extractTrailingDebordEntry(tokens: string[]): { entry: LineStoreEntry; remainingTokens: string[] } | null {
@@ -646,6 +705,7 @@ export function parseOcrText(text: string): StoreData[] {
 
   let currentZone = "Zone 1";
   let currentTravee = "";
+  let pendingCraftTravees: string[] = [];
 
   for (const line of lines) {
     const normalizedLine = normalizeOcrLine(line);
@@ -653,8 +713,28 @@ export function parseOcrText(text: string): StoreData[] {
     const lineZone = detectLineZone(normalizedLine, tokens);
     const explicitZoneOnLine = lineZone.explicit;
 
+    const effectiveZone = lineZone.zone ?? currentZone;
+    const craftHeaderTravees = effectiveZone === "Craft" ? getCraftHeaderTravees(tokens) : [];
+    if (craftHeaderTravees.length) {
+      currentZone = "Craft";
+      pendingCraftTravees = craftHeaderTravees;
+      continue;
+    }
+
+    if (pendingCraftTravees.length && effectiveZone === "Craft") {
+      const craftStores = extractCraftStoreRowNumbers(tokens);
+      if (craftStores.length === pendingCraftTravees.length) {
+        craftStores.forEach((number, index) => {
+          stores.push({ number, travee: pendingCraftTravees[index], zone: "Craft" });
+        });
+        pendingCraftTravees = [];
+        continue;
+      }
+    }
+
     if (lineZone.zone && lineZone.persistent) {
       currentZone = lineZone.zone;
+      if (lineZone.zone !== "Craft") pendingCraftTravees = [];
     }
 
     const lineEntries = extractLineStoreEntries(tokens, currentTravee, explicitZoneOnLine, lineZone.zone ?? currentZone);
