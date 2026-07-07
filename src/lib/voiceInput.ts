@@ -45,50 +45,6 @@ export async function startVoice(cb: VoiceCallbacks): Promise<VoiceHandle | null
         return null;
       }
 
-      if (Capacitor.getPlatform() === "android") {
-        let finalSent = false;
-        let ended = false;
-
-        const emitFinal = (text: string) => {
-          if (finalSent) return;
-          const t = (text || "").trim();
-          if (!t) return;
-          finalSent = true;
-          cb.onPartial?.(t);
-          cb.onFinal(t);
-        };
-
-        const finish = () => {
-          if (ended) return;
-          ended = true;
-          cb.onEnd?.();
-        };
-
-        // APK Android : le micro s'ouvre parfois sans jamais envoyer
-        // partialResults au WebView. Le dialogue natif Android renvoie le
-        // texte final dans la promesse start(), donc on l'utilise ici.
-        void native.start({
-          language: "fr-FR",
-          prompt: "Parlez maintenant",
-          partialResults: false,
-          popup: true,
-          maxResults: 1,
-        }).then((res: any) => {
-          const text = (res?.matches?.[0] ?? "").toString();
-          if (text) emitFinal(text);
-          else cb.onError?.("Aucun texte entendu");
-        }).catch((e: any) => {
-          cb.onError?.(String(e?.message ?? e));
-        }).finally(finish);
-
-        return {
-          stop: async () => {
-            try { await native.stop(); } catch {}
-            finish();
-          },
-        };
-      }
-
       let lastPartial = "";
       let finalSent = false;
       let ended = false;
@@ -152,9 +108,9 @@ export async function startVoice(cb: VoiceCallbacks): Promise<VoiceHandle | null
           scheduleFinish(1500);
         }
       });
-      // Android : les résultats partiels ne marchent pas avec popup=true.
-      // Avec partialResults=true, start() peut résoudre tout de suite sans résultat :
-      // on garde donc l'écoute active jusqu'à listeningState=stopped ou stop().
+      // Configuration restaurée de la version 22 : sur APK Android, popup=false
+      // laisse les résultats partiels arriver dans le WebView et remplit le champ
+      // pendant que l'utilisateur parle. On garde l'écoute active jusqu'au stopped.
       native.start({
         language: "fr-FR",
         prompt: "",
