@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "aTnsbehzzCFY_GFGGdY5e"
+uri = "file://staf-transport-source.zip"
+type = "unspecified"
+title = "STAF Transport — Code source complet"
